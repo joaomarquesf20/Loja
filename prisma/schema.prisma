@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  SELLER
+  BUYER
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String?
+  role         UserRole   @default(BUYER)
+  isActive     Boolean    @default(true)
+  addresses    Address[]
+  cartItems    CartItem[]
+  orders       Order[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model VehicleBrand {
+  id                     String                        @id @default(cuid())
+  name                   String                        @unique
+  slug                   String                        @unique
+  models                 VehicleModel[]
+  productCompatibilities ProductVehicleCompatibility[]
+
+  @@index([slug])
+}
+
+model VehicleModel {
+  id                     String                        @id @default(cuid())
+  brandId                String
+  name                   String
+  slug                   String
+  description            String?
+  brand                  VehicleBrand                  @relation(fields: [brandId], references: [id])
+  generations            VehicleGeneration[]
+  productCompatibilities ProductVehicleCompatibility[]
+
+  @@unique([brandId, slug])
+}
+
+model VehicleGeneration {
+  id                     String                        @id @default(cuid())
+  modelId                String
+  name                   String
+  platform               String?
+  description            String?
+  model                  VehicleModel                  @relation(fields: [modelId], references: [id])
+  configurations         VehicleConfiguration[]
+  productCompatibilities ProductVehicleCompatibility[]
+
+  @@unique([modelId, name])
+}
+
+model VehicleConfiguration {
+  id                     String                        @id @default(cuid())
+  generationId           String
+  name                   String
+  engineCode             String?
+  engineType             String?
+  displacementCc         Int?
+  powerKw                Decimal?
+  bodyType               String?
+  yearFrom               Int?
+  yearTo                 Int?
+  generation             VehicleGeneration             @relation(fields: [generationId], references: [id])
+  productCompatibilities ProductVehicleCompatibility[]
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  parentId    String?
+  name        String
+  slug        String     @unique
+  description String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+
+  @@index([slug])
+}
+
+model ProductBrand {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  slug     String    @unique
+  products Product[]
+
+  @@index([slug])
+}
+
+model Product {
+  id              String                        @id @default(cuid())
+  categoryId      String
+  productBrandId  String?
+  name            String
+  slug            String                        @unique
+  sku             String                        @unique
+  description     String?
+  price           Decimal                       @db.Decimal(10, 2)
+  stockQuantity   Int                           @default(0)
+  isActive        Boolean                       @default(true)
+  images          String[]
+  category        Category                      @relation(fields: [categoryId], references: [id])
+  brand           ProductBrand?                 @relation(fields: [productBrandId], references: [id])
+  compatibilities ProductVehicleCompatibility[]
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
+
+  @@index([categoryId])
+}
+
+model ProductVehicleCompatibility {
+  id                     String                @id @default(cuid())
+  productId              String
+  vehicleBrandId         String
+  vehicleModelId         String
+  vehicleGenerationId    String?
+  vehicleConfigurationId String?
+  yearMin                Int?
+  yearMax                Int?
+  product                Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  vehicleBrand           VehicleBrand          @relation(fields: [vehicleBrandId], references: [id])
+  vehicleModel           VehicleModel          @relation(fields: [vehicleModelId], references: [id])
+  vehicleGeneration      VehicleGeneration?    @relation(fields: [vehicleGenerationId], references: [id])
+  vehicleConfiguration   VehicleConfiguration? @relation(fields: [vehicleConfigurationId], references: [id])
+
+  @@index([productId])
+  @@index([vehicleBrandId, vehicleModelId])
+  @@index([vehicleGenerationId])
+  @@index([vehicleConfigurationId])
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int     @default(1)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+
+  @@unique([userId, productId])
+}
+
+model Address {
+  id           String  @id @default(cuid())
+  userId       String?
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String
+  zipCode      String
+  user         User?   @relation(fields: [userId], references: [id])
+
+  @@index([userId, city, state])
+}
+
+model Order {
+  id                   String        @id @default(cuid())
+  orderNumber          String        @unique
+  userId               String?
+  subtotal             Decimal       @db.Decimal(10, 2)
+  shippingCost         Decimal       @db.Decimal(10, 2)
+  tax                  Decimal       @default(0) @db.Decimal(10, 2)
+  total                Decimal       @db.Decimal(10, 2)
+  status               OrderStatus   @default(PENDING)
+  paymentStatus        PaymentStatus @default(UNPAID)
+  shippingName         String?
+  shippingStreet       String
+  shippingNumber       String?
+  shippingComplement   String?
+  shippingNeighborhood String?
+  shippingCity         String
+  shippingState        String?
+  shippingPostalCode   String?
+  shippingCountry      String
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+  user                 User?         @relation(fields: [userId], references: [id])
+  items                OrderItem[]
+
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id                    String  @id @default(cuid())
+  orderId               String
+  productId             String
+  productNameAtPurchase String
+  productSkuAtPurchase  String
+  priceAtPurchase       Decimal @db.Decimal(10, 2)
+  quantity              Int
+  subtotalAtPurchase    Decimal @db.Decimal(10, 2)
+  order                 Order   @relation(fields: [orderId], references: [id])
+  product               Product @relation(fields: [productId], references: [id])
+
+  @@unique([orderId, productId])
+}
