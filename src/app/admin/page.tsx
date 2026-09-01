@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
 import { authOptions } from '@/server/auth'
@@ -15,13 +16,45 @@ export default async function AdminPage() {
   }
 
   return (
-    <main>
-      <section>
-        <h1>PFAUTOPARTS Admin</h1>
-        <p>Sessão autenticada.</p>
-        <p>ID: {session.user.id}</p>
-        <p>Role: {session.user.role}</p>
-        <LogoutButton />
+    <main className="p-6">
+      <section className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">
+              Administração PFAUTOPARTS
+            </h1>
+
+            <p className="mt-2 text-gray-600">
+              Selecione uma área para gerir o catálogo.
+            </p>
+          </div>
+
+          <LogoutButton />
+        </div>
+
+        <nav className="grid gap-4 sm:grid-cols-2">
+          <Link
+            href="/admin/categories"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">Categorias</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir categorias e hierarquia do catálogo
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/product-brands"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Marcas de produto
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir marcas associadas aos produtos
+            </p>
+          </Link>
+        </nav>
       </section>
     </main>
   )
