@@ -57,7 +57,7 @@ const product = {
   description: null,
   price: 19.99,
   stockQuantity: 10,
-  active: true,
+  isActive: true,
 }
 
 function context() {

@@ -26,7 +26,7 @@ const product = {
   description: null,
   price: 19.99,
   stockQuantity: 10,
-  active: true,
+  isActive: true,
 }
 
 function createClient(): ProductClient {
@@ -239,7 +239,7 @@ describe('products service', () => {
           stockQuantity: 10,
           categoryId: 'category-test',
           productBrandId: 'brand-test',
-          active: true,
+          isActive: true,
         },
         client,
       )
@@ -247,7 +247,7 @@ describe('products service', () => {
       expect(result).toEqual(product)
     })
 
-    test('active omitido cria com active true', async () => {
+    test('isActive omitido cria com isActive true', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue(null)
       vi.mocked(client.category.findUnique).mockResolvedValue({
         id: 'category-test',
@@ -274,7 +274,7 @@ describe('products service', () => {
           price: 19.99,
           stockQuantity: 10,
           categoryId: 'category-test',
-          active: true,
+          isActive: true,
         },
       })
     })

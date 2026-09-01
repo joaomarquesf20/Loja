@@ -65,7 +65,7 @@ describe('Admin Products API', () => {
           description: null,
           price: 19.99,
           stockQuantity: 10,
-          active: true,
+          isActive: true,
         },
       ]
 
@@ -123,7 +123,7 @@ describe('Admin Products API', () => {
         description: null,
         price: 19.99,
         stockQuantity: 10,
-        active: true,
+        isActive: true,
       }
 
       mockCreateProduct.mockResolvedValue(product)
@@ -138,7 +138,7 @@ describe('Admin Products API', () => {
           sku: 'SKU-TESTE-001',
           price: 19.99,
           stockQuantity: 10,
-          active: true,
+          isActive: true,
         }),
       })
 
@@ -161,7 +161,7 @@ describe('Admin Products API', () => {
           sku: '',
           price: -1,
           stockQuantity: -1,
-          active: true,
+          isActive: true,
         }),
       })
 
@@ -188,7 +188,7 @@ describe('Admin Products API', () => {
           sku: 'SKU-TESTE-001',
           price: 19.99,
           stockQuantity: 10,
-          active: true,
+          isActive: true,
         }),
       })
 
@@ -212,7 +212,7 @@ describe('Admin Products API', () => {
           sku: 'SKU-TESTE-001',
           price: 19.99,
           stockQuantity: 10,
-          active: true,
+          isActive: true,
         }),
       })
 

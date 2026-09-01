@@ -394,29 +394,29 @@ describe('productSchema', () => {
     expect(result.productBrandId).toBe('brand-test')
   })
 
-  test('aceita active true', () => {
+test('aceita isActive true', () => {
     expect(
       productSchema.safeParse({
         ...validProduct,
-        active: true,
+        isActive: true,
       }).success,
     ).toBe(true)
   })
 
-  test('aceita active false', () => {
+  test('aceita isActive false', () => {
     expect(
       productSchema.safeParse({
         ...validProduct,
-        active: false,
+        isActive: false,
       }).success,
     ).toBe(true)
   })
 
-  test('rejeita active não boolean', () => {
+  test('rejeita isActive não boolean', () => {
     expect(
       productSchema.safeParse({
         ...validProduct,
-        active: 'true',
+        isActive: 'true',
       }).success,
     ).toBe(false)
   })

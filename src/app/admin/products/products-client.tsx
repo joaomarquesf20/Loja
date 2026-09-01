@@ -12,7 +12,7 @@ type Product = {
   description: string | null
   price: number | string
   stockQuantity: number
-  active: boolean
+  isActive: boolean
 }
 
 type Category = {
@@ -34,7 +34,7 @@ type ProductForm = {
   stockQuantity: string
   categoryId: string
   productBrandId: string
-  active: boolean
+  isActive: boolean
 }
 
 const emptyForm: ProductForm = {
@@ -46,7 +46,7 @@ const emptyForm: ProductForm = {
   stockQuantity: '0',
   categoryId: '',
   productBrandId: '',
-  active: true,
+  isActive: true,
 }
 
 async function getErrorMessage(response: Response) {
@@ -148,7 +148,7 @@ export default function ProductsClient() {
       stockQuantity: String(product.stockQuantity),
       categoryId: product.categoryId,
       productBrandId: product.productBrandId ?? '',
-      active: product.active,
+      isActive: product.isActive,
     })
 
     setError(null)
@@ -193,7 +193,7 @@ export default function ProductsClient() {
       stockQuantity,
       categoryId: form.categoryId,
       productBrandId: form.productBrandId || null,
-      active: form.active,
+      isActive: form.isActive,
     }
 
     try {
@@ -450,12 +450,12 @@ export default function ProductsClient() {
           <label className="flex items-center gap-2 self-end py-2">
             <input
               type="checkbox"
-              checked={form.active}
+              checked={form.isActive}
               disabled={submitting}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
-                  active: event.target.checked,
+                  isActive: event.target.checked,
                 }))
               }
             />
@@ -551,7 +551,7 @@ export default function ProductsClient() {
                     </td>
 
                     <td className="border p-2">
-                      {product.active ? 'Ativo' : 'Inativo'}
+                      {product.isActive ? 'Ativo' : 'Inativo'}
                     </td>
 
                     <td className="border p-2">

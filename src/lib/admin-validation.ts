@@ -53,7 +53,7 @@ export const productBrandUpdateSchema = productBrandSchema.partial()
  * - stockQuantity: integer >= 0
  * - categoryId: string trim min 1 (obrigatório)
  * - productBrandId: opcional, aceita string não vazia ou null
- * - active: boolean opcional
+ * - isActive: boolean opcional
  */
 export const productSchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -70,7 +70,7 @@ export const productSchema = z.object({
   stockQuantity: z.number().int().min(0),
   categoryId: z.string().trim().min(1),
   productBrandId: z.union([z.string().trim().min(1), z.null()]).optional(),
-  active: z.boolean().optional(),
+  isActive: z.boolean().optional(),
 })
 
 /**
