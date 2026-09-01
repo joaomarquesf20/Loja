@@ -4,6 +4,8 @@ import {
   categoryUpdateSchema,
   productBrandSchema,
   productBrandUpdateSchema,
+  productSchema,
+  productUpdateSchema,
 } from './admin-validation'
 
 describe('categorySchema', () => {
@@ -185,5 +187,283 @@ describe('productBrandUpdateSchema', () => {
     })
 
     expect(result.slug).toBe('super-marca')
+  })
+})
+
+describe('productSchema', () => {
+  const validProduct = {
+    name: 'Produto Teste',
+    slug: 'produto-teste',
+    sku: 'SKU-TESTE-001',
+    price: 0,
+    stockQuantity: 0,
+    categoryId: 'category-test',
+  }
+
+  test('aceita objeto mínimo válido', () => {
+    const result = productSchema.parse(validProduct)
+    expect(result).toEqual(validProduct)
+  })
+
+  test('rejeita name vazio', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        name: '',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aplica trim ao name', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      name: '  Produto Teste  ',
+    })
+
+    expect(result.name).toBe('Produto Teste')
+  })
+
+  test('normaliza slug com maiúsculas e acentos', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      slug: '  Peças Áudio  ',
+    })
+
+    expect(result.slug).toBe('pecas-audio')
+  })
+
+  test('rejeita slug apenas com pontuação', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        slug: '!!!',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita sku vazio', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        sku: '',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aplica trim ao sku', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      sku: '  SKU-TESTE-001  ',
+    })
+
+    expect(result.sku).toBe('SKU-TESTE-001')
+  })
+
+  test('aceita price zero', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        price: 0,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('aceita price positivo', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        price: 19.99,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('rejeita price negativo', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        price: -1,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita price NaN', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        price: Number.NaN,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita price Infinity', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        price: Number.POSITIVE_INFINITY,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aceita stockQuantity zero', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        stockQuantity: 0,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('aceita stockQuantity inteiro positivo', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        stockQuantity: 10,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('rejeita stockQuantity negativo', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        stockQuantity: -1,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita stockQuantity decimal', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        stockQuantity: 1.5,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita categoryId vazio', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        categoryId: '',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aplica trim ao categoryId', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      categoryId: '  category-test  ',
+    })
+
+    expect(result.categoryId).toBe('category-test')
+  })
+
+  test('aceita productBrandId null', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      productBrandId: null,
+    })
+
+    expect(result.productBrandId).toBeNull()
+  })
+
+  test('aceita productBrandId não vazio', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      productBrandId: 'brand-test',
+    })
+
+    expect(result.productBrandId).toBe('brand-test')
+  })
+
+  test('rejeita productBrandId vazio', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        productBrandId: '',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aplica trim ao productBrandId', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      productBrandId: '  brand-test  ',
+    })
+
+    expect(result.productBrandId).toBe('brand-test')
+  })
+
+  test('aceita active true', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        active: true,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('aceita active false', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        active: false,
+      }).success,
+    ).toBe(true)
+  })
+
+  test('rejeita active não boolean', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        active: 'true',
+      }).success,
+    ).toBe(false)
+  })
+})
+
+describe('productUpdateSchema', () => {
+  test('aceita objeto vazio', () => {
+    expect(productUpdateSchema.safeParse({}).success).toBe(true)
+  })
+
+  test('aceita atualização parcial de name', () => {
+    const result = productUpdateSchema.parse({
+      name: '  Produto Atualizado  ',
+    })
+
+    expect(result.name).toBe('Produto Atualizado')
+  })
+
+  test('aceita atualização parcial de price', () => {
+    const result = productUpdateSchema.parse({
+      price: 24.99,
+    })
+
+    expect(result.price).toBe(24.99)
+  })
+
+  test('rejeita price negativo numa atualização', () => {
+    expect(
+      productUpdateSchema.safeParse({
+        price: -1,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita stockQuantity decimal numa atualização', () => {
+    expect(
+      productUpdateSchema.safeParse({
+        stockQuantity: 1.5,
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita slug só com pontuação numa atualização', () => {
+    expect(
+      productUpdateSchema.safeParse({
+        slug: '!!!',
+      }).success,
+    ).toBe(false)
   })
 })
