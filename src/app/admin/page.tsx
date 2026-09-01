@@ -44,6 +44,16 @@ export default async function AdminPage() {
           </Link>
 
           <Link
+            href="/admin/products"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">Produtos</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir produtos do catálogo
+            </p>
+          </Link>
+
+          <Link
             href="/admin/product-brands"
             className="rounded-lg border p-4 transition hover:bg-gray-50"
           >
