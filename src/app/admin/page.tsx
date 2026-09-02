@@ -105,6 +105,18 @@ export default async function AdminPage() {
               Gerir gerações associadas aos modelos de veículos.
             </p>
           </Link>
+
+          <Link
+            href="/admin/vehicle-configurations"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Configurações de veículos
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir motorizações e configurações associadas às gerações de veículos.
+            </p>
+          </Link>
         </nav>
       </section>
     </main>
