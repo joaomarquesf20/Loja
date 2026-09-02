@@ -93,6 +93,18 @@ export default async function AdminPage() {
               Gerir modelos associados às marcas de veículos.
             </p>
           </Link>
+
+          <Link
+            href="/admin/vehicle-generations"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Gerações de veículos
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir gerações associadas aos modelos de veículos.
+            </p>
+          </Link>
         </nav>
       </section>
     </main>
