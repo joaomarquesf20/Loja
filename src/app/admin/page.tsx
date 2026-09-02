@@ -81,6 +81,18 @@ export default async function AdminPage() {
               Gerir marcas usadas na compatibilidade de veículos.
             </p>
           </Link>
+
+          <Link
+            href="/admin/vehicle-models"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Modelos de veículos
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir modelos associados às marcas de veículos.
+            </p>
+          </Link>
         </nav>
       </section>
     </main>
