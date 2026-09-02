@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
 import { notFound, redirect } from 'next/navigation'
+
 import { authOptions } from '@/server/auth'
 import LogoutButton from './logout-button'
 
@@ -37,7 +38,9 @@ export default async function AdminPage() {
             href="/admin/categories"
             className="rounded-lg border p-4 transition hover:bg-gray-50"
           >
-            <h2 className="text-lg font-semibold">Categorias</h2>
+            <h2 className="text-lg font-semibold">
+              Categorias
+            </h2>
             <p className="mt-1 text-sm text-gray-600">
               Gerir categorias e hierarquia do catálogo
             </p>
@@ -47,7 +50,9 @@ export default async function AdminPage() {
             href="/admin/products"
             className="rounded-lg border p-4 transition hover:bg-gray-50"
           >
-            <h2 className="text-lg font-semibold">Produtos</h2>
+            <h2 className="text-lg font-semibold">
+              Produtos
+            </h2>
             <p className="mt-1 text-sm text-gray-600">
               Gerir produtos do catálogo
             </p>
@@ -58,10 +63,22 @@ export default async function AdminPage() {
             className="rounded-lg border p-4 transition hover:bg-gray-50"
           >
             <h2 className="text-lg font-semibold">
-              Marcas de produto
+              Marcas de produtos
             </h2>
             <p className="mt-1 text-sm text-gray-600">
-              Gerir marcas associadas aos produtos
+              Gerir marcas dos produtos do catálogo
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/vehicle-brands"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Marcas de veículos
+            </h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir marcas usadas na compatibilidade de veículos.
             </p>
           </Link>
         </nav>
