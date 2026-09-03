@@ -44,6 +44,7 @@ const mockCreateProduct = vi.mocked(createProduct)
 describe('Admin Products API', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
     mockRequireAdmin.mockResolvedValue({
       user: {
         id: 'admin-test',
@@ -66,6 +67,9 @@ describe('Admin Products API', () => {
           price: 19.99,
           stockQuantity: 10,
           isActive: true,
+          images: [
+            '/products/produto-1.jpg',
+          ],
         },
       ]
 
@@ -78,7 +82,9 @@ describe('Admin Products API', () => {
     })
 
     test('devolve 401 sem autenticação', async () => {
-      mockRequireAdmin.mockRejectedValue(new UnauthorizedError())
+      mockRequireAdmin.mockRejectedValue(
+        new UnauthorizedError(),
+      )
 
       const response = await GET()
 
@@ -89,7 +95,9 @@ describe('Admin Products API', () => {
     })
 
     test('devolve 403 sem autorização ADMIN', async () => {
-      mockRequireAdmin.mockRejectedValue(new AdminForbiddenError())
+      mockRequireAdmin.mockRejectedValue(
+        new AdminForbiddenError(),
+      )
 
       const response = await GET()
 
@@ -100,7 +108,9 @@ describe('Admin Products API', () => {
     })
 
     test('devolve 500 em erro inesperado', async () => {
-      mockRequireAdmin.mockRejectedValue(new Error('Erro inesperado'))
+      mockRequireAdmin.mockRejectedValue(
+        new Error('Erro inesperado'),
+      )
 
       const response = await GET()
 
@@ -124,46 +134,110 @@ describe('Admin Products API', () => {
         price: 19.99,
         stockQuantity: 10,
         isActive: true,
+        images: [],
       }
 
       mockCreateProduct.mockResolvedValue(product)
 
-      const request = new Request('http://localhost/api/admin/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: 'category-test',
-          productBrandId: null,
-          name: 'Produto Teste',
-          slug: 'produto-teste',
-          sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
-          isActive: true,
-        }),
-      })
+      const body = {
+        categoryId: 'category-test',
+        productBrandId: null,
+        name: 'Produto Teste',
+        slug: 'produto-teste',
+        sku: 'SKU-TESTE-001',
+        price: 19.99,
+        stockQuantity: 10,
+        isActive: true,
+      }
+
+      const request = new Request(
+        'http://localhost/api/admin/products',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+        },
+      )
 
       const response = await POST(request)
 
       expect(response.status).toBe(201)
       expect(await response.json()).toEqual(product)
+      expect(mockCreateProduct).toHaveBeenCalledWith(body)
+    })
+
+    test('envia images para o service ao criar produto', async () => {
+      const images = [
+        '/products/produto-1.jpg',
+        'https://example.com/products/produto-2.jpg',
+      ]
+
+      const product = {
+        id: 'product-test',
+        categoryId: 'category-test',
+        productBrandId: null,
+        name: 'Produto Teste',
+        slug: 'produto-teste',
+        sku: 'SKU-TESTE-001',
+        description: null,
+        price: 19.99,
+        stockQuantity: 10,
+        isActive: true,
+        images,
+      }
+
+      mockCreateProduct.mockResolvedValue(product)
+
+      const body = {
+        categoryId: 'category-test',
+        productBrandId: null,
+        name: 'Produto Teste',
+        slug: 'produto-teste',
+        sku: 'SKU-TESTE-001',
+        price: 19.99,
+        stockQuantity: 10,
+        isActive: true,
+        images,
+      }
+
+      const request = new Request(
+        'http://localhost/api/admin/products',
+        {
+          method: 'POST',
+          body: JSON.stringify(body),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+
+      const response = await POST(request)
+
+      expect(response.status).toBe(201)
+      expect(mockCreateProduct).toHaveBeenCalledWith(body)
+      expect(await response.json()).toEqual(product)
     })
 
     test('devolve 400 para ZodError', async () => {
-      mockCreateProduct.mockRejectedValue(new ZodError([]))
+      mockCreateProduct.mockRejectedValue(
+        new ZodError([]),
+      )
 
-      const request = new Request('http://localhost/api/admin/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: '',
-          productBrandId: null,
-          name: '',
-          slug: '',
-          sku: '',
-          price: -1,
-          stockQuantity: -1,
-          isActive: true,
-        }),
-      })
+      const request = new Request(
+        'http://localhost/api/admin/products',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            categoryId: '',
+            productBrandId: null,
+            name: '',
+            slug: '',
+            sku: '',
+            price: -1,
+            stockQuantity: -1,
+            isActive: true,
+          }),
+        },
+      )
 
       const response = await POST(request)
 
@@ -178,19 +252,22 @@ describe('Admin Products API', () => {
         new ValidationError('Dados inválidos'),
       )
 
-      const request = new Request('http://localhost/api/admin/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: 'category-test',
-          productBrandId: null,
-          name: 'Produto Teste',
-          slug: 'produto-teste',
-          sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
-          isActive: true,
-        }),
-      })
+      const request = new Request(
+        'http://localhost/api/admin/products',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            categoryId: 'category-test',
+            productBrandId: null,
+            name: 'Produto Teste',
+            slug: 'produto-teste',
+            sku: 'SKU-TESTE-001',
+            price: 19.99,
+            stockQuantity: 10,
+            isActive: true,
+          }),
+        },
+      )
 
       const response = await POST(request)
 
@@ -199,22 +276,27 @@ describe('Admin Products API', () => {
 
     test('devolve 409 para slug duplicado', async () => {
       mockCreateProduct.mockRejectedValue(
-        new ConflictError('Já existe um produto com este slug'),
+        new ConflictError(
+          'Já existe um produto com este slug',
+        ),
       )
 
-      const request = new Request('http://localhost/api/admin/products', {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: 'category-test',
-          productBrandId: null,
-          name: 'Produto Teste',
-          slug: 'produto-teste',
-          sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
-          isActive: true,
-        }),
-      })
+      const request = new Request(
+        'http://localhost/api/admin/products',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            categoryId: 'category-test',
+            productBrandId: null,
+            name: 'Produto Teste',
+            slug: 'produto-teste',
+            sku: 'SKU-TESTE-001',
+            price: 19.99,
+            stockQuantity: 10,
+            isActive: true,
+          }),
+        },
+      )
 
       const response = await POST(request)
 

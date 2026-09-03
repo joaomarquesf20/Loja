@@ -58,11 +58,16 @@ const product = {
   price: 19.99,
   stockQuantity: 10,
   isActive: true,
+  images: [
+    '/products/produto-1.jpg',
+  ],
 }
 
 function context() {
   return {
-    params: Promise.resolve({ id: 'product-test' }),
+    params: Promise.resolve({
+      id: 'product-test',
+    }),
   }
 }
 
@@ -105,13 +110,17 @@ describe('Admin Product API', () => {
       mockGetProductById.mockResolvedValue(product)
 
       const response = await GET(
-        new Request('http://localhost/api/admin/products/product-test'),
+        new Request(
+          'http://localhost/api/admin/products/product-test',
+        ),
         context(),
       )
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual(product)
-      expect(mockGetProductById).toHaveBeenCalledWith('product-test')
+      expect(
+        mockGetProductById,
+      ).toHaveBeenCalledWith('product-test')
     })
 
     test('devolve 404 quando produto não existe', async () => {
@@ -120,7 +129,9 @@ describe('Admin Product API', () => {
       )
 
       const response = await GET(
-        new Request('http://localhost/api/admin/products/product-test'),
+        new Request(
+          'http://localhost/api/admin/products/product-test',
+        ),
         context(),
       )
 
@@ -131,10 +142,14 @@ describe('Admin Product API', () => {
     })
 
     test('devolve 401 sem autenticação', async () => {
-      mockRequireAdmin.mockRejectedValue(new UnauthorizedError())
+      mockRequireAdmin.mockRejectedValue(
+        new UnauthorizedError(),
+      )
 
       const response = await GET(
-        new Request('http://localhost/api/admin/products/product-test'),
+        new Request(
+          'http://localhost/api/admin/products/product-test',
+        ),
         context(),
       )
 
@@ -145,10 +160,14 @@ describe('Admin Product API', () => {
     })
 
     test('devolve 403 sem autorização ADMIN', async () => {
-      mockRequireAdmin.mockRejectedValue(new AdminForbiddenError())
+      mockRequireAdmin.mockRejectedValue(
+        new AdminForbiddenError(),
+      )
 
       const response = await GET(
-        new Request('http://localhost/api/admin/products/product-test'),
+        new Request(
+          'http://localhost/api/admin/products/product-test',
+        ),
         context(),
       )
 
@@ -166,7 +185,9 @@ describe('Admin Product API', () => {
         name: 'Produto Atualizado',
       }
 
-      mockUpdateProduct.mockResolvedValue(updatedProduct)
+      mockUpdateProduct.mockResolvedValue(
+        updatedProduct,
+      )
 
       const response = await PATCH(
         patchRequest({
@@ -176,7 +197,9 @@ describe('Admin Product API', () => {
       )
 
       expect(response.status).toBe(200)
-      expect(await response.json()).toEqual(updatedProduct)
+      expect(await response.json()).toEqual(
+        updatedProduct,
+      )
       expect(mockUpdateProduct).toHaveBeenCalledWith(
         'product-test',
         {
@@ -185,8 +208,73 @@ describe('Admin Product API', () => {
       )
     })
 
+    test('envia images para o service ao atualizar produto', async () => {
+      const images = [
+        '/products/atualizado-1.jpg',
+        'https://example.com/products/atualizado-2.jpg',
+      ]
+
+      const updatedProduct = {
+        ...product,
+        images,
+      }
+
+      mockUpdateProduct.mockResolvedValue(
+        updatedProduct,
+      )
+
+      const response = await PATCH(
+        patchRequest({
+          images,
+        }),
+        context(),
+      )
+
+      expect(response.status).toBe(200)
+      expect(mockUpdateProduct).toHaveBeenCalledWith(
+        'product-test',
+        {
+          images,
+        },
+      )
+      expect(await response.json()).toEqual(
+        updatedProduct,
+      )
+    })
+
+    test('permite limpar todas as images', async () => {
+      const updatedProduct = {
+        ...product,
+        images: [],
+      }
+
+      mockUpdateProduct.mockResolvedValue(
+        updatedProduct,
+      )
+
+      const response = await PATCH(
+        patchRequest({
+          images: [],
+        }),
+        context(),
+      )
+
+      expect(response.status).toBe(200)
+      expect(mockUpdateProduct).toHaveBeenCalledWith(
+        'product-test',
+        {
+          images: [],
+        },
+      )
+      expect(await response.json()).toEqual(
+        updatedProduct,
+      )
+    })
+
     test('devolve 400 para ZodError', async () => {
-      mockUpdateProduct.mockRejectedValue(new ZodError([]))
+      mockUpdateProduct.mockRejectedValue(
+        new ZodError([]),
+      )
 
       const response = await PATCH(
         patchRequest({
@@ -239,7 +327,9 @@ describe('Admin Product API', () => {
 
     test('devolve 409 para conflito', async () => {
       mockUpdateProduct.mockRejectedValue(
-        new ConflictError('Já existe um produto com este slug'),
+        new ConflictError(
+          'Já existe um produto com este slug',
+        ),
       )
 
       const response = await PATCH(
@@ -267,7 +357,9 @@ describe('Admin Product API', () => {
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual(product)
-      expect(mockDeleteProduct).toHaveBeenCalledWith('product-test')
+      expect(
+        mockDeleteProduct,
+      ).toHaveBeenCalledWith('product-test')
     })
 
     test('devolve 404 quando produto não existe', async () => {
