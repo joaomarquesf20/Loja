@@ -15,6 +15,7 @@ type ProductRecord = {
   price: number
   stockQuantity: number
   isActive: boolean
+  images?: string[]
 }
 
 type ProductCreateData = {
@@ -27,6 +28,7 @@ type ProductCreateData = {
   categoryId: string
   productBrandId?: string | null
   isActive?: boolean
+  images?: string[]
 }
 
 type ProductUpdateData = Partial<ProductCreateData>
@@ -191,11 +193,12 @@ export async function createProduct(
   }
 
   return db.product.create({
-  data: {
-    ...data,
-    isActive: data.isActive ?? true,
-  },
-})
+    data: {
+      ...data,
+      isActive: data.isActive ?? true,
+      images: data.images ?? [],
+    },
+  })
 }
 
 export async function updateProduct(

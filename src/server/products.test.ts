@@ -27,6 +27,7 @@ const product = {
   price: 19.99,
   stockQuantity: 10,
   isActive: true,
+  images: [],
 }
 
 function createClient(): ProductClient {
@@ -75,9 +76,9 @@ describe('products service', () => {
 
   describe('getProductById', () => {
     test('rejeita id vazio', async () => {
-      await expect(getProductById('', client)).rejects.toBeInstanceOf(
-        ValidationError,
-      )
+      await expect(
+        getProductById('', client),
+      ).rejects.toBeInstanceOf(ValidationError)
     })
 
     test('rejeita produto inexistente', async () => {
@@ -95,7 +96,10 @@ describe('products service', () => {
     test('devolve produto existente', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue(product)
 
-      const result = await getProductById('product-test', client)
+      const result = await getProductById(
+        'product-test',
+        client,
+      )
 
       expect(result).toEqual(product)
     })
@@ -114,7 +118,9 @@ describe('products service', () => {
     })
 
     test('rejeita slug duplicado', async () => {
-      vi.mocked(client.product.findUnique).mockResolvedValueOnce(product)
+      vi.mocked(
+        client.product.findUnique,
+      ).mockResolvedValueOnce(product)
 
       await expect(
         createProduct(
@@ -175,7 +181,9 @@ describe('products service', () => {
       vi.mocked(client.category.findUnique).mockResolvedValue({
         id: 'category-test',
       })
-      vi.mocked(client.productBrand.findUnique).mockResolvedValue(null)
+      vi.mocked(client.productBrand.findUnique).mockResolvedValue(
+        null,
+      )
 
       await expect(
         createProduct(
@@ -216,7 +224,9 @@ describe('products service', () => {
         client,
       )
 
-      expect(client.productBrand.findUnique).not.toHaveBeenCalled()
+      expect(
+        client.productBrand.findUnique,
+      ).not.toHaveBeenCalled()
       expect(result.productBrandId).toBeNull()
     })
 
@@ -247,7 +257,62 @@ describe('products service', () => {
       expect(result).toEqual(product)
     })
 
-    test('isActive omitido cria com isActive true', async () => {
+    test('cria produto com imagens', async () => {
+      const productWithImages = {
+        ...product,
+        images: [
+          '/products/produto-1.jpg',
+          'https://example.com/products/produto-2.jpg',
+        ],
+      }
+
+      vi.mocked(client.product.findUnique).mockResolvedValue(null)
+      vi.mocked(client.category.findUnique).mockResolvedValue({
+        id: 'category-test',
+      })
+      vi.mocked(client.product.create).mockResolvedValue(
+        productWithImages,
+      )
+
+      const result = await createProduct(
+        {
+          name: 'Produto Teste',
+          slug: 'produto-teste',
+          sku: 'SKU-TESTE-001',
+          price: 19.99,
+          stockQuantity: 10,
+          categoryId: 'category-test',
+          images: [
+            '/products/produto-1.jpg',
+            'https://example.com/products/produto-2.jpg',
+          ],
+        },
+        client,
+      )
+
+      expect(client.product.create).toHaveBeenCalledWith({
+        data: {
+          name: 'Produto Teste',
+          slug: 'produto-teste',
+          sku: 'SKU-TESTE-001',
+          price: 19.99,
+          stockQuantity: 10,
+          categoryId: 'category-test',
+          images: [
+            '/products/produto-1.jpg',
+            'https://example.com/products/produto-2.jpg',
+          ],
+          isActive: true,
+        },
+      })
+
+      expect(result.images).toEqual([
+        '/products/produto-1.jpg',
+        'https://example.com/products/produto-2.jpg',
+      ])
+    })
+
+    test('isActive e images omitidos aplicam defaults', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue(null)
       vi.mocked(client.category.findUnique).mockResolvedValue({
         id: 'category-test',
@@ -275,6 +340,7 @@ describe('products service', () => {
           stockQuantity: 10,
           categoryId: 'category-test',
           isActive: true,
+          images: [],
         },
       })
     })
@@ -283,7 +349,11 @@ describe('products service', () => {
   describe('updateProduct', () => {
     test('rejeita id vazio', async () => {
       await expect(
-        updateProduct('', { name: 'Produto Atualizado' }, client),
+        updateProduct(
+          '',
+          { name: 'Produto Atualizado' },
+          client,
+        ),
       ).rejects.toBeInstanceOf(ValidationError)
     })
 
@@ -348,7 +418,9 @@ describe('products service', () => {
 
     test('rejeita productBrandId inexistente', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue(product)
-      vi.mocked(client.productBrand.findUnique).mockResolvedValue(null)
+      vi.mocked(client.productBrand.findUnique).mockResolvedValue(
+        null,
+      )
 
       await expect(
         updateProduct(
@@ -374,12 +446,53 @@ describe('products service', () => {
         client,
       )
 
-      expect(client.productBrand.findUnique).not.toHaveBeenCalled()
+      expect(
+        client.productBrand.findUnique,
+      ).not.toHaveBeenCalled()
       expect(client.product.update).toHaveBeenCalledWith({
         where: { id: 'product-test' },
         data: { productBrandId: null },
       })
       expect(result.productBrandId).toBeNull()
+    })
+
+    test('atualiza imagens do produto', async () => {
+      const updated = {
+        ...product,
+        images: [
+          '/products/atualizado-1.jpg',
+          '/products/atualizado-2.jpg',
+        ],
+      }
+
+      vi.mocked(client.product.findUnique).mockResolvedValue(product)
+      vi.mocked(client.product.update).mockResolvedValue(updated)
+
+      const result = await updateProduct(
+        'product-test',
+        {
+          images: [
+            '/products/atualizado-1.jpg',
+            '/products/atualizado-2.jpg',
+          ],
+        },
+        client,
+      )
+
+      expect(client.product.update).toHaveBeenCalledWith({
+        where: { id: 'product-test' },
+        data: {
+          images: [
+            '/products/atualizado-1.jpg',
+            '/products/atualizado-2.jpg',
+          ],
+        },
+      })
+
+      expect(result.images).toEqual([
+        '/products/atualizado-1.jpg',
+        '/products/atualizado-2.jpg',
+      ])
     })
 
     test('faz update parcial válido', async () => {
@@ -447,7 +560,10 @@ describe('products service', () => {
       vi.mocked(client.cartItem.count).mockResolvedValue(0)
       vi.mocked(client.product.delete).mockResolvedValue(product)
 
-      const result = await deleteProduct('product-test', client)
+      const result = await deleteProduct(
+        'product-test',
+        client,
+      )
 
       expect(client.product.delete).toHaveBeenCalledWith({
         where: { id: 'product-test' },

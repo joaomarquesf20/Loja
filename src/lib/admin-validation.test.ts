@@ -394,7 +394,7 @@ describe('productSchema', () => {
     expect(result.productBrandId).toBe('brand-test')
   })
 
-test('aceita isActive true', () => {
+  test('aceita isActive true', () => {
     expect(
       productSchema.safeParse({
         ...validProduct,
@@ -417,6 +417,74 @@ test('aceita isActive true', () => {
       productSchema.safeParse({
         ...validProduct,
         isActive: 'true',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aceita lista vazia de imagens', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      images: [],
+    })
+
+    expect(result.images).toEqual([])
+  })
+
+  test('aceita URL HTTPS de imagem', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      images: [
+        'https://example.com/products/produto.jpg',
+      ],
+    })
+
+    expect(result.images).toEqual([
+      'https://example.com/products/produto.jpg',
+    ])
+  })
+
+  test('aceita caminho relativo de imagem', () => {
+    const result = productSchema.parse({
+      ...validProduct,
+      images: [
+        '  /products/produto.jpg  ',
+      ],
+    })
+
+    expect(result.images).toEqual([
+      '/products/produto.jpg',
+    ])
+  })
+
+  test('rejeita imagem vazia', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        images: [''],
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita protocolo de imagem não permitido', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        images: [
+          'javascript:alert(1)',
+        ],
+      }).success,
+    ).toBe(false)
+  })
+
+  test('rejeita mais de 20 imagens', () => {
+    expect(
+      productSchema.safeParse({
+        ...validProduct,
+        images: Array.from(
+          { length: 21 },
+          (_, index) =>
+            `/products/image-${index}.jpg`,
+        ),
       }).success,
     ).toBe(false)
   })
@@ -463,6 +531,30 @@ describe('productUpdateSchema', () => {
     expect(
       productUpdateSchema.safeParse({
         slug: '!!!',
+      }).success,
+    ).toBe(false)
+  })
+
+  test('aceita atualização parcial de images', () => {
+    const result = productUpdateSchema.parse({
+      images: [
+        '/products/novo-1.jpg',
+        'https://example.com/novo-2.jpg',
+      ],
+    })
+
+    expect(result.images).toEqual([
+      '/products/novo-1.jpg',
+      'https://example.com/novo-2.jpg',
+    ])
+  })
+
+  test('rejeita images inválidas numa atualização', () => {
+    expect(
+      productUpdateSchema.safeParse({
+        images: [
+          'ftp://example.com/image.jpg',
+        ],
       }).success,
     ).toBe(false)
   })
