@@ -22,11 +22,53 @@ const compatibilityRecord = {
   vehicleConfigurationId: 'vehicle-configuration-test',
 }
 
+const configurationHierarchy = {
+  id: 'vehicle-configuration-test',
+  generation: {
+    id: 'generation-test',
+    model: {
+      id: 'model-test',
+      brand: {
+        id: 'brand-test',
+      },
+    },
+  },
+}
+
+const compatibilityListRecord = {
+  ...compatibilityRecord,
+  vehicleBrand: {
+    id: 'brand-test',
+    name: 'Volkswagen',
+  },
+  vehicleModel: {
+    id: 'model-test',
+    name: 'Golf',
+  },
+  vehicleGeneration: {
+    id: 'generation-test',
+    name: 'Mk7',
+  },
+  vehicleConfiguration: {
+    id: 'vehicle-configuration-test',
+    name: '2.0 TDI 150',
+    engineCode: 'EA288',
+    engineType: 'Diesel',
+    displacementCc: 1968,
+    powerKw: {
+      toString: () => '110.5',
+    },
+    bodyType: 'Hatchback',
+    yearFrom: 2013,
+    yearTo: 2020,
+  },
+}
+
 function createClient(): ProductCompatibilityClient {
   return {
     productVehicleCompatibility: {
       findMany: vi.fn(),
-      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       create: vi.fn(),
       delete: vi.fn(),
     },
@@ -79,6 +121,39 @@ describe('product compatibilities service', () => {
         client.productVehicleCompatibility.findMany,
       ).toHaveBeenCalledWith({
         where: { productId: 'product-test' },
+        include: {
+          vehicleBrand: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          vehicleModel: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          vehicleGeneration: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          vehicleConfiguration: {
+            select: {
+              id: true,
+              name: true,
+              engineCode: true,
+              engineType: true,
+              displacementCc: true,
+              powerKw: true,
+              bodyType: true,
+              yearFrom: true,
+              yearTo: true,
+            },
+          },
+        },
       })
     })
 
@@ -88,14 +163,22 @@ describe('product compatibilities service', () => {
       })
       vi.mocked(
         client.productVehicleCompatibility.findMany,
-      ).mockResolvedValue([compatibilityRecord])
+      ).mockResolvedValue([compatibilityListRecord])
 
       const result = await listProductCompatibilities(
         'product-test',
         client,
       )
 
-      expect(result).toEqual([compatibilityRecord])
+      expect(result).toEqual([
+        {
+          ...compatibilityListRecord,
+          vehicleConfiguration: {
+            ...compatibilityListRecord.vehicleConfiguration,
+            powerKw: 110.5,
+          },
+        },
+      ])
     })
   })
 
@@ -149,17 +232,15 @@ describe('product compatibilities service', () => {
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
-    test('rejeita associação duplicada', async () => {
+    test('procura configuração com a hierarquia necessária', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue({
         id: 'product-test',
       })
       vi.mocked(
         client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue({
-        id: 'vehicle-configuration-test',
-      })
+      ).mockResolvedValue(configurationHierarchy)
       vi.mocked(
-        client.productVehicleCompatibility.findUnique,
+        client.productVehicleCompatibility.findFirst,
       ).mockResolvedValue(compatibilityRecord)
 
       await expect(
@@ -169,6 +250,62 @@ describe('product compatibilities service', () => {
           client,
         ),
       ).rejects.toBeInstanceOf(ConflictError)
+
+      expect(
+        client.vehicleConfiguration.findUnique,
+      ).toHaveBeenCalledWith({
+        where: {
+          id: 'vehicle-configuration-test',
+        },
+        select: {
+          id: true,
+          generation: {
+            select: {
+              id: true,
+              model: {
+                select: {
+                  id: true,
+                  brand: {
+                    select: {
+                      id: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+    })
+
+    test('rejeita associação duplicada usando findFirst', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue({
+        id: 'product-test',
+      })
+      vi.mocked(
+        client.vehicleConfiguration.findUnique,
+      ).mockResolvedValue(configurationHierarchy)
+      vi.mocked(
+        client.productVehicleCompatibility.findFirst,
+      ).mockResolvedValue(compatibilityRecord)
+
+      await expect(
+        addProductCompatibility(
+          'product-test',
+          'vehicle-configuration-test',
+          client,
+        ),
+      ).rejects.toBeInstanceOf(ConflictError)
+
+      expect(
+        client.productVehicleCompatibility.findFirst,
+      ).toHaveBeenCalledWith({
+        where: {
+          productId: 'product-test',
+          vehicleConfigurationId:
+            'vehicle-configuration-test',
+        },
+      })
     })
 
     test('cria associação válida', async () => {
@@ -177,11 +314,9 @@ describe('product compatibilities service', () => {
       })
       vi.mocked(
         client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue({
-        id: 'vehicle-configuration-test',
-      })
+      ).mockResolvedValue(configurationHierarchy)
       vi.mocked(
-        client.productVehicleCompatibility.findUnique,
+        client.productVehicleCompatibility.findFirst,
       ).mockResolvedValue(null)
       vi.mocked(
         client.productVehicleCompatibility.create,
@@ -198,6 +333,9 @@ describe('product compatibilities service', () => {
       ).toHaveBeenCalledWith({
         data: {
           productId: 'product-test',
+          vehicleBrandId: 'brand-test',
+          vehicleModelId: 'model-test',
+          vehicleGenerationId: 'generation-test',
           vehicleConfigurationId:
             'vehicle-configuration-test',
         },
@@ -230,7 +368,7 @@ describe('product compatibilities service', () => {
 
     test('rejeita associação inexistente', async () => {
       vi.mocked(
-        client.productVehicleCompatibility.findUnique,
+        client.productVehicleCompatibility.findFirst,
       ).mockResolvedValue(null)
 
       await expect(
@@ -242,9 +380,34 @@ describe('product compatibilities service', () => {
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
+    test('procura associação por produto e configuração', async () => {
+      vi.mocked(
+        client.productVehicleCompatibility.findFirst,
+      ).mockResolvedValue(compatibilityRecord)
+      vi.mocked(
+        client.productVehicleCompatibility.delete,
+      ).mockResolvedValue(compatibilityRecord)
+
+      await removeProductCompatibility(
+        'product-test',
+        'vehicle-configuration-test',
+        client,
+      )
+
+      expect(
+        client.productVehicleCompatibility.findFirst,
+      ).toHaveBeenCalledWith({
+        where: {
+          productId: 'product-test',
+          vehicleConfigurationId:
+            'vehicle-configuration-test',
+        },
+      })
+    })
+
     test('apaga associação existente', async () => {
       vi.mocked(
-        client.productVehicleCompatibility.findUnique,
+        client.productVehicleCompatibility.findFirst,
       ).mockResolvedValue(compatibilityRecord)
       vi.mocked(
         client.productVehicleCompatibility.delete,
@@ -260,11 +423,7 @@ describe('product compatibilities service', () => {
         client.productVehicleCompatibility.delete,
       ).toHaveBeenCalledWith({
         where: {
-          productId_vehicleConfigurationId: {
-            productId: 'product-test',
-            vehicleConfigurationId:
-              'vehicle-configuration-test',
-          },
+          id: 'compatibility-test',
         },
       })
 

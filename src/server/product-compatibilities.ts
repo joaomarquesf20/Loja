@@ -6,45 +6,138 @@ import {
 } from './products'
 import { productCompatibilitySchema } from '../lib/product-compatibility-validation'
 
+type DecimalLike =
+  | number
+  | string
+  | {
+      toString(): string
+    }
+
 type ProductVehicleCompatibilityRecord = {
   id: string
   productId: string
-  vehicleConfigurationId: string
+  vehicleConfigurationId: string | null
 }
 
-type CompatibilityWhereUnique =
-  | { id: string }
-  | {
-      productId_vehicleConfigurationId: {
-        productId: string
-        vehicleConfigurationId: string
+type ProductVehicleCompatibilityListRecord =
+  ProductVehicleCompatibilityRecord & {
+    vehicleBrand: {
+      id: string
+      name: string
+    }
+    vehicleModel: {
+      id: string
+      name: string
+    }
+    vehicleGeneration: {
+      id: string
+      name: string
+    } | null
+    vehicleConfiguration: {
+      id: string
+      name: string
+      engineCode: string | null
+      engineType: string | null
+      displacementCc: number | null
+      powerKw: DecimalLike | null
+      bodyType: string | null
+      yearFrom: number | null
+      yearTo: number | null
+    } | null
+  }
+
+type VehicleConfigurationHierarchyRecord = {
+  id: string
+  generation: {
+    id: string
+    model: {
+      id: string
+      brand: {
+        id: string
       }
     }
+  }
+}
+
+const compatibilityInclude = {
+  vehicleBrand: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  vehicleModel: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  vehicleGeneration: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  vehicleConfiguration: {
+    select: {
+      id: true,
+      name: true,
+      engineCode: true,
+      engineType: true,
+      displacementCc: true,
+      powerKw: true,
+      bodyType: true,
+      yearFrom: true,
+      yearTo: true,
+    },
+  },
+} as const
+
+const vehicleConfigurationHierarchySelect = {
+  id: true,
+  generation: {
+    select: {
+      id: true,
+      model: {
+        select: {
+          id: true,
+          brand: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const
 
 export interface ProductCompatibilityClient {
   productVehicleCompatibility: {
     findMany(args: {
       where: { productId: string }
-    }): Promise<ProductVehicleCompatibilityRecord[]>
+      include: typeof compatibilityInclude
+    }): Promise<ProductVehicleCompatibilityListRecord[]>
 
-    findUnique(args: {
-      where: CompatibilityWhereUnique
+    findFirst(args: {
+      where: {
+        productId: string
+        vehicleConfigurationId: string
+      }
     }): Promise<ProductVehicleCompatibilityRecord | null>
 
     create(args: {
       data: {
         productId: string
+        vehicleBrandId: string
+        vehicleModelId: string
+        vehicleGenerationId: string
         vehicleConfigurationId: string
       }
     }): Promise<ProductVehicleCompatibilityRecord>
 
     delete(args: {
-      where: {
-        productId_vehicleConfigurationId: {
-          productId: string
-          vehicleConfigurationId: string
-        }
-      }
+      where: { id: string }
     }): Promise<ProductVehicleCompatibilityRecord>
   }
 
@@ -57,7 +150,8 @@ export interface ProductCompatibilityClient {
   vehicleConfiguration: {
     findUnique(args: {
       where: { id: string }
-    }): Promise<{ id: string } | null>
+      select: typeof vehicleConfigurationHierarchySelect
+    }): Promise<VehicleConfigurationHierarchyRecord | null>
   }
 }
 
@@ -70,6 +164,31 @@ function getClient(
 function validateId(id: string) {
   if (!id.trim()) {
     throw new ValidationError('ID é obrigatório')
+  }
+}
+
+function normalizePowerKw(value: DecimalLike | null) {
+  if (value === null) {
+    return null
+  }
+
+  return Number(value.toString())
+}
+
+function normalizeCompatibility(
+  record: ProductVehicleCompatibilityListRecord,
+) {
+  return {
+    ...record,
+    vehicleConfiguration:
+      record.vehicleConfiguration === null
+        ? null
+        : {
+            ...record.vehicleConfiguration,
+            powerKw: normalizePowerKw(
+              record.vehicleConfiguration.powerKw,
+            ),
+          },
   }
 }
 
@@ -89,9 +208,13 @@ export async function listProductCompatibilities(
     throw new NotFoundError('Produto não encontrado')
   }
 
-  return db.productVehicleCompatibility.findMany({
-    where: { productId },
-  })
+  const compatibilities =
+    await db.productVehicleCompatibility.findMany({
+      where: { productId },
+      include: compatibilityInclude,
+    })
+
+  return compatibilities.map(normalizeCompatibility)
 }
 
 export async function addProductCompatibility(
@@ -117,6 +240,7 @@ export async function addProductCompatibility(
   const vehicleConfiguration =
     await db.vehicleConfiguration.findUnique({
       where: { id: data.vehicleConfigurationId },
+      select: vehicleConfigurationHierarchySelect,
     })
 
   if (!vehicleConfiguration) {
@@ -126,13 +250,11 @@ export async function addProductCompatibility(
   }
 
   const existing =
-    await db.productVehicleCompatibility.findUnique({
+    await db.productVehicleCompatibility.findFirst({
       where: {
-        productId_vehicleConfigurationId: {
-          productId: data.productId,
-          vehicleConfigurationId:
-            data.vehicleConfigurationId,
-        },
+        productId: data.productId,
+        vehicleConfigurationId:
+          data.vehicleConfigurationId,
       },
     })
 
@@ -145,8 +267,14 @@ export async function addProductCompatibility(
   return db.productVehicleCompatibility.create({
     data: {
       productId: data.productId,
+      vehicleBrandId:
+        vehicleConfiguration.generation.model.brand.id,
+      vehicleModelId:
+        vehicleConfiguration.generation.model.id,
+      vehicleGenerationId:
+        vehicleConfiguration.generation.id,
       vehicleConfigurationId:
-        data.vehicleConfigurationId,
+        vehicleConfiguration.id,
     },
   })
 }
@@ -164,13 +292,11 @@ export async function removeProductCompatibility(
   const db = getClient(client)
 
   const existing =
-    await db.productVehicleCompatibility.findUnique({
+    await db.productVehicleCompatibility.findFirst({
       where: {
-        productId_vehicleConfigurationId: {
-          productId: data.productId,
-          vehicleConfigurationId:
-            data.vehicleConfigurationId,
-        },
+        productId: data.productId,
+        vehicleConfigurationId:
+          data.vehicleConfigurationId,
       },
     })
 
@@ -181,12 +307,6 @@ export async function removeProductCompatibility(
   }
 
   return db.productVehicleCompatibility.delete({
-    where: {
-      productId_vehicleConfigurationId: {
-        productId: data.productId,
-        vehicleConfigurationId:
-          data.vehicleConfigurationId,
-      },
-    },
+    where: { id: existing.id },
   })
 }

@@ -61,6 +61,33 @@ const compatibility = {
   vehicleConfigurationId: 'vehicle-configuration-test',
 }
 
+const compatibilityListRecord = {
+  ...compatibility,
+  vehicleBrand: {
+    id: 'brand-test',
+    name: 'Volkswagen',
+  },
+  vehicleModel: {
+    id: 'model-test',
+    name: 'Golf',
+  },
+  vehicleGeneration: {
+    id: 'generation-test',
+    name: 'Mk7',
+  },
+  vehicleConfiguration: {
+    id: 'vehicle-configuration-test',
+    name: '2.0 TDI 150',
+    engineCode: 'EA288',
+    engineType: 'Diesel',
+    displacementCc: 1968,
+    powerKw: 110.5,
+    bodyType: 'Hatchback',
+    yearFrom: 2013,
+    yearTo: 2020,
+  },
+}
+
 function context() {
   return {
     params: Promise.resolve({
@@ -100,7 +127,7 @@ describe('Admin Product Compatibilities API', () => {
   describe('GET', () => {
     test('devolve compatibilidades com status 200', async () => {
       mockListProductCompatibilities.mockResolvedValue([
-        compatibility,
+        compatibilityListRecord,
       ])
 
       const response = await GET(
@@ -112,7 +139,7 @@ describe('Admin Product Compatibilities API', () => {
 
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual([
-        compatibility,
+        compatibilityListRecord,
       ])
       expect(
         mockListProductCompatibilities,
