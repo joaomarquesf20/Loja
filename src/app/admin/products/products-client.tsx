@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useState } from 'react'
+import ProductCompatibilitiesClient from './product-compatibilities-client'
 
 type Product = {
   id: string
@@ -64,12 +65,22 @@ async function getErrorMessage(response: Response) {
 export default function ProductsClient() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [productBrands, setProductBrands] = useState<ProductBrand[]>([])
+  const [productBrands, setProductBrands] =
+    useState<ProductBrand[]>([])
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [compatibilityProductId, setCompatibilityProductId] =
+    useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const compatibilityProduct =
+    compatibilityProductId === null
+      ? null
+      : products.find(
+          (product) => product.id === compatibilityProductId,
+        ) ?? null
 
   useEffect(() => {
     async function loadInitialData() {
@@ -77,23 +88,32 @@ export default function ProductsClient() {
         setLoading(true)
         setError(null)
 
-        const [productsResponse, categoriesResponse, brandsResponse] =
-          await Promise.all([
-            fetch('/api/admin/products'),
-            fetch('/api/admin/categories'),
-            fetch('/api/admin/product-brands'),
-          ])
+        const [
+          productsResponse,
+          categoriesResponse,
+          brandsResponse,
+        ] = await Promise.all([
+          fetch('/api/admin/products'),
+          fetch('/api/admin/categories'),
+          fetch('/api/admin/product-brands'),
+        ])
 
         if (!productsResponse.ok) {
-          throw new Error(await getErrorMessage(productsResponse))
+          throw new Error(
+            await getErrorMessage(productsResponse),
+          )
         }
 
         if (!categoriesResponse.ok) {
-          throw new Error(await getErrorMessage(categoriesResponse))
+          throw new Error(
+            await getErrorMessage(categoriesResponse),
+          )
         }
 
         if (!brandsResponse.ok) {
-          throw new Error(await getErrorMessage(brandsResponse))
+          throw new Error(
+            await getErrorMessage(brandsResponse),
+          )
         }
 
         const productsData =
@@ -154,7 +174,9 @@ export default function ProductsClient() {
     setError(null)
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault()
 
     if (submitting) {
@@ -170,7 +192,9 @@ export default function ProductsClient() {
     const stockQuantity = Number(form.stockQuantity)
 
     if (!Number.isFinite(price) || price < 0) {
-      setError('O preço tem de ser um número igual ou superior a zero')
+      setError(
+        'O preço tem de ser um número igual ou superior a zero',
+      )
       return
     }
 
@@ -263,6 +287,10 @@ export default function ProductsClient() {
       if (editingId === product.id) {
         resetForm()
       }
+
+      if (compatibilityProductId === product.id) {
+        setCompatibilityProductId(null)
+      }
     } catch (deleteError) {
       setError(
         deleteError instanceof Error
@@ -296,8 +324,8 @@ export default function ProductsClient() {
 
         {categories.length === 0 && (
           <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">
-            Não existem categorias disponíveis. Cria primeiro uma
-            categoria antes de adicionar produtos.
+            Não existem categorias disponíveis. Cria primeiro
+            uma categoria antes de adicionar produtos.
           </p>
         )}
 
@@ -399,7 +427,9 @@ export default function ProductsClient() {
             <select
               required
               value={form.categoryId}
-              disabled={submitting || categories.length === 0}
+              disabled={
+                submitting || categories.length === 0
+              }
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
@@ -408,7 +438,9 @@ export default function ProductsClient() {
               }
               className="rounded border px-3 py-2"
             >
-              <option value="">Selecionar categoria</option>
+              <option value="">
+                Selecionar categoria
+              </option>
 
               {categories.map((category) => (
                 <option
@@ -481,7 +513,9 @@ export default function ProductsClient() {
           <div className="flex gap-2 md:col-span-2">
             <button
               type="submit"
-              disabled={submitting || categories.length === 0}
+              disabled={
+                submitting || categories.length === 0
+              }
               className="rounded bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting
@@ -517,13 +551,27 @@ export default function ProductsClient() {
             <table className="w-full border-collapse border">
               <thead>
                 <tr>
-                  <th className="border p-2 text-left">Nome</th>
-                  <th className="border p-2 text-left">SKU</th>
-                  <th className="border p-2 text-left">Slug</th>
-                  <th className="border p-2 text-right">Preço</th>
-                  <th className="border p-2 text-right">Stock</th>
-                  <th className="border p-2 text-left">Estado</th>
-                  <th className="border p-2 text-left">Ações</th>
+                  <th className="border p-2 text-left">
+                    Nome
+                  </th>
+                  <th className="border p-2 text-left">
+                    SKU
+                  </th>
+                  <th className="border p-2 text-left">
+                    Slug
+                  </th>
+                  <th className="border p-2 text-right">
+                    Preço
+                  </th>
+                  <th className="border p-2 text-right">
+                    Stock
+                  </th>
+                  <th className="border p-2 text-left">
+                    Estado
+                  </th>
+                  <th className="border p-2 text-left">
+                    Ações
+                  </th>
                 </tr>
               </thead>
 
@@ -551,18 +599,36 @@ export default function ProductsClient() {
                     </td>
 
                     <td className="border p-2">
-                      {product.isActive ? 'Ativo' : 'Inativo'}
+                      {product.isActive
+                        ? 'Ativo'
+                        : 'Inativo'}
                     </td>
 
                     <td className="border p-2">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           disabled={submitting}
-                          onClick={() => startEditing(product)}
+                          onClick={() =>
+                            startEditing(product)
+                          }
                           className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Editar
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => {
+                            setCompatibilityProductId(
+                              product.id,
+                            )
+                            setError(null)
+                          }}
+                          className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Compatibilidades
                         </button>
 
                         <button
@@ -584,6 +650,17 @@ export default function ProductsClient() {
           </div>
         )}
       </section>
+
+      {compatibilityProduct && (
+        <ProductCompatibilitiesClient
+          key={compatibilityProduct.id}
+          productId={compatibilityProduct.id}
+          productName={compatibilityProduct.name}
+          onClose={() =>
+            setCompatibilityProductId(null)
+          }
+        />
+      )}
     </div>
   )
 }
