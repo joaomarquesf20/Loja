@@ -1,4 +1,9 @@
-import { describe, expect, test, vi } from 'vitest'
+import {
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest'
 
 vi.mock('./db', () => ({
   prisma: {},
@@ -6,6 +11,7 @@ vi.mock('./db', () => ({
 
 import {
   CatalogClient,
+  getCatalogProductBySlug,
   listCatalogCategories,
   listCatalogProducts,
 } from './catalog'
@@ -14,6 +20,7 @@ function createClient(): CatalogClient {
   return {
     product: {
       findMany: vi.fn(),
+      findFirst: vi.fn(),
     },
     category: {
       findMany: vi.fn(),
@@ -150,9 +157,13 @@ describe('Catalog', () => {
       const result =
         await listCatalogProducts(client)
 
-      expect(result[0]?.inStock).toBe(false)
+      expect(result[0]?.inStock).toBe(
+        false,
+      )
       expect(result[0]?.brand).toBeNull()
-      expect(result[0]?.images).toEqual([])
+      expect(result[0]?.images).toEqual(
+        [],
+      )
     })
 
     test('não expõe stockQuantity no modelo público', async () => {
@@ -185,6 +196,148 @@ describe('Catalog', () => {
         'stockQuantity',
       )
       expect(product?.inStock).toBe(true)
+    })
+  })
+
+  describe('getCatalogProductBySlug', () => {
+    test('procura apenas produto ativo pelo slug', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue(null)
+
+      await getCatalogProductBySlug(
+        'produto-1',
+        client,
+      )
+
+      expect(
+        client.product.findFirst,
+      ).toHaveBeenCalledWith({
+        where: {
+          slug: 'produto-1',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          sku: true,
+          description: true,
+          price: true,
+          stockQuantity: true,
+          images: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+          brand: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      })
+    })
+
+    test('devolve detalhe público do produto', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue({
+        id: 'product-1',
+        name: 'Produto 1',
+        slug: 'produto-1',
+        sku: 'SKU-001',
+        description: 'Descrição',
+        price: '49.90',
+        stockQuantity: 2,
+        images: [
+          '/products/produto-1.jpg',
+        ],
+        category: {
+          id: 'category-1',
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+        },
+        brand: {
+          id: 'brand-1',
+          name: 'Marca 1',
+          slug: 'marca-1',
+        },
+      })
+
+      const result =
+        await getCatalogProductBySlug(
+          'produto-1',
+          client,
+        )
+
+      expect(result).toEqual({
+        id: 'product-1',
+        name: 'Produto 1',
+        slug: 'produto-1',
+        sku: 'SKU-001',
+        description: 'Descrição',
+        price: 49.9,
+        inStock: true,
+        images: [
+          '/products/produto-1.jpg',
+        ],
+        category: {
+          id: 'category-1',
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+        },
+        brand: {
+          id: 'brand-1',
+          name: 'Marca 1',
+          slug: 'marca-1',
+        },
+      })
+
+      expect(result).not.toHaveProperty(
+        'stockQuantity',
+      )
+    })
+
+    test('devolve null quando produto não existe ou está inativo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue(null)
+
+      const result =
+        await getCatalogProductBySlug(
+          'produto-inexistente',
+          client,
+        )
+
+      expect(result).toBeNull()
+    })
+
+    test('slug vazio devolve null sem consultar a base de dados', async () => {
+      const client = createClient()
+
+      const result =
+        await getCatalogProductBySlug(
+          '   ',
+          client,
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        client.product.findFirst,
+      ).not.toHaveBeenCalled()
     })
   })
 
@@ -380,7 +533,9 @@ describe('Catalog', () => {
         await listCatalogCategories(client)
 
       expect(
-        result.map((category) => category.id),
+        result.map(
+          (category) => category.id,
+        ),
       ).toEqual([
         'root',
         'parent',
