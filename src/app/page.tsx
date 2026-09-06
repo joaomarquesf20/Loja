@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import {
   listCatalogCategories,
   listCatalogProducts,
@@ -105,64 +106,68 @@ export default async function Home() {
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {products.map((product) => (
-                <article
+                <Link
                   key={product.id}
-                  className="flex flex-col overflow-hidden rounded-lg border"
+                  href={`/produtos/${product.slug}`}
+                  aria-label={`Ver ${product.name}`}
+                  className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
                 >
-                  <div className="flex aspect-[4/3] items-center justify-center border-b bg-neutral-50 px-4 text-center dark:bg-neutral-950">
-                    {product.images.length > 0 ? (
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Imagem associada ao produto
-                      </p>
-                    ) : (
-                      <p className="text-sm text-neutral-500">
-                        Sem imagem
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border px-2 py-1">
-                        {product.category.name}
-                      </span>
-
-                      {product.brand && (
-                        <span className="rounded-full border px-2 py-1">
-                          {product.brand.name}
-                        </span>
+                  <article className="flex h-full flex-col overflow-hidden rounded-lg border transition group-hover:border-neutral-500">
+                    <div className="flex aspect-[4/3] items-center justify-center border-b bg-neutral-50 px-4 text-center dark:bg-neutral-950">
+                      {product.images.length > 0 ? (
+                        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                          Imagem associada ao produto
+                        </p>
+                      ) : (
+                        <p className="text-sm text-neutral-500">
+                          Sem imagem
+                        </p>
                       )}
                     </div>
 
-                    <h3 className="font-semibold leading-snug">
-                      {product.name}
-                    </h3>
+                    <div className="flex flex-1 flex-col p-4">
+                      <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full border px-2 py-1">
+                          {product.category.name}
+                        </span>
 
-                    {product.description && (
-                      <p className="mt-2 line-clamp-3 text-sm text-neutral-600 dark:text-neutral-400">
-                        {product.description}
-                      </p>
-                    )}
+                        {product.brand && (
+                          <span className="rounded-full border px-2 py-1">
+                            {product.brand.name}
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="mt-auto pt-5">
-                      <p className="text-xl font-bold">
-                        {formatPrice(product.price)}
-                      </p>
+                      <h3 className="font-semibold leading-snug group-hover:underline">
+                        {product.name}
+                      </h3>
 
-                      <p
-                        className={`mt-1 text-sm font-medium ${
-                          product.inStock
-                            ? 'text-green-700 dark:text-green-400'
-                            : 'text-red-700 dark:text-red-400'
-                        }`}
-                      >
-                        {product.inStock
-                          ? 'Em stock'
-                          : 'Sem stock'}
-                      </p>
+                      {product.description && (
+                        <p className="mt-2 line-clamp-3 text-sm text-neutral-600 dark:text-neutral-400">
+                          {product.description}
+                        </p>
+                      )}
+
+                      <div className="mt-auto pt-5">
+                        <p className="text-xl font-bold">
+                          {formatPrice(product.price)}
+                        </p>
+
+                        <p
+                          className={`mt-1 text-sm font-medium ${
+                            product.inStock
+                              ? 'text-green-700 dark:text-green-400'
+                              : 'text-red-700 dark:text-red-400'
+                          }`}
+                        >
+                          {product.inStock
+                            ? 'Em stock'
+                            : 'Sem stock'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </article>
+                  </article>
+                </Link>
               ))}
             </div>
           )}
