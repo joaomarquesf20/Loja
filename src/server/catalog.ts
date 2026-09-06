@@ -27,9 +27,10 @@ type CatalogProductRecord = {
   } | null
 }
 
-type CatalogProductDetailRecord = CatalogProductRecord & {
-  sku: string
-}
+type CatalogProductDetailRecord =
+  CatalogProductRecord & {
+    sku: string
+  }
 
 type CatalogCategoryRecord = {
   id: string
@@ -75,39 +76,51 @@ export type CatalogCategory = {
   description: string | null
 }
 
-export interface CatalogClient {
-  product: {
-    findMany(args: {
-      where: {
-        isActive: true
-      }
-      orderBy: {
-        name: 'asc'
-      }
+export type CatalogCategoryPage = {
+  category: CatalogCategory
+  products: CatalogProduct[]
+}
+
+type CatalogProductFindManyArgs = {
+  where: {
+    isActive: true
+    categoryId?: {
+      in: string[]
+    }
+  }
+  orderBy: {
+    name: 'asc'
+  }
+  select: {
+    id: true
+    name: true
+    slug: true
+    description: true
+    price: true
+    stockQuantity: true
+    images: true
+    category: {
       select: {
         id: true
         name: true
         slug: true
-        description: true
-        price: true
-        stockQuantity: true
-        images: true
-        category: {
-          select: {
-            id: true
-            name: true
-            slug: true
-          }
-        }
-        brand: {
-          select: {
-            id: true
-            name: true
-            slug: true
-          }
-        }
       }
-    }): Promise<CatalogProductRecord[]>
+    }
+    brand: {
+      select: {
+        id: true
+        name: true
+        slug: true
+      }
+    }
+  }
+}
+
+export interface CatalogClient {
+  product: {
+    findMany(
+      args: CatalogProductFindManyArgs,
+    ): Promise<CatalogProductRecord[]>
 
     findFirst(args: {
       where: {
@@ -169,7 +182,10 @@ export interface CatalogClient {
 function getClient(
   client?: CatalogClient,
 ): CatalogClient {
-  return client ?? (prisma as unknown as CatalogClient)
+  return (
+    client ??
+    (prisma as unknown as CatalogClient)
+  )
 }
 
 function toCatalogProduct(
@@ -186,6 +202,72 @@ function toCatalogProduct(
     category: product.category,
     brand: product.brand,
   }
+}
+
+function toCatalogCategory(
+  category: CatalogCategoryRecord,
+): CatalogCategory {
+  return {
+    id: category.id,
+    parentId: category.parentId,
+    name: category.name,
+    slug: category.slug,
+    description: category.description,
+  }
+}
+
+async function getCategoryRecords(
+  db: CatalogClient,
+) {
+  return db.category.findMany({
+    orderBy: {
+      name: 'asc',
+    },
+    select: {
+      id: true,
+      parentId: true,
+      name: true,
+      slug: true,
+      description: true,
+      _count: {
+        select: {
+          products: {
+            where: {
+              isActive: true,
+            },
+          },
+        },
+      },
+    },
+  })
+}
+
+function getCategoryAndDescendantIds(
+  categories: CatalogCategoryRecord[],
+  rootCategoryId: string,
+) {
+  const categoryIds = new Set<string>([
+    rootCategoryId,
+  ])
+
+  let foundNewCategory = true
+
+  while (foundNewCategory) {
+    foundNewCategory = false
+
+    for (const category of categories) {
+      if (
+        category.parentId &&
+        categoryIds.has(category.parentId) &&
+        !categoryIds.has(category.id)
+      ) {
+        categoryIds.add(category.id)
+        foundNewCategory = true
+      }
+    }
+  }
+
+  return Array.from(categoryIds)
 }
 
 export async function listCatalogProducts(
@@ -240,16 +322,90 @@ export async function getCatalogProductBySlug(
 
   const db = getClient(client)
 
-  const product = await db.product.findFirst({
+  const product =
+    await db.product.findFirst({
+      where: {
+        slug: normalizedSlug,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sku: true,
+        description: true,
+        price: true,
+        stockQuantity: true,
+        images: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    })
+
+  if (!product) {
+    return null
+  }
+
+  return {
+    ...toCatalogProduct(product),
+    sku: product.sku,
+  }
+}
+
+export async function getCatalogCategoryPageBySlug(
+  slug: string,
+  client?: CatalogClient,
+): Promise<CatalogCategoryPage | null> {
+  const normalizedSlug = slug.trim()
+
+  if (!normalizedSlug) {
+    return null
+  }
+
+  const db = getClient(client)
+  const categories =
+    await getCategoryRecords(db)
+
+  const category = categories.find(
+    (item) => item.slug === normalizedSlug,
+  )
+
+  if (!category) {
+    return null
+  }
+
+  const categoryIds =
+    getCategoryAndDescendantIds(
+      categories,
+      category.id,
+    )
+
+  const products = await db.product.findMany({
     where: {
-      slug: normalizedSlug,
       isActive: true,
+      categoryId: {
+        in: categoryIds,
+      },
+    },
+    orderBy: {
+      name: 'asc',
     },
     select: {
       id: true,
       name: true,
       slug: true,
-      sku: true,
       description: true,
       price: true,
       stockQuantity: true,
@@ -271,13 +427,13 @@ export async function getCatalogProductBySlug(
     },
   })
 
-  if (!product) {
+  if (products.length === 0) {
     return null
   }
 
   return {
-    ...toCatalogProduct(product),
-    sku: product.sku,
+    category: toCatalogCategory(category),
+    products: products.map(toCatalogProduct),
   }
 }
 
@@ -287,27 +443,7 @@ export async function listCatalogCategories(
   const db = getClient(client)
 
   const categories =
-    await db.category.findMany({
-      orderBy: {
-        name: 'asc',
-      },
-      select: {
-        id: true,
-        parentId: true,
-        name: true,
-        slug: true,
-        description: true,
-        _count: {
-          select: {
-            products: {
-              where: {
-                isActive: true,
-              },
-            },
-          },
-        },
-      },
-    })
+    await getCategoryRecords(db)
 
   const categoriesById = new Map(
     categories.map((category) => [
@@ -349,11 +485,5 @@ export async function listCatalogCategories(
     .filter((category) =>
       visibleCategoryIds.has(category.id),
     )
-    .map((category) => ({
-      id: category.id,
-      parentId: category.parentId,
-      name: category.name,
-      slug: category.slug,
-      description: category.description,
-    }))
+    .map(toCatalogCategory)
 }

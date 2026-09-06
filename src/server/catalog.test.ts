@@ -11,6 +11,7 @@ vi.mock('./db', () => ({
 
 import {
   CatalogClient,
+  getCatalogCategoryPageBySlug,
   getCatalogProductBySlug,
   listCatalogCategories,
   listCatalogProducts,
@@ -338,6 +339,222 @@ describe('Catalog', () => {
       expect(
         client.product.findFirst,
       ).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getCatalogCategoryPageBySlug', () => {
+    test('slug vazio devolve null sem consultar a base de dados', async () => {
+      const client = createClient()
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          '   ',
+          client,
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        client.category.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        client.product.findMany,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('devolve null quando categoria não existe', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'inexistente',
+          client,
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        client.product.findMany,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('inclui produtos das subcategorias', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'root',
+          parentId: null,
+          name: 'Raiz',
+          slug: 'raiz',
+          description: 'Categoria principal',
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'child',
+          parentId: 'root',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'grandchild',
+          parentId: 'child',
+          name: 'Neta',
+          slug: 'neta',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+        {
+          id: 'other',
+          parentId: null,
+          name: 'Outra',
+          slug: 'outra',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: null,
+          price: '25.50',
+          stockQuantity: 3,
+          images: [],
+          category: {
+            id: 'grandchild',
+            name: 'Neta',
+            slug: 'neta',
+          },
+          brand: null,
+        },
+      ])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'raiz',
+          client,
+        )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          isActive: true,
+          categoryId: {
+            in: [
+              'root',
+              'child',
+              'grandchild',
+            ],
+          },
+        },
+        orderBy: {
+          name: 'asc',
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          price: true,
+          stockQuantity: true,
+          images: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+          brand: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      })
+
+      expect(result).toEqual({
+        category: {
+          id: 'root',
+          parentId: null,
+          name: 'Raiz',
+          slug: 'raiz',
+          description: 'Categoria principal',
+        },
+        products: [
+          {
+            id: 'product-1',
+            name: 'Produto 1',
+            slug: 'produto-1',
+            description: null,
+            price: 25.5,
+            inStock: true,
+            images: [],
+            category: {
+              id: 'grandchild',
+              name: 'Neta',
+              slug: 'neta',
+            },
+            brand: null,
+          },
+        ],
+      })
+    })
+
+    test('devolve null quando categoria não tem produtos ativos na árvore', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          client,
+        )
+
+      expect(result).toBeNull()
     })
   })
 
