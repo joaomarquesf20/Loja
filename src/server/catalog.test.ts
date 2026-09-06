@@ -1,0 +1,391 @@
+import { describe, expect, test, vi } from 'vitest'
+
+vi.mock('./db', () => ({
+  prisma: {},
+}))
+
+import {
+  CatalogClient,
+  listCatalogCategories,
+  listCatalogProducts,
+} from './catalog'
+
+function createClient(): CatalogClient {
+  return {
+    product: {
+      findMany: vi.fn(),
+    },
+    category: {
+      findMany: vi.fn(),
+    },
+  }
+}
+
+describe('Catalog', () => {
+  describe('listCatalogProducts', () => {
+    test('consulta apenas produtos ativos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await listCatalogProducts(client)
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          description: true,
+          price: true,
+          stockQuantity: true,
+          images: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+          brand: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
+        },
+      })
+    })
+
+    test('transforma produto no modelo público', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: 'Descrição',
+          price: '19.99',
+          stockQuantity: 5,
+          images: [
+            '/products/produto-1.jpg',
+          ],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: {
+            id: 'brand-1',
+            name: 'Marca 1',
+            slug: 'marca-1',
+          },
+        },
+      ])
+
+      const result =
+        await listCatalogProducts(client)
+
+      expect(result).toEqual([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: 'Descrição',
+          price: 19.99,
+          inStock: true,
+          images: [
+            '/products/produto-1.jpg',
+          ],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: {
+            id: 'brand-1',
+            name: 'Marca 1',
+            slug: 'marca-1',
+          },
+        },
+      ])
+    })
+
+    test('produto sem stock devolve inStock false', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: null,
+          price: 10,
+          stockQuantity: 0,
+          images: [],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: null,
+        },
+      ])
+
+      const result =
+        await listCatalogProducts(client)
+
+      expect(result[0]?.inStock).toBe(false)
+      expect(result[0]?.brand).toBeNull()
+      expect(result[0]?.images).toEqual([])
+    })
+
+    test('não expõe stockQuantity no modelo público', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: null,
+          price: 10,
+          stockQuantity: 37,
+          images: [],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: null,
+        },
+      ])
+
+      const [product] =
+        await listCatalogProducts(client)
+
+      expect(product).not.toHaveProperty(
+        'stockQuantity',
+      )
+      expect(product?.inStock).toBe(true)
+    })
+  })
+
+  describe('listCatalogCategories', () => {
+    test('consulta contagem apenas de produtos ativos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([])
+
+      await listCatalogCategories(client)
+
+      expect(
+        client.category.findMany,
+      ).toHaveBeenCalledWith({
+        orderBy: {
+          name: 'asc',
+        },
+        select: {
+          id: true,
+          parentId: true,
+          name: true,
+          slug: true,
+          description: true,
+          _count: {
+            select: {
+              products: {
+                where: {
+                  isActive: true,
+                },
+              },
+            },
+          },
+        },
+      })
+    })
+
+    test('devolve categoria com produto ativo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      const result =
+        await listCatalogCategories(client)
+
+      expect(result).toEqual([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+        },
+      ])
+    })
+
+    test('esconde categoria sem produtos ativos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'empty-category',
+          parentId: null,
+          name: 'Vazia',
+          slug: 'vazia',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+      ])
+
+      const result =
+        await listCatalogCategories(client)
+
+      expect(result).toEqual([])
+    })
+
+    test('mantém categoria pai quando descendente tem produto ativo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'parent',
+          parentId: null,
+          name: 'Pai',
+          slug: 'pai',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'child',
+          parentId: 'parent',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      const result =
+        await listCatalogCategories(client)
+
+      expect(result).toEqual([
+        {
+          id: 'parent',
+          parentId: null,
+          name: 'Pai',
+          slug: 'pai',
+          description: null,
+        },
+        {
+          id: 'child',
+          parentId: 'parent',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+        },
+      ])
+    })
+
+    test('mantém todos os antepassados necessários', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'root',
+          parentId: null,
+          name: 'Raiz',
+          slug: 'raiz',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'parent',
+          parentId: 'root',
+          name: 'Pai',
+          slug: 'pai',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'child',
+          parentId: 'parent',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+        {
+          id: 'empty',
+          parentId: null,
+          name: 'Vazia',
+          slug: 'vazia',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+      ])
+
+      const result =
+        await listCatalogCategories(client)
+
+      expect(
+        result.map((category) => category.id),
+      ).toEqual([
+        'root',
+        'parent',
+        'child',
+      ])
+    })
+  })
+})
