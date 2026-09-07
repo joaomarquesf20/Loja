@@ -81,11 +81,18 @@ export type CatalogCategoryPage = {
   products: CatalogProduct[]
 }
 
+export type CatalogCategoryFilters = {
+  inStockOnly?: boolean
+}
+
 type CatalogProductFindManyArgs = {
   where: {
     isActive: true
     categoryId?: {
       in: string[]
+    }
+    stockQuantity?: {
+      gt: number
     }
   }
   orderBy: {
@@ -185,6 +192,22 @@ function getClient(
   return (
     client ??
     (prisma as unknown as CatalogClient)
+  )
+}
+
+function isCatalogClient(
+  value:
+    | CatalogCategoryFilters
+    | CatalogClient
+    | undefined,
+): value is CatalogClient {
+  if (!value) {
+    return false
+  }
+
+  return (
+    'product' in value &&
+    'category' in value
   )
 }
 
@@ -364,9 +387,23 @@ export async function getCatalogProductBySlug(
   }
 }
 
-export async function getCatalogCategoryPageBySlug(
+export function getCatalogCategoryPageBySlug(
   slug: string,
   client?: CatalogClient,
+): Promise<CatalogCategoryPage | null>
+
+export function getCatalogCategoryPageBySlug(
+  slug: string,
+  filters: CatalogCategoryFilters,
+  client?: CatalogClient,
+): Promise<CatalogCategoryPage | null>
+
+export async function getCatalogCategoryPageBySlug(
+  slug: string,
+  filtersOrClient?:
+    | CatalogCategoryFilters
+    | CatalogClient,
+  maybeClient?: CatalogClient,
 ): Promise<CatalogCategoryPage | null> {
   const normalizedSlug = slug.trim()
 
@@ -374,12 +411,25 @@ export async function getCatalogCategoryPageBySlug(
     return null
   }
 
+  const filters: CatalogCategoryFilters =
+    isCatalogClient(filtersOrClient)
+      ? {}
+      : filtersOrClient ?? {}
+
+  const client = isCatalogClient(
+    filtersOrClient,
+  )
+    ? filtersOrClient
+    : maybeClient
+
   const db = getClient(client)
+
   const categories =
     await getCategoryRecords(db)
 
   const category = categories.find(
-    (item) => item.slug === normalizedSlug,
+    (item) =>
+      item.slug === normalizedSlug,
   )
 
   if (!category) {
@@ -392,48 +442,73 @@ export async function getCatalogCategoryPageBySlug(
       category.id,
     )
 
-  const products = await db.product.findMany({
-    where: {
+  const categoryIdSet =
+    new Set(categoryIds)
+
+  const hasActiveProductsInTree =
+    categories.some(
+      (item) =>
+        categoryIdSet.has(item.id) &&
+        item._count.products > 0,
+    )
+
+  const where: CatalogProductFindManyArgs['where'] =
+    {
       isActive: true,
       categoryId: {
         in: categoryIds,
       },
-    },
-    orderBy: {
-      name: 'asc',
-    },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      description: true,
-      price: true,
-      stockQuantity: true,
-      images: true,
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-      brand: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-    },
-  })
+    }
 
-  if (products.length === 0) {
+  if (filters.inStockOnly) {
+    where.stockQuantity = {
+      gt: 0,
+    }
+  }
+
+  const products =
+    await db.product.findMany({
+      where,
+      orderBy: {
+        name: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        price: true,
+        stockQuantity: true,
+        images: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+        brand: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+    })
+
+  if (
+    products.length === 0 &&
+    !hasActiveProductsInTree
+  ) {
     return null
   }
 
   return {
-    category: toCatalogCategory(category),
-    products: products.map(toCatalogProduct),
+    category:
+      toCatalogCategory(category),
+    products:
+      products.map(toCatalogProduct),
   }
 }
 

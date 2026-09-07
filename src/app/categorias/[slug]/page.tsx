@@ -8,6 +8,9 @@ type CategoryPageProps = {
   params: Promise<{
     slug: string
   }>
+  searchParams: Promise<{
+    stock?: string | string[]
+  }>
 }
 
 function formatPrice(price: number) {
@@ -17,19 +20,46 @@ function formatPrice(price: number) {
   }).format(price)
 }
 
+function getSearchParamValue(
+  value: string | string[] | undefined,
+) {
+  if (Array.isArray(value)) {
+    return value[0]
+  }
+
+  return value
+}
+
 export default async function CategoryPage({
   params,
+  searchParams,
 }: CategoryPageProps) {
-  const { slug } = await params
+  const [{ slug }, query] = await Promise.all([
+    params,
+    searchParams,
+  ])
+
+  const inStockOnly =
+    getSearchParamValue(query.stock) ===
+    'available'
 
   const result =
-    await getCatalogCategoryPageBySlug(slug)
+    await getCatalogCategoryPageBySlug(
+      slug,
+      {
+        inStockOnly,
+      },
+    )
 
   if (!result) {
     notFound()
   }
 
   const { category, products } = result
+
+  const stockFilterHref = inStockOnly
+    ? `/categorias/${category.slug}`
+    : `/categorias/${category.slug}?stock=available`
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -71,6 +101,50 @@ export default async function CategoryPage({
         </section>
 
         <section
+          aria-labelledby="filters-heading"
+          className="mt-8 rounded-lg border p-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2
+                id="filters-heading"
+                className="font-semibold"
+              >
+                Filtros
+              </h2>
+
+              <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                Refina os produtos desta categoria.
+              </p>
+            </div>
+
+            {inStockOnly && (
+              <Link
+                href={`/categorias/${category.slug}`}
+                className="text-sm font-medium underline underline-offset-4"
+              >
+                Limpar filtros
+              </Link>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              href={stockFilterHref}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
+                inStockOnly
+                  ? 'border-foreground bg-foreground text-background'
+                  : 'hover:border-neutral-500'
+              }`}
+            >
+              {inStockOnly
+                ? '✓ Em stock'
+                : 'Em stock'}
+            </Link>
+          </div>
+        </section>
+
+        <section
           aria-labelledby="products-heading"
           className="mt-8"
         >
@@ -81,72 +155,89 @@ export default async function CategoryPage({
             Produtos
           </h2>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <Link
-                key={product.id}
-                href={`/produtos/${product.slug}`}
-                aria-label={`Ver ${product.name}`}
-                className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
-              >
-                <article className="flex h-full flex-col overflow-hidden rounded-lg border transition group-hover:border-neutral-500">
-                  <div className="flex aspect-[4/3] items-center justify-center border-b bg-neutral-50 px-4 text-center dark:bg-neutral-950">
-                    {product.images.length > 0 ? (
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        Imagem associada ao produto
-                      </p>
-                    ) : (
-                      <p className="text-sm text-neutral-500">
-                        Sem imagem
-                      </p>
-                    )}
-                  </div>
+          {products.length === 0 ? (
+            <div className="rounded-lg border p-6">
+              <p className="font-medium">
+                Nenhum produto corresponde aos
+                filtros selecionados.
+              </p>
 
-                  <div className="flex flex-1 flex-col p-4">
-                    <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border px-2 py-1">
-                        {product.category.name}
-                      </span>
-
-                      {product.brand && (
-                        <span className="rounded-full border px-2 py-1">
-                          {product.brand.name}
-                        </span>
+              <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+                Remove ou altera os filtros para
+                voltares a ver os produtos desta
+                categoria.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {products.map((product) => (
+                <Link
+                  key={product.id}
+                  href={`/produtos/${product.slug}`}
+                  aria-label={`Ver ${product.name}`}
+                  className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
+                >
+                  <article className="flex h-full flex-col overflow-hidden rounded-lg border transition group-hover:border-neutral-500">
+                    <div className="flex aspect-[4/3] items-center justify-center border-b bg-neutral-50 px-4 text-center dark:bg-neutral-950">
+                      {product.images.length > 0 ? (
+                        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                          Imagem associada ao produto
+                        </p>
+                      ) : (
+                        <p className="text-sm text-neutral-500">
+                          Sem imagem
+                        </p>
                       )}
                     </div>
 
-                    <h3 className="font-semibold leading-snug group-hover:underline">
-                      {product.name}
-                    </h3>
+                    <div className="flex flex-1 flex-col p-4">
+                      <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                        <span className="rounded-full border px-2 py-1">
+                          {product.category.name}
+                        </span>
 
-                    {product.description && (
-                      <p className="mt-2 line-clamp-3 text-sm text-neutral-600 dark:text-neutral-400">
-                        {product.description}
-                      </p>
-                    )}
+                        {product.brand && (
+                          <span className="rounded-full border px-2 py-1">
+                            {product.brand.name}
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="mt-auto pt-5">
-                      <p className="text-xl font-bold">
-                        {formatPrice(product.price)}
-                      </p>
+                      <h3 className="font-semibold leading-snug group-hover:underline">
+                        {product.name}
+                      </h3>
 
-                      <p
-                        className={`mt-1 text-sm font-medium ${
-                          product.inStock
-                            ? 'text-green-700 dark:text-green-400'
-                            : 'text-red-700 dark:text-red-400'
-                        }`}
-                      >
-                        {product.inStock
-                          ? 'Em stock'
-                          : 'Sem stock'}
-                      </p>
+                      {product.description && (
+                        <p className="mt-2 line-clamp-3 text-sm text-neutral-600 dark:text-neutral-400">
+                          {product.description}
+                        </p>
+                      )}
+
+                      <div className="mt-auto pt-5">
+                        <p className="text-xl font-bold">
+                          {formatPrice(
+                            product.price,
+                          )}
+                        </p>
+
+                        <p
+                          className={`mt-1 text-sm font-medium ${
+                            product.inStock
+                              ? 'text-green-700 dark:text-green-400'
+                              : 'text-red-700 dark:text-red-400'
+                          }`}
+                        >
+                          {product.inStock
+                            ? 'Em stock'
+                            : 'Sem stock'}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              </Link>
-            ))}
-          </div>
+                  </article>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>

@@ -158,13 +158,17 @@ describe('Catalog', () => {
       const result =
         await listCatalogProducts(client)
 
-      expect(result[0]?.inStock).toBe(
-        false,
-      )
-      expect(result[0]?.brand).toBeNull()
-      expect(result[0]?.images).toEqual(
-        [],
-      )
+      expect(
+        result[0]?.inStock,
+      ).toBe(false)
+
+      expect(
+        result[0]?.brand,
+      ).toBeNull()
+
+      expect(
+        result[0]?.images,
+      ).toEqual([])
     })
 
     test('não expõe stockQuantity no modelo público', async () => {
@@ -196,6 +200,7 @@ describe('Catalog', () => {
       expect(product).not.toHaveProperty(
         'stockQuantity',
       )
+
       expect(product?.inStock).toBe(true)
     })
   })
@@ -523,6 +528,121 @@ describe('Catalog', () => {
             brand: null,
           },
         ],
+      })
+    })
+
+    test('filtra produtos em stock quando inStockOnly está ativo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: null,
+          price: 20,
+          stockQuantity: 4,
+          images: [],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: null,
+        },
+      ])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            inStockOnly: true,
+          },
+          client,
+        )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            stockQuantity: {
+              gt: 0,
+            },
+          },
+        }),
+      )
+
+      expect(
+        result?.products,
+      ).toHaveLength(1)
+
+      expect(
+        result?.products[0]?.inStock,
+      ).toBe(true)
+    })
+
+    test('mantém categoria quando filtro em stock não encontra produtos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            inStockOnly: true,
+          },
+          client,
+        )
+
+      expect(result).toEqual({
+        category: {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+        },
+        products: [],
       })
     })
 
