@@ -10,7 +10,13 @@ type CategoryPageProps = {
   }>
   searchParams: Promise<{
     stock?: string | string[]
+    brand?: string | string[]
   }>
+}
+
+type CategoryFilterState = {
+  inStockOnly: boolean
+  brandSlugs: string[]
 }
 
 function formatPrice(price: number) {
@@ -30,6 +36,46 @@ function getSearchParamValue(
   return value
 }
 
+function getSearchParamValues(
+  value: string | string[] | undefined,
+) {
+  const values =
+    value === undefined
+      ? []
+      : Array.isArray(value)
+        ? value
+        : [value]
+
+  return Array.from(
+    new Set(
+      values
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0),
+    ),
+  )
+}
+
+function buildCategoryHref(
+  categorySlug: string,
+  filters: CategoryFilterState,
+) {
+  const params = new URLSearchParams()
+
+  if (filters.inStockOnly) {
+    params.set('stock', 'available')
+  }
+
+  for (const brandSlug of filters.brandSlugs) {
+    params.append('brand', brandSlug)
+  }
+
+  const query = params.toString()
+
+  return query
+    ? `/categorias/${categorySlug}?${query}`
+    : `/categorias/${categorySlug}`
+}
+
 export default async function CategoryPage({
   params,
   searchParams,
@@ -43,11 +89,15 @@ export default async function CategoryPage({
     getSearchParamValue(query.stock) ===
     'available'
 
+  const selectedBrandSlugs =
+    getSearchParamValues(query.brand)
+
   const result =
     await getCatalogCategoryPageBySlug(
       slug,
       {
         inStockOnly,
+        brandSlugs: selectedBrandSlugs,
       },
     )
 
@@ -55,11 +105,24 @@ export default async function CategoryPage({
     notFound()
   }
 
-  const { category, products } = result
+  const {
+    category,
+    brands,
+    products,
+  } = result
 
-  const stockFilterHref = inStockOnly
-    ? `/categorias/${category.slug}`
-    : `/categorias/${category.slug}?stock=available`
+  const hasActiveFilters =
+    inStockOnly ||
+    selectedBrandSlugs.length > 0
+
+  const stockFilterHref =
+    buildCategoryHref(
+      category.slug,
+      {
+        inStockOnly: !inStockOnly,
+        brandSlugs: selectedBrandSlugs,
+      },
+    )
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -104,7 +167,7 @@ export default async function CategoryPage({
           aria-labelledby="filters-heading"
           className="mt-8 rounded-lg border p-4"
         >
-          <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2
                 id="filters-heading"
@@ -118,7 +181,7 @@ export default async function CategoryPage({
               </p>
             </div>
 
-            {inStockOnly && (
+            {hasActiveFilters && (
               <Link
                 href={`/categorias/${category.slug}`}
                 className="text-sm font-medium underline underline-offset-4"
@@ -128,20 +191,80 @@ export default async function CategoryPage({
             )}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link
-              href={stockFilterHref}
-              className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
-                inStockOnly
-                  ? 'border-foreground bg-foreground text-background'
-                  : 'hover:border-neutral-500'
-              }`}
-            >
-              {inStockOnly
-                ? '✓ Em stock'
-                : 'Em stock'}
-            </Link>
+          <div className="mt-5">
+            <h3 className="text-sm font-semibold">
+              Disponibilidade
+            </h3>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Link
+                href={stockFilterHref}
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
+                  inStockOnly
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'hover:border-neutral-500'
+                }`}
+              >
+                {inStockOnly
+                  ? '✓ Em stock'
+                  : 'Em stock'}
+              </Link>
+            </div>
           </div>
+
+          {brands.length > 0 && (
+            <div className="mt-5 border-t pt-5">
+              <h3 className="text-sm font-semibold">
+                Marca
+              </h3>
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                {brands.map((brand) => {
+                  const isSelected =
+                    selectedBrandSlugs.includes(
+                      brand.slug,
+                    )
+
+                  const nextBrandSlugs =
+                    isSelected
+                      ? selectedBrandSlugs.filter(
+                          (slug) =>
+                            slug !== brand.slug,
+                        )
+                      : [
+                          ...selectedBrandSlugs,
+                          brand.slug,
+                        ]
+
+                  const href =
+                    buildCategoryHref(
+                      category.slug,
+                      {
+                        inStockOnly,
+                        brandSlugs:
+                          nextBrandSlugs,
+                      },
+                    )
+
+                  return (
+                    <Link
+                      key={brand.id}
+                      href={href}
+                      className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
+                        isSelected
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'hover:border-neutral-500'
+                      }`}
+                    >
+                      {isSelected
+                        ? `✓ ${brand.name}`
+                        : brand.name}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         <section
@@ -167,6 +290,15 @@ export default async function CategoryPage({
                 voltares a ver os produtos desta
                 categoria.
               </p>
+
+              {hasActiveFilters && (
+                <Link
+                  href={`/categorias/${category.slug}`}
+                  className="mt-4 inline-block text-sm font-medium underline underline-offset-4"
+                >
+                  Limpar filtros
+                </Link>
+              )}
             </div>
           ) : (
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

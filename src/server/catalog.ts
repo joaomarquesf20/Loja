@@ -43,6 +43,12 @@ type CatalogCategoryRecord = {
   }
 }
 
+type CatalogBrandRecord = {
+  id: string
+  name: string
+  slug: string
+}
+
 export type CatalogProduct = {
   id: string
   name: string
@@ -76,13 +82,21 @@ export type CatalogCategory = {
   description: string | null
 }
 
+export type CatalogBrand = {
+  id: string
+  name: string
+  slug: string
+}
+
 export type CatalogCategoryPage = {
   category: CatalogCategory
+  brands: CatalogBrand[]
   products: CatalogProduct[]
 }
 
 export type CatalogCategoryFilters = {
   inStockOnly?: boolean
+  brandSlugs?: string[]
 }
 
 type CatalogProductFindManyArgs = {
@@ -93,6 +107,9 @@ type CatalogProductFindManyArgs = {
     }
     stockQuantity?: {
       gt: number
+    }
+    productBrandId?: {
+      in: string[]
     }
   }
   orderBy: {
@@ -184,6 +201,29 @@ export interface CatalogClient {
       }
     }): Promise<CatalogCategoryRecord[]>
   }
+
+  productBrand: {
+    findMany(args: {
+      where: {
+        products: {
+          some: {
+            isActive: true
+            categoryId: {
+              in: string[]
+            }
+          }
+        }
+      }
+      orderBy: {
+        name: 'asc'
+      }
+      select: {
+        id: true
+        name: true
+        slug: true
+      }
+    }): Promise<CatalogBrandRecord[]>
+  }
 }
 
 function getClient(
@@ -239,6 +279,16 @@ function toCatalogCategory(
   }
 }
 
+function toCatalogBrand(
+  brand: CatalogBrandRecord,
+): CatalogBrand {
+  return {
+    id: brand.id,
+    name: brand.name,
+    slug: brand.slug,
+  }
+}
+
 async function getCategoryRecords(
   db: CatalogClient,
 ) {
@@ -291,6 +341,22 @@ function getCategoryAndDescendantIds(
   }
 
   return Array.from(categoryIds)
+}
+
+function normalizeBrandSlugs(
+  brandSlugs: string[] | undefined,
+) {
+  if (!brandSlugs) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      brandSlugs
+        .map((slug) => slug.trim())
+        .filter((slug) => slug.length > 0),
+    ),
+  )
 }
 
 export async function listCatalogProducts(
@@ -452,6 +518,44 @@ export async function getCatalogCategoryPageBySlug(
         item._count.products > 0,
     )
 
+  const brands =
+    await db.productBrand.findMany({
+      where: {
+        products: {
+          some: {
+            isActive: true,
+            categoryId: {
+              in: categoryIds,
+            },
+          },
+        },
+      },
+      orderBy: {
+        name: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+      },
+    })
+
+  const normalizedBrandSlugs =
+    normalizeBrandSlugs(
+      filters.brandSlugs,
+    )
+
+  const selectedBrandIds =
+    normalizedBrandSlugs.length === 0
+      ? []
+      : brands
+          .filter((brand) =>
+            normalizedBrandSlugs.includes(
+              brand.slug,
+            ),
+          )
+          .map((brand) => brand.id)
+
   const where: CatalogProductFindManyArgs['where'] =
     {
       isActive: true,
@@ -463,6 +567,12 @@ export async function getCatalogCategoryPageBySlug(
   if (filters.inStockOnly) {
     where.stockQuantity = {
       gt: 0,
+    }
+  }
+
+  if (normalizedBrandSlugs.length > 0) {
+    where.productBrandId = {
+      in: selectedBrandIds,
     }
   }
 
@@ -507,6 +617,8 @@ export async function getCatalogCategoryPageBySlug(
   return {
     category:
       toCatalogCategory(category),
+    brands:
+      brands.map(toCatalogBrand),
     products:
       products.map(toCatalogProduct),
   }

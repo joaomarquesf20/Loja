@@ -26,6 +26,11 @@ function createClient(): CatalogClient {
     category: {
       findMany: vi.fn(),
     },
+    productBrand: {
+      findMany: vi.fn(
+        async () => [],
+      ),
+    },
   }
 }
 
@@ -366,6 +371,10 @@ describe('Catalog', () => {
       expect(
         client.product.findMany,
       ).not.toHaveBeenCalled()
+
+      expect(
+        client.productBrand.findMany,
+      ).not.toHaveBeenCalled()
     })
 
     test('devolve null quando categoria não existe', async () => {
@@ -385,6 +394,10 @@ describe('Catalog', () => {
 
       expect(
         client.product.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        client.productBrand.findMany,
       ).not.toHaveBeenCalled()
     })
 
@@ -511,6 +524,7 @@ describe('Catalog', () => {
           slug: 'raiz',
           description: 'Categoria principal',
         },
+        brands: [],
         products: [
           {
             id: 'product-1',
@@ -529,6 +543,255 @@ describe('Catalog', () => {
           },
         ],
       })
+    })
+
+    test('lista marcas com produtos ativos na árvore da categoria', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'root',
+          parentId: null,
+          name: 'Raiz',
+          slug: 'raiz',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'child',
+          parentId: 'root',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+        {
+          id: 'brand-b',
+          name: 'Marca B',
+          slug: 'marca-b',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'raiz',
+          client,
+        )
+
+      expect(
+        client.productBrand.findMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          products: {
+            some: {
+              isActive: true,
+              categoryId: {
+                in: [
+                  'root',
+                  'child',
+                ],
+              },
+            },
+          },
+        },
+        orderBy: {
+          name: 'asc',
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+        },
+      })
+
+      expect(result?.brands).toEqual([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+        {
+          id: 'brand-b',
+          name: 'Marca B',
+          slug: 'marca-b',
+        },
+      ])
+    })
+
+    test('filtra produtos pelas marcas selecionadas', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+        {
+          id: 'brand-b',
+          name: 'Marca B',
+          slug: 'marca-b',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-b',
+          name: 'Produto B',
+          slug: 'produto-b',
+          description: null,
+          price: 30,
+          stockQuantity: 5,
+          images: [],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: {
+            id: 'brand-b',
+            name: 'Marca B',
+            slug: 'marca-b',
+          },
+        },
+      ])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            brandSlugs: [
+              'marca-b',
+            ],
+          },
+          client,
+        )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            productBrandId: {
+              in: ['brand-b'],
+            },
+          },
+        }),
+      )
+
+      expect(
+        result?.products,
+      ).toHaveLength(1)
+
+      expect(
+        result?.products[0]?.brand?.slug,
+      ).toBe('marca-b')
+    })
+
+    test('combina filtros de marca e stock', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          inStockOnly: true,
+          brandSlugs: [
+            'marca-a',
+          ],
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            stockQuantity: {
+              gt: 0,
+            },
+            productBrandId: {
+              in: ['brand-a'],
+            },
+          },
+        }),
+      )
     })
 
     test('filtra produtos em stock quando inStockOnly está ativo', async () => {
@@ -642,8 +905,87 @@ describe('Catalog', () => {
           slug: 'categoria-1',
           description: null,
         },
+        brands: [],
         products: [],
       })
+    })
+
+    test('mantém categoria quando filtro de marca não encontra produtos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            brandSlugs: [
+              'marca-inexistente',
+            ],
+          },
+          client,
+        )
+
+      expect(result).toEqual({
+        category: {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+        },
+        brands: [
+          {
+            id: 'brand-a',
+            name: 'Marca A',
+            slug: 'marca-a',
+          },
+        ],
+        products: [],
+      })
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            productBrandId: {
+              in: [],
+            },
+          },
+        }),
+      )
     })
 
     test('devolve null quando categoria não tem produtos ativos na árvore', async () => {
