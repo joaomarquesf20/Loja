@@ -97,6 +97,8 @@ export type CatalogCategoryPage = {
 export type CatalogCategoryFilters = {
   inStockOnly?: boolean
   brandSlugs?: string[]
+  priceMin?: number
+  priceMax?: number
 }
 
 type CatalogProductFindManyArgs = {
@@ -110,6 +112,10 @@ type CatalogProductFindManyArgs = {
     }
     productBrandId?: {
       in: string[]
+    }
+    price?: {
+      gte?: number
+      lte?: number
     }
   }
   orderBy: {
@@ -359,6 +365,60 @@ function normalizeBrandSlugs(
   )
 }
 
+function normalizePriceBound(
+  value: number | undefined,
+) {
+  if (
+    value === undefined ||
+    !Number.isFinite(value) ||
+    value < 0
+  ) {
+    return undefined
+  }
+
+  return value
+}
+
+function getPriceFilter(
+  priceMin: number | undefined,
+  priceMax: number | undefined,
+) {
+  const normalizedPriceMin =
+    normalizePriceBound(priceMin)
+
+  const normalizedPriceMax =
+    normalizePriceBound(priceMax)
+
+  if (
+    normalizedPriceMin !== undefined &&
+    normalizedPriceMax !== undefined &&
+    normalizedPriceMin >
+      normalizedPriceMax
+  ) {
+    return undefined
+  }
+
+  if (
+    normalizedPriceMin === undefined &&
+    normalizedPriceMax === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    ...(normalizedPriceMin !== undefined
+      ? {
+          gte: normalizedPriceMin,
+        }
+      : {}),
+    ...(normalizedPriceMax !== undefined
+      ? {
+          lte: normalizedPriceMax,
+        }
+      : {}),
+  }
+}
+
 export async function listCatalogProducts(
   client?: CatalogClient,
 ): Promise<CatalogProduct[]> {
@@ -574,6 +634,15 @@ export async function getCatalogCategoryPageBySlug(
     where.productBrandId = {
       in: selectedBrandIds,
     }
+  }
+
+  const priceFilter = getPriceFilter(
+    filters.priceMin,
+    filters.priceMax,
+  )
+
+  if (priceFilter) {
+    where.price = priceFilter
   }
 
   const products =

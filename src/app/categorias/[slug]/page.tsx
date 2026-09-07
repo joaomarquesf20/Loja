@@ -1,5 +1,8 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import {
+  notFound,
+  redirect,
+} from 'next/navigation'
 import { getCatalogCategoryPageBySlug } from '@/server/catalog'
 
 export const dynamic = 'force-dynamic'
@@ -11,12 +14,16 @@ type CategoryPageProps = {
   searchParams: Promise<{
     stock?: string | string[]
     brand?: string | string[]
+    priceMin?: string | string[]
+    priceMax?: string | string[]
   }>
 }
 
 type CategoryFilterState = {
   inStockOnly: boolean
   brandSlugs: string[]
+  priceMin?: number
+  priceMax?: number
 }
 
 function formatPrice(price: number) {
@@ -55,6 +62,32 @@ function getSearchParamValues(
   )
 }
 
+function parsePriceParam(
+  value: string | string[] | undefined,
+) {
+  const rawValue =
+    getSearchParamValue(value)?.trim()
+
+  if (!rawValue) {
+    return undefined
+  }
+
+  const normalizedValue =
+    rawValue.replace(',', '.')
+
+  const parsedValue =
+    Number(normalizedValue)
+
+  if (
+    !Number.isFinite(parsedValue) ||
+    parsedValue < 0
+  ) {
+    return undefined
+  }
+
+  return parsedValue
+}
+
 function buildCategoryHref(
   categorySlug: string,
   filters: CategoryFilterState,
@@ -69,6 +102,20 @@ function buildCategoryHref(
     params.append('brand', brandSlug)
   }
 
+  if (filters.priceMin !== undefined) {
+    params.set(
+      'priceMin',
+      String(filters.priceMin),
+    )
+  }
+
+  if (filters.priceMax !== undefined) {
+    params.set(
+      'priceMax',
+      String(filters.priceMax),
+    )
+  }
+
   const query = params.toString()
 
   return query
@@ -80,10 +127,11 @@ export default async function CategoryPage({
   params,
   searchParams,
 }: CategoryPageProps) {
-  const [{ slug }, query] = await Promise.all([
-    params,
-    searchParams,
-  ])
+  const [{ slug }, query] =
+    await Promise.all([
+      params,
+      searchParams,
+    ])
 
   const inStockOnly =
     getSearchParamValue(query.stock) ===
@@ -92,12 +140,43 @@ export default async function CategoryPage({
   const selectedBrandSlugs =
     getSearchParamValues(query.brand)
 
+  const parsedPriceMin =
+    parsePriceParam(query.priceMin)
+
+  const parsedPriceMax =
+    parsePriceParam(query.priceMax)
+
+  const priceRangeIsInverted =
+    parsedPriceMin !== undefined &&
+    parsedPriceMax !== undefined &&
+    parsedPriceMin > parsedPriceMax
+
+  const priceMin =
+    priceRangeIsInverted
+      ? undefined
+      : parsedPriceMin
+
+  const priceMax =
+    priceRangeIsInverted
+      ? undefined
+      : parsedPriceMax
+
+  const hasInvalidPriceParams =
+    (query.priceMin !== undefined &&
+      parsedPriceMin === undefined) ||
+    (query.priceMax !== undefined &&
+      parsedPriceMax === undefined) ||
+    priceRangeIsInverted
+
   const result =
     await getCatalogCategoryPageBySlug(
       slug,
       {
         inStockOnly,
-        brandSlugs: selectedBrandSlugs,
+        brandSlugs:
+          selectedBrandSlugs,
+        priceMin,
+        priceMax,
       },
     )
 
@@ -111,16 +190,49 @@ export default async function CategoryPage({
     products,
   } = result
 
+  if (hasInvalidPriceParams) {
+    redirect(
+      buildCategoryHref(
+        category.slug,
+        {
+          inStockOnly,
+          brandSlugs:
+            selectedBrandSlugs,
+          priceMin,
+          priceMax,
+        },
+      ),
+    )
+  }
+
+  const hasPriceFilter =
+    priceMin !== undefined ||
+    priceMax !== undefined
+
   const hasActiveFilters =
     inStockOnly ||
-    selectedBrandSlugs.length > 0
+    selectedBrandSlugs.length > 0 ||
+    hasPriceFilter
 
   const stockFilterHref =
     buildCategoryHref(
       category.slug,
       {
         inStockOnly: !inStockOnly,
-        brandSlugs: selectedBrandSlugs,
+        brandSlugs:
+          selectedBrandSlugs,
+        priceMin,
+        priceMax,
+      },
+    )
+
+  const removePriceHref =
+    buildCategoryHref(
+      category.slug,
+      {
+        inStockOnly,
+        brandSlugs:
+          selectedBrandSlugs,
       },
     )
 
@@ -228,8 +340,9 @@ export default async function CategoryPage({
                   const nextBrandSlugs =
                     isSelected
                       ? selectedBrandSlugs.filter(
-                          (slug) =>
-                            slug !== brand.slug,
+                          (selectedSlug) =>
+                            selectedSlug !==
+                            brand.slug,
                         )
                       : [
                           ...selectedBrandSlugs,
@@ -243,6 +356,8 @@ export default async function CategoryPage({
                         inStockOnly,
                         brandSlugs:
                           nextBrandSlugs,
+                        priceMin,
+                        priceMax,
                       },
                     )
 
@@ -265,6 +380,95 @@ export default async function CategoryPage({
               </div>
             </div>
           )}
+
+          <div className="mt-5 border-t pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">
+                Preço
+              </h3>
+
+              {hasPriceFilter && (
+                <Link
+                  href={removePriceHref}
+                  className="text-sm font-medium underline underline-offset-4"
+                >
+                  Remover preço
+                </Link>
+              )}
+            </div>
+
+            <form
+              action={`/categorias/${category.slug}`}
+              method="get"
+              className="mt-3"
+            >
+              {inStockOnly && (
+                <input
+                  type="hidden"
+                  name="stock"
+                  value="available"
+                />
+              )}
+
+              {selectedBrandSlugs.map(
+                (brandSlug) => (
+                  <input
+                    key={brandSlug}
+                    type="hidden"
+                    name="brand"
+                    value={brandSlug}
+                  />
+                ),
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
+                <label className="block">
+                  <span className="text-sm font-medium">
+                    Preço mínimo (€)
+                  </span>
+
+                  <input
+                    type="number"
+                    name="priceMin"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    defaultValue={
+                      priceMin ?? ''
+                    }
+                    placeholder="0,00"
+                    className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-medium">
+                    Preço máximo (€)
+                  </span>
+
+                  <input
+                    type="number"
+                    name="priceMax"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    defaultValue={
+                      priceMax ?? ''
+                    }
+                    placeholder="Sem limite"
+                    className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="mt-3 rounded-md border px-4 py-2 text-sm font-medium transition hover:border-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
+              >
+                Aplicar preço
+              </button>
+            </form>
+          </div>
         </section>
 
         <section

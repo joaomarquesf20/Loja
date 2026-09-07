@@ -794,6 +794,304 @@ describe('Catalog', () => {
       )
     })
 
+    test('filtra produtos por preço mínimo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          priceMin: 25,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            price: {
+              gte: 25,
+            },
+          },
+        }),
+      )
+    })
+
+    test('filtra produtos por preço máximo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          priceMax: 75,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            price: {
+              lte: 75,
+            },
+          },
+        }),
+      )
+    })
+
+    test('combina intervalo de preço com marca e stock', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          inStockOnly: true,
+          brandSlugs: [
+            'marca-a',
+          ],
+          priceMin: 20,
+          priceMax: 100,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            stockQuantity: {
+              gt: 0,
+            },
+            productBrandId: {
+              in: ['brand-a'],
+            },
+            price: {
+              gte: 20,
+              lte: 100,
+            },
+          },
+        }),
+      )
+    })
+
+    test('ignora preço negativo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          priceMin: -10,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+          },
+        }),
+      )
+    })
+
+    test('ignora limites de preço não finitos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          priceMin: Number.NaN,
+          priceMax:
+            Number.POSITIVE_INFINITY,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+          },
+        }),
+      )
+    })
+
+    test('ignora intervalo de preço invertido', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          priceMin: 100,
+          priceMax: 20,
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+          },
+        }),
+      )
+    })
+
     test('filtra produtos em stock quando inStockOnly está ativo', async () => {
       const client = createClient()
 
