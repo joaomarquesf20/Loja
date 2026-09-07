@@ -63,12 +63,13 @@ export default async function Home() {
 
             <div className="flex flex-wrap gap-2">
               {categories.map((category) => (
-                <span
+                <Link
                   key={category.id}
-                  className="rounded-full border px-3 py-1.5 text-sm"
+                  href={`/categorias/${category.slug}`}
+                  className="rounded-full border px-3 py-1.5 text-sm transition hover:border-neutral-500 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
                 >
                   {category.name}
-                </span>
+                </Link>
               ))}
             </div>
           </section>
