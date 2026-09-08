@@ -175,6 +175,47 @@ describe('CartClient', () => {
     )
   })
 
+  test('não transforma erro da API autenticada em carrinho convidado', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error:
+            'Erro interno do servidor',
+        },
+        500,
+      ),
+    )
+
+    render(<CartClient />)
+
+    const alert =
+      await screen.findByRole(
+        'alert',
+      )
+
+    expect(
+      alert.textContent,
+    ).toContain(
+      'Não foi possível carregar o carrinho',
+    )
+
+    expect(
+      alert.textContent,
+    ).toContain(
+      'Erro interno do servidor',
+    )
+
+    expect(
+      screen.queryByText(
+        'Carrinho guardado neste dispositivo.',
+      ),
+    ).toBeNull()
+
+    expect(
+      fetchMock,
+    ).toHaveBeenCalledTimes(1)
+  })
+
   test('aumenta quantidade no carrinho autenticado', async () => {
     fetchMock
       .mockResolvedValueOnce(

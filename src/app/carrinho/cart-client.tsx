@@ -35,6 +35,7 @@ type CartMode =
   | 'loading'
   | 'authenticated'
   | 'guest'
+  | 'error'
 
 type CartResponse = {
   items: CartItem[]
@@ -243,7 +244,7 @@ export function CartClient() {
               : 'Não foi possível carregar o carrinho',
           )
 
-          setMode('guest')
+          setMode('error')
         }
       }
     }
@@ -433,6 +434,24 @@ export function CartClient() {
       <div className="rounded-xl border border-gray-200 bg-white p-6">
         <p className="text-sm text-gray-600">
           A carregar carrinho...
+        </p>
+      </div>
+    )
+  }
+
+  if (mode === 'error') {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-red-200 bg-red-50 p-6"
+      >
+        <h2 className="font-semibold text-red-900">
+          Não foi possível carregar o carrinho
+        </h2>
+
+        <p className="mt-2 text-sm text-red-800">
+          {error ??
+            'Ocorreu um erro ao carregar o carrinho.'}
         </p>
       </div>
     )
