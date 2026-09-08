@@ -13,6 +13,15 @@ export class GuestCartValidationError extends Error {
   }
 }
 
+export class GuestCartItemNotFoundError extends Error {
+  constructor(
+    message = 'Item do carrinho não encontrado',
+  ) {
+    super(message)
+    this.name = 'GuestCartItemNotFoundError'
+  }
+}
+
 function normalizeProductId(
   productId: string,
 ) {
@@ -32,7 +41,7 @@ function validateQuantity(
   quantity: number,
 ) {
   if (
-    !Number.isInteger(quantity) ||
+    !Number.isSafeInteger(quantity) ||
     quantity <= 0
   ) {
     throw new GuestCartValidationError(
@@ -52,15 +61,20 @@ function isGuestCartItem(
     return false
   }
 
-  const item =
+  const candidate =
     value as Record<string, unknown>
 
   return (
-    typeof item.productId === 'string' &&
-    item.productId.trim().length > 0 &&
-    typeof item.quantity === 'number' &&
-    Number.isInteger(item.quantity) &&
-    item.quantity > 0
+    typeof candidate.productId ===
+      'string' &&
+    candidate.productId.trim().length >
+      0 &&
+    typeof candidate.quantity ===
+      'number' &&
+    Number.isSafeInteger(
+      candidate.quantity,
+    ) &&
+    candidate.quantity > 0
   )
 }
 
@@ -69,33 +83,39 @@ export function readGuestCart(): GuestCartItem[] {
     return []
   }
 
-  const storedValue =
-    window.localStorage.getItem(
-      GUEST_CART_STORAGE_KEY,
-    )
-
-  if (!storedValue) {
-    return []
-  }
+  let rawValue: string | null
 
   try {
-    const parsedValue: unknown =
-      JSON.parse(storedValue)
-
-    if (!Array.isArray(parsedValue)) {
-      return []
-    }
-
-    return parsedValue
-      .filter(isGuestCartItem)
-      .map((item) => ({
-        productId:
-          item.productId.trim(),
-        quantity: item.quantity,
-      }))
+    rawValue =
+      window.localStorage.getItem(
+        GUEST_CART_STORAGE_KEY,
+      )
   } catch {
     return []
   }
+
+  if (!rawValue) {
+    return []
+  }
+
+  let parsedValue: unknown
+
+  try {
+    parsedValue = JSON.parse(rawValue)
+  } catch {
+    return []
+  }
+
+  if (!Array.isArray(parsedValue)) {
+    return []
+  }
+
+  return parsedValue
+    .filter(isGuestCartItem)
+    .map((item) => ({
+      productId: item.productId.trim(),
+      quantity: item.quantity,
+    }))
 }
 
 export function writeGuestCart(
@@ -114,7 +134,7 @@ export function writeGuestCart(
 export function addGuestCartItem(
   productId: string,
   quantity = 1,
-) {
+): GuestCartItem[] {
   const normalizedProductId =
     normalizeProductId(productId)
 
@@ -122,32 +142,111 @@ export function addGuestCartItem(
 
   const items = readGuestCart()
 
-  const existingItem = items.find(
+  const existingIndex =
+    items.findIndex(
+      (item) =>
+        item.productId ===
+        normalizedProductId,
+    )
+
+  if (existingIndex === -1) {
+    const nextItems = [
+      ...items,
+      {
+        productId:
+          normalizedProductId,
+        quantity,
+      },
+    ]
+
+    writeGuestCart(nextItems)
+
+    return nextItems
+  }
+
+  const currentItem =
+    items[existingIndex]
+
+  const nextQuantity =
+    currentItem.quantity + quantity
+
+  validateQuantity(nextQuantity)
+
+  const nextItems = items.map(
+    (item, index) =>
+      index === existingIndex
+        ? {
+            ...item,
+            quantity: nextQuantity,
+          }
+        : item,
+  )
+
+  writeGuestCart(nextItems)
+
+  return nextItems
+}
+
+export function updateGuestCartItemQuantity(
+  productId: string,
+  quantity: number,
+): GuestCartItem[] {
+  const normalizedProductId =
+    normalizeProductId(productId)
+
+  validateQuantity(quantity)
+
+  const items = readGuestCart()
+
+  const existingIndex =
+    items.findIndex(
+      (item) =>
+        item.productId ===
+        normalizedProductId,
+    )
+
+  if (existingIndex === -1) {
+    throw new GuestCartItemNotFoundError()
+  }
+
+  const nextItems = items.map(
+    (item, index) =>
+      index === existingIndex
+        ? {
+            ...item,
+            quantity,
+          }
+        : item,
+  )
+
+  writeGuestCart(nextItems)
+
+  return nextItems
+}
+
+export function removeGuestCartItem(
+  productId: string,
+): GuestCartItem[] {
+  const normalizedProductId =
+    normalizeProductId(productId)
+
+  const items = readGuestCart()
+
+  const exists = items.some(
     (item) =>
       item.productId ===
       normalizedProductId,
   )
 
-  const nextItems = existingItem
-    ? items.map((item) =>
-        item.productId ===
-        normalizedProductId
-          ? {
-              ...item,
-              quantity:
-                item.quantity +
-                quantity,
-            }
-          : item,
-      )
-    : [
-        ...items,
-        {
-          productId:
-            normalizedProductId,
-          quantity,
-        },
-      ]
+  if (!exists) {
+    throw new GuestCartItemNotFoundError()
+  }
+
+  const nextItems = items.filter(
+    (item) =>
+      item.productId !==
+      normalizedProductId,
+  )
 
   writeGuestCart(nextItems)
 
