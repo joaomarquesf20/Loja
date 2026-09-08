@@ -65,7 +65,9 @@ export interface GuestCartClient {
         isActive: true
         images: true
       }
-    }): Promise<GuestCartProductRecord[]>
+    }): Promise<
+      GuestCartProductRecord[]
+    >
   }
 }
 
@@ -97,7 +99,9 @@ function validateQuantity(
   quantity: number,
 ) {
   if (
-    !Number.isInteger(quantity) ||
+    !Number.isSafeInteger(
+      quantity,
+    ) ||
     quantity <= 0
   ) {
     throw new GuestCartServerValidationError(
@@ -106,9 +110,9 @@ function validateQuantity(
   }
 }
 
-function normalizeItems(
+export function normalizeGuestCartInputItems(
   items: GuestCartInputItem[],
-) {
+): GuestCartInputItem[] {
   if (items.length > 100) {
     throw new GuestCartServerValidationError(
       'Carrinho demasiado grande',
@@ -124,12 +128,18 @@ function normalizeItems(
         item.productId,
       )
 
-    validateQuantity(item.quantity)
+    validateQuantity(
+      item.quantity,
+    )
+
+    const currentQuantity =
+      quantitiesByProductId.get(
+        productId,
+      ) ?? 0
 
     const nextQuantity =
-      (quantitiesByProductId.get(
-        productId,
-      ) ?? 0) + item.quantity
+      currentQuantity +
+      item.quantity
 
     if (
       !Number.isSafeInteger(
@@ -159,11 +169,18 @@ function normalizeItems(
 export async function resolveGuestCartItems(
   items: GuestCartInputItem[],
   client?: GuestCartClient,
-): Promise<ResolvedGuestCartItem[]> {
+): Promise<
+  ResolvedGuestCartItem[]
+> {
   const normalizedItems =
-    normalizeItems(items)
+    normalizeGuestCartInputItems(
+      items,
+    )
 
-  if (normalizedItems.length === 0) {
+  if (
+    normalizedItems.length ===
+    0
+  ) {
     return []
   }
 
@@ -174,7 +191,8 @@ export async function resolveGuestCartItems(
       where: {
         id: {
           in: normalizedItems.map(
-            (item) => item.productId,
+            (item) =>
+              item.productId,
           ),
         },
       },
@@ -192,12 +210,15 @@ export async function resolveGuestCartItems(
       },
     })
 
-  const productsById = new Map(
-    products.map((product) => [
-      product.id,
-      product,
-    ]),
-  )
+  const productsById =
+    new Map(
+      products.map(
+        (product) => [
+          product.id,
+          product,
+        ],
+      ),
+    )
 
   return normalizedItems.map(
     (item) => {
@@ -208,8 +229,10 @@ export async function resolveGuestCartItems(
 
       if (!product) {
         return {
-          productId: item.productId,
-          quantity: item.quantity,
+          productId:
+            item.productId,
+          quantity:
+            item.quantity,
           product: null,
           inStock: false,
           isAvailable: false,
@@ -219,7 +242,8 @@ export async function resolveGuestCartItems(
 
       const inStock =
         product.isActive &&
-        product.stockQuantity > 0
+        product.stockQuantity >
+          0
 
       const isAvailable =
         product.isActive &&
@@ -232,8 +256,10 @@ export async function resolveGuestCartItems(
           item.quantity
 
       return {
-        productId: item.productId,
-        quantity: item.quantity,
+        productId:
+          item.productId,
+        quantity:
+          item.quantity,
         product: {
           id: product.id,
           name: product.name,
@@ -241,7 +267,8 @@ export async function resolveGuestCartItems(
           price: Number(
             product.price.toString(),
           ),
-          images: product.images,
+          images:
+            product.images,
         },
         inStock,
         isAvailable,
