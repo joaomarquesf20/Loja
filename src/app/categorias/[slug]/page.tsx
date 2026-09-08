@@ -4,6 +4,7 @@ import {
   redirect,
 } from 'next/navigation'
 import { getCatalogCategoryPageBySlug } from '@/server/catalog'
+import VehicleFilter from './vehicle-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ type CategoryPageProps = {
     brand?: string | string[]
     priceMin?: string | string[]
     priceMax?: string | string[]
+    vehicle?: string | string[]
   }>
 }
 
@@ -24,6 +26,7 @@ type CategoryFilterState = {
   brandSlugs: string[]
   priceMin?: number
   priceMax?: number
+  vehicleConfigurationId?: string
 }
 
 function formatPrice(price: number) {
@@ -88,6 +91,15 @@ function parsePriceParam(
   return parsedValue
 }
 
+function parseVehicleParam(
+  value: string | string[] | undefined,
+) {
+  const rawValue =
+    getSearchParamValue(value)?.trim()
+
+  return rawValue || undefined
+}
+
 function buildCategoryHref(
   categorySlug: string,
   filters: CategoryFilterState,
@@ -113,6 +125,15 @@ function buildCategoryHref(
     params.set(
       'priceMax',
       String(filters.priceMax),
+    )
+  }
+
+  if (
+    filters.vehicleConfigurationId
+  ) {
+    params.set(
+      'vehicle',
+      filters.vehicleConfigurationId,
     )
   }
 
@@ -161,6 +182,9 @@ export default async function CategoryPage({
       ? undefined
       : parsedPriceMax
 
+  const requestedVehicleConfigurationId =
+    parseVehicleParam(query.vehicle)
+
   const hasInvalidPriceParams =
     (query.priceMin !== undefined &&
       parsedPriceMin === undefined) ||
@@ -177,6 +201,8 @@ export default async function CategoryPage({
           selectedBrandSlugs,
         priceMin,
         priceMax,
+        vehicleConfigurationId:
+          requestedVehicleConfigurationId,
       },
     )
 
@@ -187,10 +213,30 @@ export default async function CategoryPage({
   const {
     category,
     brands,
+    vehicleConfigurations,
     products,
   } = result
 
-  if (hasInvalidPriceParams) {
+  const selectedVehicleConfiguration =
+    requestedVehicleConfigurationId
+      ? vehicleConfigurations.find(
+          (configuration) =>
+            configuration.id ===
+            requestedVehicleConfigurationId,
+        )
+      : undefined
+
+  const hasInvalidVehicleParam =
+    query.vehicle !== undefined &&
+    !selectedVehicleConfiguration
+
+  const selectedVehicleConfigurationId =
+    selectedVehicleConfiguration?.id
+
+  if (
+    hasInvalidPriceParams ||
+    hasInvalidVehicleParam
+  ) {
     redirect(
       buildCategoryHref(
         category.slug,
@@ -200,6 +246,8 @@ export default async function CategoryPage({
             selectedBrandSlugs,
           priceMin,
           priceMax,
+          vehicleConfigurationId:
+            selectedVehicleConfigurationId,
         },
       ),
     )
@@ -209,10 +257,15 @@ export default async function CategoryPage({
     priceMin !== undefined ||
     priceMax !== undefined
 
+  const hasVehicleFilter =
+    selectedVehicleConfigurationId !==
+    undefined
+
   const hasActiveFilters =
     inStockOnly ||
     selectedBrandSlugs.length > 0 ||
-    hasPriceFilter
+    hasPriceFilter ||
+    hasVehicleFilter
 
   const stockFilterHref =
     buildCategoryHref(
@@ -223,6 +276,8 @@ export default async function CategoryPage({
           selectedBrandSlugs,
         priceMin,
         priceMax,
+        vehicleConfigurationId:
+          selectedVehicleConfigurationId,
       },
     )
 
@@ -233,6 +288,8 @@ export default async function CategoryPage({
         inStockOnly,
         brandSlugs:
           selectedBrandSlugs,
+        vehicleConfigurationId:
+          selectedVehicleConfigurationId,
       },
     )
 
@@ -303,7 +360,21 @@ export default async function CategoryPage({
             )}
           </div>
 
-          <div className="mt-5">
+          <VehicleFilter
+            key={
+              selectedVehicleConfigurationId ??
+              'no-vehicle'
+            }
+            categorySlug={category.slug}
+            configurations={
+              vehicleConfigurations
+            }
+            selectedConfigurationId={
+              selectedVehicleConfigurationId
+            }
+          />
+
+          <div className="mt-5 border-t pt-5">
             <h3 className="text-sm font-semibold">
               Disponibilidade
             </h3>
@@ -327,7 +398,7 @@ export default async function CategoryPage({
           {brands.length > 0 && (
             <div className="mt-5 border-t pt-5">
               <h3 className="text-sm font-semibold">
-                Marca
+                Marca do produto
               </h3>
 
               <div className="mt-2 flex flex-wrap gap-2">
@@ -358,6 +429,8 @@ export default async function CategoryPage({
                           nextBrandSlugs,
                         priceMin,
                         priceMax,
+                        vehicleConfigurationId:
+                          selectedVehicleConfigurationId,
                       },
                     )
 
@@ -419,6 +492,16 @@ export default async function CategoryPage({
                     value={brandSlug}
                   />
                 ),
+              )}
+
+              {selectedVehicleConfigurationId && (
+                <input
+                  type="hidden"
+                  name="vehicle"
+                  value={
+                    selectedVehicleConfigurationId
+                  }
+                />
               )}
 
               <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">

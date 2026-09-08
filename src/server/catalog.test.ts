@@ -17,7 +17,14 @@ import {
   listCatalogProducts,
 } from './catalog'
 
-function createClient(): CatalogClient {
+type TestCatalogClient =
+  CatalogClient & {
+    productVehicleCompatibility: NonNullable<
+      CatalogClient['productVehicleCompatibility']
+    >
+  }
+
+function createClient(): TestCatalogClient {
   return {
     product: {
       findMany: vi.fn(),
@@ -27,6 +34,11 @@ function createClient(): CatalogClient {
       findMany: vi.fn(),
     },
     productBrand: {
+      findMany: vi.fn(
+        async () => [],
+      ),
+    },
+    productVehicleCompatibility: {
       findMany: vi.fn(
         async () => [],
       ),
@@ -375,6 +387,11 @@ describe('Catalog', () => {
       expect(
         client.productBrand.findMany,
       ).not.toHaveBeenCalled()
+
+      expect(
+        client.productVehicleCompatibility
+          .findMany,
+      ).not.toHaveBeenCalled()
     })
 
     test('devolve null quando categoria não existe', async () => {
@@ -398,6 +415,11 @@ describe('Catalog', () => {
 
       expect(
         client.productBrand.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        client.productVehicleCompatibility
+          .findMany,
       ).not.toHaveBeenCalled()
     })
 
@@ -525,6 +547,7 @@ describe('Catalog', () => {
           description: 'Categoria principal',
         },
         brands: [],
+        vehicleConfigurations: [],
         products: [
           {
             id: 'product-1',
@@ -635,6 +658,395 @@ describe('Catalog', () => {
           name: 'Marca B',
           slug: 'marca-b',
         },
+      ])
+    })
+
+    test('lista configurações compatíveis com produtos ativos da árvore da categoria', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'root',
+          parentId: null,
+          name: 'Raiz',
+          slug: 'raiz',
+          description: null,
+          _count: {
+            products: 0,
+          },
+        },
+        {
+          id: 'child',
+          parentId: 'root',
+          name: 'Filha',
+          slug: 'filha',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productVehicleCompatibility
+          .findMany,
+      ).mockResolvedValue([
+        {
+          vehicleConfiguration: {
+            id: 'configuration-1',
+            name: '2.0 TDI',
+            engineCode: 'CFFB',
+            engineType: 'Diesel',
+            displacementCc: 1968,
+            powerKw: '103.5',
+            bodyType: 'Hatchback',
+            yearFrom: 2010,
+            yearTo: 2014,
+            generation: {
+              id: 'generation-1',
+              name: 'Mk6',
+              model: {
+                id: 'model-1',
+                name: 'Golf',
+                brand: {
+                  id: 'vehicle-brand-1',
+                  name: 'Volkswagen',
+                },
+              },
+            },
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'raiz',
+          client,
+        )
+
+      expect(
+        client.productVehicleCompatibility
+          .findMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          product: {
+            isActive: true,
+            categoryId: {
+              in: [
+                'root',
+                'child',
+              ],
+            },
+          },
+          vehicleConfigurationId: {
+            not: null,
+          },
+        },
+        select: {
+          vehicleConfiguration: {
+            select: {
+              id: true,
+              name: true,
+              engineCode: true,
+              engineType: true,
+              displacementCc: true,
+              powerKw: true,
+              bodyType: true,
+              yearFrom: true,
+              yearTo: true,
+              generation: {
+                select: {
+                  id: true,
+                  name: true,
+                  model: {
+                    select: {
+                      id: true,
+                      name: true,
+                      brand: {
+                        select: {
+                          id: true,
+                          name: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      expect(
+        result?.vehicleConfigurations,
+      ).toEqual([
+        {
+          id: 'configuration-1',
+          name: '2.0 TDI',
+          engineCode: 'CFFB',
+          engineType: 'Diesel',
+          displacementCc: 1968,
+          powerKw: 103.5,
+          bodyType: 'Hatchback',
+          yearFrom: 2010,
+          yearTo: 2014,
+          generation: {
+            id: 'generation-1',
+            name: 'Mk6',
+            model: {
+              id: 'model-1',
+              name: 'Golf',
+              brand: {
+                id: 'vehicle-brand-1',
+                name: 'Volkswagen',
+              },
+            },
+          },
+        },
+      ])
+    })
+
+    test('remove configurações de veículo duplicadas', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      const duplicatedConfiguration = {
+        id: 'configuration-1',
+        name: '1.9 TDI',
+        engineCode: 'BKC',
+        engineType: 'Diesel',
+        displacementCc: 1896,
+        powerKw: 77,
+        bodyType: null,
+        yearFrom: 2004,
+        yearTo: 2008,
+        generation: {
+          id: 'generation-1',
+          name: 'Mk5',
+          model: {
+            id: 'model-1',
+            name: 'Golf',
+            brand: {
+              id: 'vehicle-brand-1',
+              name: 'Volkswagen',
+            },
+          },
+        },
+      }
+
+      vi.mocked(
+        client.productVehicleCompatibility
+          .findMany,
+      ).mockResolvedValue([
+        {
+          vehicleConfiguration:
+            duplicatedConfiguration,
+        },
+        {
+          vehicleConfiguration:
+            duplicatedConfiguration,
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          client,
+        )
+
+      expect(
+        result?.vehicleConfigurations,
+      ).toHaveLength(1)
+
+      expect(
+        result?.vehicleConfigurations[0]?.id,
+      ).toBe('configuration-1')
+    })
+
+    test('ignora compatibilidades sem configuração de veículo', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productVehicleCompatibility
+          .findMany,
+      ).mockResolvedValue([
+        {
+          vehicleConfiguration: null,
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          client,
+        )
+
+      expect(
+        result?.vehicleConfigurations,
+      ).toEqual([])
+    })
+
+    test('ordena configurações por marca, modelo, geração e configuração', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 3,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productVehicleCompatibility
+          .findMany,
+      ).mockResolvedValue([
+        {
+          vehicleConfiguration: {
+            id: 'configuration-z',
+            name: '2.0',
+            engineCode: null,
+            engineType: null,
+            displacementCc: null,
+            powerKw: null,
+            bodyType: null,
+            yearFrom: null,
+            yearTo: null,
+            generation: {
+              id: 'generation-z',
+              name: 'Zeta',
+              model: {
+                id: 'model-z',
+                name: 'Modelo Z',
+                brand: {
+                  id: 'brand-z',
+                  name: 'Volkswagen',
+                },
+              },
+            },
+          },
+        },
+        {
+          vehicleConfiguration: {
+            id: 'configuration-a',
+            name: '1.0',
+            engineCode: null,
+            engineType: null,
+            displacementCc: null,
+            powerKw: null,
+            bodyType: null,
+            yearFrom: null,
+            yearTo: null,
+            generation: {
+              id: 'generation-a',
+              name: 'Alpha',
+              model: {
+                id: 'model-a',
+                name: 'A3',
+                brand: {
+                  id: 'brand-a',
+                  name: 'Audi',
+                },
+              },
+            },
+          },
+        },
+        {
+          vehicleConfiguration: {
+            id: 'configuration-b',
+            name: '1.5',
+            engineCode: null,
+            engineType: null,
+            displacementCc: null,
+            powerKw: null,
+            bodyType: null,
+            yearFrom: null,
+            yearTo: null,
+            generation: {
+              id: 'generation-b',
+              name: 'Beta',
+              model: {
+                id: 'model-b',
+                name: 'Golf',
+                brand: {
+                  id: 'brand-b',
+                  name: 'Volkswagen',
+                },
+              },
+            },
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          client,
+        )
+
+      expect(
+        result?.vehicleConfigurations.map(
+          (configuration) =>
+            configuration.id,
+        ),
+      ).toEqual([
+        'configuration-a',
+        'configuration-b',
+        'configuration-z',
       ])
     })
 
@@ -1092,6 +1504,246 @@ describe('Catalog', () => {
       )
     })
 
+    test('filtra produtos pela configuração de veículo selecionada', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'product-1',
+          name: 'Produto 1',
+          slug: 'produto-1',
+          description: null,
+          price: 50,
+          stockQuantity: 3,
+          images: [],
+          category: {
+            id: 'category-1',
+            name: 'Categoria 1',
+            slug: 'categoria-1',
+          },
+          brand: null,
+        },
+      ])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            vehicleConfigurationId:
+              'configuration-1',
+          },
+          client,
+        )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            compatibilities: {
+              some: {
+                vehicleConfigurationId:
+                  'configuration-1',
+              },
+            },
+          },
+        }),
+      )
+
+      expect(
+        result?.products,
+      ).toHaveLength(1)
+    })
+
+    test('combina veículo com stock, marca e preço', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.productBrand.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'brand-a',
+          name: 'Marca A',
+          slug: 'marca-a',
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          inStockOnly: true,
+          brandSlugs: [
+            'marca-a',
+          ],
+          priceMin: 20,
+          priceMax: 100,
+          vehicleConfigurationId:
+            'configuration-1',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+            stockQuantity: {
+              gt: 0,
+            },
+            productBrandId: {
+              in: ['brand-a'],
+            },
+            price: {
+              gte: 20,
+              lte: 100,
+            },
+            compatibilities: {
+              some: {
+                vehicleConfigurationId:
+                  'configuration-1',
+              },
+            },
+          },
+        }),
+      )
+    })
+
+    test('ignora configuração de veículo vazia', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          vehicleConfigurationId:
+            '   ',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            isActive: true,
+            categoryId: {
+              in: ['category-1'],
+            },
+          },
+        }),
+      )
+    })
+
+    test('mantém categoria quando filtro de veículo não encontra produtos', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 1,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            vehicleConfigurationId:
+              'configuration-sem-produtos',
+          },
+          client,
+        )
+
+      expect(result).toEqual({
+        category: {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+        },
+        brands: [],
+        vehicleConfigurations: [],
+        products: [],
+      })
+    })
+
     test('filtra produtos em stock quando inStockOnly está ativo', async () => {
       const client = createClient()
 
@@ -1204,6 +1856,7 @@ describe('Catalog', () => {
           description: null,
         },
         brands: [],
+        vehicleConfigurations: [],
         products: [],
       })
     })
@@ -1266,6 +1919,7 @@ describe('Catalog', () => {
             slug: 'marca-a',
           },
         ],
+        vehicleConfigurations: [],
         products: [],
       })
 

@@ -49,6 +49,32 @@ type CatalogBrandRecord = {
   slug: string
 }
 
+type CatalogVehicleCompatibilityRecord = {
+  vehicleConfiguration: {
+    id: string
+    name: string
+    engineCode: string | null
+    engineType: string | null
+    displacementCc: number | null
+    powerKw: CatalogPrice | null
+    bodyType: string | null
+    yearFrom: number | null
+    yearTo: number | null
+    generation: {
+      id: string
+      name: string
+      model: {
+        id: string
+        name: string
+        brand: {
+          id: string
+          name: string
+        }
+      }
+    }
+  } | null
+}
+
 export type CatalogProduct = {
   id: string
   name: string
@@ -88,9 +114,35 @@ export type CatalogBrand = {
   slug: string
 }
 
+export type CatalogVehicleConfiguration = {
+  id: string
+  name: string
+  engineCode: string | null
+  engineType: string | null
+  displacementCc: number | null
+  powerKw: number | null
+  bodyType: string | null
+  yearFrom: number | null
+  yearTo: number | null
+  generation: {
+    id: string
+    name: string
+    model: {
+      id: string
+      name: string
+      brand: {
+        id: string
+        name: string
+      }
+    }
+  }
+}
+
 export type CatalogCategoryPage = {
   category: CatalogCategory
   brands: CatalogBrand[]
+  vehicleConfigurations:
+    CatalogVehicleConfiguration[]
   products: CatalogProduct[]
 }
 
@@ -99,6 +151,7 @@ export type CatalogCategoryFilters = {
   brandSlugs?: string[]
   priceMin?: number
   priceMax?: number
+  vehicleConfigurationId?: string
 }
 
 type CatalogProductFindManyArgs = {
@@ -116,6 +169,11 @@ type CatalogProductFindManyArgs = {
     price?: {
       gte?: number
       lte?: number
+    }
+    compatibilities?: {
+      some: {
+        vehicleConfigurationId: string
+      }
     }
   }
   orderBy: {
@@ -230,6 +288,57 @@ export interface CatalogClient {
       }
     }): Promise<CatalogBrandRecord[]>
   }
+
+  productVehicleCompatibility?: {
+    findMany(args: {
+      where: {
+        product: {
+          isActive: true
+          categoryId: {
+            in: string[]
+          }
+        }
+        vehicleConfigurationId: {
+          not: null
+        }
+      }
+      select: {
+        vehicleConfiguration: {
+          select: {
+            id: true
+            name: true
+            engineCode: true
+            engineType: true
+            displacementCc: true
+            powerKw: true
+            bodyType: true
+            yearFrom: true
+            yearTo: true
+            generation: {
+              select: {
+                id: true
+                name: true
+                model: {
+                  select: {
+                    id: true
+                    name: true
+                    brand: {
+                      select: {
+                        id: true
+                        name: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }): Promise<
+      CatalogVehicleCompatibilityRecord[]
+    >
+  }
 }
 
 function getClient(
@@ -292,6 +401,49 @@ function toCatalogBrand(
     id: brand.id,
     name: brand.name,
     slug: brand.slug,
+  }
+}
+
+function toCatalogVehicleConfiguration(
+  configuration: NonNullable<
+    CatalogVehicleCompatibilityRecord[
+      'vehicleConfiguration'
+    ]
+  >,
+): CatalogVehicleConfiguration {
+  return {
+    id: configuration.id,
+    name: configuration.name,
+    engineCode: configuration.engineCode,
+    engineType: configuration.engineType,
+    displacementCc:
+      configuration.displacementCc,
+    powerKw:
+      configuration.powerKw === null
+        ? null
+        : Number(
+            configuration.powerKw.toString(),
+          ),
+    bodyType: configuration.bodyType,
+    yearFrom: configuration.yearFrom,
+    yearTo: configuration.yearTo,
+    generation: {
+      id: configuration.generation.id,
+      name: configuration.generation.name,
+      model: {
+        id: configuration.generation.model.id,
+        name:
+          configuration.generation.model.name,
+        brand: {
+          id:
+            configuration.generation.model.brand
+              .id,
+          name:
+            configuration.generation.model.brand
+              .name,
+        },
+      },
+    },
   }
 }
 
@@ -417,6 +569,149 @@ function getPriceFilter(
         }
       : {}),
   }
+}
+
+function normalizeVehicleConfigurationId(
+  value: string | undefined,
+) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const normalizedValue = value.trim()
+
+  return normalizedValue.length > 0
+    ? normalizedValue
+    : undefined
+}
+
+function compareVehicleConfigurations(
+  first: CatalogVehicleConfiguration,
+  second: CatalogVehicleConfiguration,
+) {
+  const firstBrand =
+    first.generation.model.brand.name
+
+  const secondBrand =
+    second.generation.model.brand.name
+
+  const brandComparison =
+    firstBrand.localeCompare(secondBrand)
+
+  if (brandComparison !== 0) {
+    return brandComparison
+  }
+
+  const modelComparison =
+    first.generation.model.name.localeCompare(
+      second.generation.model.name,
+    )
+
+  if (modelComparison !== 0) {
+    return modelComparison
+  }
+
+  const generationComparison =
+    first.generation.name.localeCompare(
+      second.generation.name,
+    )
+
+  if (generationComparison !== 0) {
+    return generationComparison
+  }
+
+  return first.name.localeCompare(second.name)
+}
+
+async function listCatalogVehicleConfigurations(
+  db: CatalogClient,
+  categoryIds: string[],
+) {
+  if (!db.productVehicleCompatibility) {
+    return []
+  }
+
+  const compatibilities =
+    await db.productVehicleCompatibility.findMany({
+      where: {
+        product: {
+          isActive: true,
+          categoryId: {
+            in: categoryIds,
+          },
+        },
+        vehicleConfigurationId: {
+          not: null,
+        },
+      },
+      select: {
+        vehicleConfiguration: {
+          select: {
+            id: true,
+            name: true,
+            engineCode: true,
+            engineType: true,
+            displacementCc: true,
+            powerKw: true,
+            bodyType: true,
+            yearFrom: true,
+            yearTo: true,
+            generation: {
+              select: {
+                id: true,
+                name: true,
+                model: {
+                  select: {
+                    id: true,
+                    name: true,
+                    brand: {
+                      select: {
+                        id: true,
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+  const configurationsById =
+    new Map<
+      string,
+      CatalogVehicleConfiguration
+    >()
+
+  for (const compatibility of compatibilities) {
+    const configuration =
+      compatibility.vehicleConfiguration
+
+    if (!configuration) {
+      continue
+    }
+
+    if (
+      configurationsById.has(
+        configuration.id,
+      )
+    ) {
+      continue
+    }
+
+    configurationsById.set(
+      configuration.id,
+      toCatalogVehicleConfiguration(
+        configuration,
+      ),
+    )
+  }
+
+  return Array.from(
+    configurationsById.values(),
+  ).sort(compareVehicleConfigurations)
 }
 
 export async function listCatalogProducts(
@@ -578,8 +873,11 @@ export async function getCatalogCategoryPageBySlug(
         item._count.products > 0,
     )
 
-  const brands =
-    await db.productBrand.findMany({
+  const [
+    brands,
+    vehicleConfigurations,
+  ] = await Promise.all([
+    db.productBrand.findMany({
       where: {
         products: {
           some: {
@@ -598,7 +896,12 @@ export async function getCatalogCategoryPageBySlug(
         name: true,
         slug: true,
       },
-    })
+    }),
+    listCatalogVehicleConfigurations(
+      db,
+      categoryIds,
+    ),
+  ])
 
   const normalizedBrandSlugs =
     normalizeBrandSlugs(
@@ -615,6 +918,11 @@ export async function getCatalogCategoryPageBySlug(
             ),
           )
           .map((brand) => brand.id)
+
+  const normalizedVehicleConfigurationId =
+    normalizeVehicleConfigurationId(
+      filters.vehicleConfigurationId,
+    )
 
   const where: CatalogProductFindManyArgs['where'] =
     {
@@ -643,6 +951,15 @@ export async function getCatalogCategoryPageBySlug(
 
   if (priceFilter) {
     where.price = priceFilter
+  }
+
+  if (normalizedVehicleConfigurationId) {
+    where.compatibilities = {
+      some: {
+        vehicleConfigurationId:
+          normalizedVehicleConfigurationId,
+      },
+    }
   }
 
   const products =
@@ -688,6 +1005,7 @@ export async function getCatalogCategoryPageBySlug(
       toCatalogCategory(category),
     brands:
       brands.map(toCatalogBrand),
+    vehicleConfigurations,
     products:
       products.map(toCatalogProduct),
   }
