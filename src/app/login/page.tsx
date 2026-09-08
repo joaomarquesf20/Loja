@@ -1,58 +1,235 @@
 'use client'
 
-import { useState } from 'react'
-import { signIn } from 'next-auth/react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  signIn,
+  useSession,
+} from 'next-auth/react'
+import {
+  useState,
+  type FormEvent,
+} from 'react'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const router = useRouter()
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const {
+    data: session,
+    status,
+    update,
+  } = useSession()
+
+  const [email, setEmail] =
+    useState('')
+
+  const [
+    password,
+    setPassword,
+  ] = useState('')
+
+  const [error, setError] =
+    useState<string | null>(null)
+
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState(false)
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (isSubmitting) {
+      return
+    }
+
+    setError(null)
+    setIsSubmitting(true)
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
+      const result =
+        await signIn(
+          'credentials',
+          {
+            email,
+            password,
+            redirect: false,
+          },
+        )
 
-      if (result?.error) {
-        setError(result.error)
-      } else {
-        setSuccess(true)
-        setError(null)
+      if (
+        !result ||
+        result.error
+      ) {
+        setError(
+          'Email ou password inválidos.',
+        )
+        return
       }
+
+      await update()
+
+      router.replace('/')
+      router.refresh()
     } catch {
-      setError('Erro desconhecido')
+      setError(
+        'Não foi possível iniciar sessão.',
+      )
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
+  if (status === 'loading') {
+    return (
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
+          A verificar sessão…
+        </p>
+      </main>
+    )
+  }
+
+  if (
+    status === 'authenticated'
+  ) {
+    const accountLabel =
+      session.user.name?.trim() ||
+      session.user.email?.trim() ||
+      'a tua conta'
+
+    return (
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <section className="w-full max-w-md rounded-xl border p-6">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Sessão iniciada
+          </h1>
+
+          <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
+            Já tens sessão iniciada
+            como{' '}
+            <span className="font-semibold text-foreground">
+              {accountLabel}
+            </span>
+            .
+          </p>
+
+          <Link
+            href="/"
+            className="mt-6 inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+          >
+            Voltar à loja
+          </Link>
+        </section>
+      </main>
+    )
+  }
+
   return (
-    <form onSubmit={handleSubmit}>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {success && <p style={{ color: 'green' }}>Login efetuado com sucesso!</p>}
-      <div>
-        <label>Email: </label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-      </div>
-      <div>
-        <label>Password: </label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-      </div>
-      <button type="submit">Entrar</button>
-    </form>
+    <main className="flex flex-1 items-center justify-center px-4 py-12">
+      <section className="w-full max-w-md">
+        <Link
+          href="/"
+          className="text-sm font-medium hover:underline"
+        >
+          ← Voltar à loja
+        </Link>
+
+        <div className="mt-6 rounded-xl border p-6">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Entrar
+          </h1>
+
+          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+            Inicia sessão na tua conta
+            PFAUTOPARTS.
+          </p>
+
+          <form
+            onSubmit={handleSubmit}
+            className="mt-6 space-y-5"
+          >
+            {error && (
+              <div
+                role="alert"
+                className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
+              >
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label
+                htmlFor="login-email"
+                className="mb-1.5 block text-sm font-semibold"
+              >
+                Email
+              </label>
+
+              <input
+                id="login-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) =>
+                  setEmail(
+                    event.target
+                      .value,
+                  )
+                }
+                required
+                disabled={
+                  isSubmitting
+                }
+                className="w-full rounded-lg border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="login-password"
+                className="mb-1.5 block text-sm font-semibold"
+              >
+                Password
+              </label>
+
+              <input
+                id="login-password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) =>
+                  setPassword(
+                    event.target
+                      .value,
+                  )
+                }
+                required
+                disabled={
+                  isSubmitting
+                }
+                className="w-full rounded-lg border bg-background px-3 py-2 outline-none focus:ring-2 focus:ring-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={
+                isSubmitting
+              }
+              className="w-full rounded-lg border px-4 py-2.5 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-900"
+            >
+              {isSubmitting
+                ? 'A entrar…'
+                : 'Entrar'}
+            </button>
+          </form>
+        </div>
+      </section>
+    </main>
   )
 }
