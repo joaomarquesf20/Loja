@@ -170,16 +170,15 @@ model CartItem {
 model Address {
   id           String  @id @default(cuid())
   userId       String?
-  street       String
-  number       String
-  complement   String?
-  neighborhood String
+  name         String
+  addressLine1 String
+  addressLine2 String?
   city         String
-  state        String
-  zipCode      String
+  postalCode   String
+  country      String
   user         User?   @relation(fields: [userId], references: [id])
 
-  @@index([userId, city, state])
+  @@index([userId])
 }
 
 model Order {
@@ -192,14 +191,13 @@ model Order {
   total                Decimal       @db.Decimal(10, 2)
   status               OrderStatus   @default(PENDING)
   paymentStatus        PaymentStatus @default(UNPAID)
-  shippingName         String?
-  shippingStreet       String
-  shippingNumber       String?
-  shippingComplement   String?
-  shippingNeighborhood String?
+  shippingName         String
+  shippingEmail        String
+  shippingPhone        String
+  shippingAddressLine1 String
+  shippingAddressLine2 String?
   shippingCity         String
-  shippingState        String?
-  shippingPostalCode   String?
+  shippingPostalCode   String
   shippingCountry      String
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
