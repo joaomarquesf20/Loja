@@ -23,9 +23,18 @@ export default async function Home() {
     <main className="min-h-screen bg-background text-foreground">
       <header className="border-b">
         <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <p className="text-sm font-medium tracking-[0.2em]">
-            PFAUTOPARTS
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm font-medium tracking-[0.2em]">
+              PFAUTOPARTS
+            </p>
+
+            <Link
+              href="/carrinho"
+              className="rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+            >
+              Carrinho
+            </Link>
+          </div>
 
           <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
             Peças e acessórios automóveis
