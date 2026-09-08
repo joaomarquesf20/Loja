@@ -138,6 +138,12 @@ export type CatalogVehicleConfiguration = {
   }
 }
 
+export type CatalogSort =
+  | 'name-asc'
+  | 'name-desc'
+  | 'price-asc'
+  | 'price-desc'
+
 export type CatalogCategoryPage = {
   category: CatalogCategory
   brands: CatalogBrand[]
@@ -152,7 +158,21 @@ export type CatalogCategoryFilters = {
   priceMin?: number
   priceMax?: number
   vehicleConfigurationId?: string
+  sort?: CatalogSort
 }
+
+type CatalogProductOrderBy =
+  | {
+      name: 'asc' | 'desc'
+    }
+  | [
+      {
+        price: 'asc' | 'desc'
+      },
+      {
+        name: 'asc'
+      },
+    ]
 
 type CatalogProductFindManyArgs = {
   where: {
@@ -176,9 +196,7 @@ type CatalogProductFindManyArgs = {
       }
     }
   }
-  orderBy: {
-    name: 'asc'
-  }
+  orderBy: CatalogProductOrderBy
   select: {
     id: true
     name: true
@@ -585,6 +603,42 @@ function normalizeVehicleConfigurationId(
     : undefined
 }
 
+function getCatalogProductOrderBy(
+  sort: CatalogSort | undefined,
+): CatalogProductOrderBy {
+  if (sort === 'name-desc') {
+    return {
+      name: 'desc',
+    }
+  }
+
+  if (sort === 'price-asc') {
+    return [
+      {
+        price: 'asc',
+      },
+      {
+        name: 'asc',
+      },
+    ]
+  }
+
+  if (sort === 'price-desc') {
+    return [
+      {
+        price: 'desc',
+      },
+      {
+        name: 'asc',
+      },
+    ]
+  }
+
+  return {
+    name: 'asc',
+  }
+}
+
 function compareVehicleConfigurations(
   first: CatalogVehicleConfiguration,
   second: CatalogVehicleConfiguration,
@@ -965,9 +1019,10 @@ export async function getCatalogCategoryPageBySlug(
   const products =
     await db.product.findMany({
       where,
-      orderBy: {
-        name: 'asc',
-      },
+      orderBy:
+        getCatalogProductOrderBy(
+          filters.sort,
+        ),
       select: {
         id: true,
         name: true,

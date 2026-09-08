@@ -1206,6 +1206,180 @@ describe('Catalog', () => {
       )
     })
 
+    test('ordena produtos por nome ascendente', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          sort: 'name-asc',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            name: 'asc',
+          },
+        }),
+      )
+    })
+
+    test('ordena produtos por nome descendente', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          sort: 'name-desc',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            name: 'desc',
+          },
+        }),
+      )
+    })
+
+    test('ordena produtos por preço ascendente com nome como desempate', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          sort: 'price-asc',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [
+            {
+              price: 'asc',
+            },
+            {
+              name: 'asc',
+            },
+          ],
+        }),
+      )
+    })
+
+    test('ordena produtos por preço descendente com nome como desempate', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.category.findMany,
+      ).mockResolvedValue([
+        {
+          id: 'category-1',
+          parentId: null,
+          name: 'Categoria 1',
+          slug: 'categoria-1',
+          description: null,
+          _count: {
+            products: 2,
+          },
+        },
+      ])
+
+      vi.mocked(
+        client.product.findMany,
+      ).mockResolvedValue([])
+
+      await getCatalogCategoryPageBySlug(
+        'categoria-1',
+        {
+          sort: 'price-desc',
+        },
+        client,
+      )
+
+      expect(
+        client.product.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [
+            {
+              price: 'desc',
+            },
+            {
+              name: 'asc',
+            },
+          ],
+        }),
+      )
+    })
+
     test('filtra produtos por preço mínimo', async () => {
       const client = createClient()
 

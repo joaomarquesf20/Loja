@@ -3,7 +3,10 @@ import {
   notFound,
   redirect,
 } from 'next/navigation'
-import { getCatalogCategoryPageBySlug } from '@/server/catalog'
+import {
+  getCatalogCategoryPageBySlug,
+  type CatalogSort,
+} from '@/server/catalog'
 import VehicleFilter from './vehicle-filter'
 
 export const dynamic = 'force-dynamic'
@@ -18,6 +21,7 @@ type CategoryPageProps = {
     priceMin?: string | string[]
     priceMax?: string | string[]
     vehicle?: string | string[]
+    sort?: string | string[]
   }>
 }
 
@@ -27,6 +31,7 @@ type CategoryFilterState = {
   priceMin?: number
   priceMax?: number
   vehicleConfigurationId?: string
+  sort?: CatalogSort
 }
 
 function formatPrice(price: number) {
@@ -100,6 +105,27 @@ function parseVehicleParam(
   return rawValue || undefined
 }
 
+function parseSortParam(
+  value: string | string[] | undefined,
+): CatalogSort | undefined {
+  const rawValue =
+    getSearchParamValue(value)?.trim()
+
+  if (rawValue === 'name-desc') {
+    return 'name-desc'
+  }
+
+  if (rawValue === 'price-asc') {
+    return 'price-asc'
+  }
+
+  if (rawValue === 'price-desc') {
+    return 'price-desc'
+  }
+
+  return undefined
+}
+
 function buildCategoryHref(
   categorySlug: string,
   filters: CategoryFilterState,
@@ -134,6 +160,16 @@ function buildCategoryHref(
     params.set(
       'vehicle',
       filters.vehicleConfigurationId,
+    )
+  }
+
+  if (
+    filters.sort &&
+    filters.sort !== 'name-asc'
+  ) {
+    params.set(
+      'sort',
+      filters.sort,
     )
   }
 
@@ -185,12 +221,19 @@ export default async function CategoryPage({
   const requestedVehicleConfigurationId =
     parseVehicleParam(query.vehicle)
 
+  const sort =
+    parseSortParam(query.sort)
+
   const hasInvalidPriceParams =
     (query.priceMin !== undefined &&
       parsedPriceMin === undefined) ||
     (query.priceMax !== undefined &&
       parsedPriceMax === undefined) ||
     priceRangeIsInverted
+
+  const shouldCanonicalizeSort =
+    query.sort !== undefined &&
+    sort === undefined
 
   const result =
     await getCatalogCategoryPageBySlug(
@@ -203,6 +246,7 @@ export default async function CategoryPage({
         priceMax,
         vehicleConfigurationId:
           requestedVehicleConfigurationId,
+        sort,
       },
     )
 
@@ -235,7 +279,8 @@ export default async function CategoryPage({
 
   if (
     hasInvalidPriceParams ||
-    hasInvalidVehicleParam
+    hasInvalidVehicleParam ||
+    shouldCanonicalizeSort
   ) {
     redirect(
       buildCategoryHref(
@@ -248,6 +293,7 @@ export default async function CategoryPage({
           priceMax,
           vehicleConfigurationId:
             selectedVehicleConfigurationId,
+          sort,
         },
       ),
     )
@@ -267,6 +313,16 @@ export default async function CategoryPage({
     hasPriceFilter ||
     hasVehicleFilter
 
+  const clearFiltersHref =
+    buildCategoryHref(
+      category.slug,
+      {
+        inStockOnly: false,
+        brandSlugs: [],
+        sort,
+      },
+    )
+
   const stockFilterHref =
     buildCategoryHref(
       category.slug,
@@ -278,6 +334,7 @@ export default async function CategoryPage({
         priceMax,
         vehicleConfigurationId:
           selectedVehicleConfigurationId,
+        sort,
       },
     )
 
@@ -290,6 +347,7 @@ export default async function CategoryPage({
           selectedBrandSlugs,
         vehicleConfigurationId:
           selectedVehicleConfigurationId,
+        sort,
       },
     )
 
@@ -352,7 +410,7 @@ export default async function CategoryPage({
 
             {hasActiveFilters && (
               <Link
-                href={`/categorias/${category.slug}`}
+                href={clearFiltersHref}
                 className="text-sm font-medium underline underline-offset-4"
               >
                 Limpar filtros
@@ -431,6 +489,7 @@ export default async function CategoryPage({
                         priceMax,
                         vehicleConfigurationId:
                           selectedVehicleConfigurationId,
+                        sort,
                       },
                     )
 
@@ -504,6 +563,14 @@ export default async function CategoryPage({
                 />
               )}
 
+              {sort && (
+                <input
+                  type="hidden"
+                  name="sort"
+                  value={sort}
+                />
+              )}
+
               <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
                 <label className="block">
                   <span className="text-sm font-medium">
@@ -552,6 +619,98 @@ export default async function CategoryPage({
               </button>
             </form>
           </div>
+
+          <div className="mt-5 border-t pt-5">
+            <h3 className="text-sm font-semibold">
+              Ordenação
+            </h3>
+
+            <form
+              action={`/categorias/${category.slug}`}
+              method="get"
+              className="mt-3 flex flex-wrap items-end gap-3"
+            >
+              {inStockOnly && (
+                <input
+                  type="hidden"
+                  name="stock"
+                  value="available"
+                />
+              )}
+
+              {selectedBrandSlugs.map(
+                (brandSlug) => (
+                  <input
+                    key={brandSlug}
+                    type="hidden"
+                    name="brand"
+                    value={brandSlug}
+                  />
+                ),
+              )}
+
+              {priceMin !== undefined && (
+                <input
+                  type="hidden"
+                  name="priceMin"
+                  value={priceMin}
+                />
+              )}
+
+              {priceMax !== undefined && (
+                <input
+                  type="hidden"
+                  name="priceMax"
+                  value={priceMax}
+                />
+              )}
+
+              {selectedVehicleConfigurationId && (
+                <input
+                  type="hidden"
+                  name="vehicle"
+                  value={
+                    selectedVehicleConfigurationId
+                  }
+                />
+              )}
+
+              <label className="block">
+                <span className="text-sm font-medium">
+                  Ordenar produtos por
+                </span>
+
+                <select
+                  name="sort"
+                  defaultValue={sort ?? ''}
+                  className="mt-1 block min-w-60 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+                >
+                  <option value="">
+                    Nome: A–Z
+                  </option>
+
+                  <option value="name-desc">
+                    Nome: Z–A
+                  </option>
+
+                  <option value="price-asc">
+                    Preço: menor primeiro
+                  </option>
+
+                  <option value="price-desc">
+                    Preço: maior primeiro
+                  </option>
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                className="rounded-md border px-4 py-2 text-sm font-medium transition hover:border-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
+              >
+                Ordenar
+              </button>
+            </form>
+          </div>
         </section>
 
         <section
@@ -580,7 +739,7 @@ export default async function CategoryPage({
 
               {hasActiveFilters && (
                 <Link
-                  href={`/categorias/${category.slug}`}
+                  href={clearFiltersHref}
                   className="mt-4 inline-block text-sm font-medium underline underline-offset-4"
                 >
                   Limpar filtros
