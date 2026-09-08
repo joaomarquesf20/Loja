@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCatalogProductBySlug } from '@/server/catalog'
+import AddToCartButton from './add-to-cart-button'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,10 +12,13 @@ type ProductPageProps = {
 }
 
 function formatPrice(price: number) {
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(price)
+  return new Intl.NumberFormat(
+    'pt-PT',
+    {
+      style: 'currency',
+      currency: 'EUR',
+    },
+  ).format(price)
 }
 
 export default async function ProductPage({
@@ -48,7 +52,8 @@ export default async function ProductPage({
             aria-label="Imagem do produto"
             className="flex aspect-[4/3] items-center justify-center rounded-lg border bg-neutral-50 p-6 text-center dark:bg-neutral-950"
           >
-            {product.images.length > 0 ? (
+            {product.images.length >
+            0 ? (
               <p className="text-sm text-neutral-600 dark:text-neutral-400">
                 Imagem associada ao produto
               </p>
@@ -82,7 +87,9 @@ export default async function ProductPage({
 
             <div className="mt-6">
               <p className="text-3xl font-bold">
-                {formatPrice(product.price)}
+                {formatPrice(
+                  product.price,
+                )}
               </p>
 
               <p
@@ -96,6 +103,11 @@ export default async function ProductPage({
                   ? 'Em stock'
                   : 'Sem stock'}
               </p>
+
+              <AddToCartButton
+                productId={product.id}
+                inStock={product.inStock}
+              />
             </div>
 
             {product.description ? (
@@ -115,7 +127,8 @@ export default async function ProductPage({
                 </h2>
 
                 <p className="mt-3 text-sm text-neutral-600 dark:text-neutral-400">
-                  Este produto não tem descrição disponível.
+                  Este produto não tem
+                  descrição disponível.
                 </p>
               </div>
             )}
