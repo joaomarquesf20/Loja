@@ -4,9 +4,12 @@ import { authOptions } from '@/server/auth'
 import {
   addCartItem,
   CartInsufficientStockError,
+  CartItemNotFoundError,
   CartProductUnavailableError,
   CartValidationError,
   listCartItems,
+  removeCartItem,
+  updateCartItemQuantity,
 } from '@/server/cart'
 
 function errorResponse(
@@ -43,6 +46,58 @@ async function getAuthenticatedUserId() {
   return userId || null
 }
 
+function handleCartError(error: unknown) {
+  if (
+    error instanceof
+    CartValidationError
+  ) {
+    return errorResponse(
+      error.message,
+      400,
+    )
+  }
+
+  if (
+    error instanceof
+    CartItemNotFoundError
+  ) {
+    return errorResponse(
+      error.message,
+      404,
+    )
+  }
+
+  if (
+    error instanceof
+    CartProductUnavailableError
+  ) {
+    return errorResponse(
+      error.message,
+      404,
+    )
+  }
+
+  if (
+    error instanceof
+    CartInsufficientStockError
+  ) {
+    return errorResponse(
+      error.message,
+      409,
+    )
+  }
+
+  console.error(
+    'Unexpected cart API error:',
+    error,
+  )
+
+  return errorResponse(
+    'Erro interno do servidor',
+    500,
+  )
+}
+
 export async function GET() {
   try {
     const userId =
@@ -62,15 +117,7 @@ export async function GET() {
       items,
     })
   } catch (error) {
-    console.error(
-      'Unexpected cart API error:',
-      error,
-    )
-
-    return errorResponse(
-      'Erro interno do servidor',
-      500,
-    )
+    return handleCartError(error)
   }
 }
 
@@ -138,44 +185,124 @@ export async function POST(
       item,
     })
   } catch (error) {
-    if (
-      error instanceof
-      CartValidationError
-    ) {
+    return handleCartError(error)
+  }
+}
+
+export async function PATCH(
+  request: Request,
+) {
+  try {
+    const userId =
+      await getAuthenticatedUserId()
+
+    if (!userId) {
       return errorResponse(
-        error.message,
+        'Não autenticado',
+        401,
+      )
+    }
+
+    let body: unknown
+
+    try {
+      body = await request.json()
+    } catch {
+      return errorResponse(
+        'JSON inválido',
         400,
       )
     }
 
-    if (
-      error instanceof
-      CartProductUnavailableError
-    ) {
+    if (!isRecord(body)) {
       return errorResponse(
-        error.message,
-        404,
+        'Pedido inválido',
+        400,
       )
     }
 
-    if (
-      error instanceof
-      CartInsufficientStockError
-    ) {
+    const productId = body.productId
+    const quantity = body.quantity
+
+    if (typeof productId !== 'string') {
       return errorResponse(
-        error.message,
-        409,
+        'Produto inválido',
+        400,
       )
     }
 
-    console.error(
-      'Unexpected cart API error:',
-      error,
+    if (typeof quantity !== 'number') {
+      return errorResponse(
+        'Quantidade inválida',
+        400,
+      )
+    }
+
+    const item =
+      await updateCartItemQuantity(
+        userId,
+        productId,
+        quantity,
+      )
+
+    return NextResponse.json({
+      item,
+    })
+  } catch (error) {
+    return handleCartError(error)
+  }
+}
+
+export async function DELETE(
+  request: Request,
+) {
+  try {
+    const userId =
+      await getAuthenticatedUserId()
+
+    if (!userId) {
+      return errorResponse(
+        'Não autenticado',
+        401,
+      )
+    }
+
+    let body: unknown
+
+    try {
+      body = await request.json()
+    } catch {
+      return errorResponse(
+        'JSON inválido',
+        400,
+      )
+    }
+
+    if (!isRecord(body)) {
+      return errorResponse(
+        'Pedido inválido',
+        400,
+      )
+    }
+
+    const productId = body.productId
+
+    if (typeof productId !== 'string') {
+      return errorResponse(
+        'Produto inválido',
+        400,
+      )
+    }
+
+    await removeCartItem(
+      userId,
+      productId,
     )
 
-    return errorResponse(
-      'Erro interno do servidor',
-      500,
-    )
+    return new Response(null, {
+      status: 204,
+    })
+  } catch (error) {
+    return handleCartError(error)
   }
 }

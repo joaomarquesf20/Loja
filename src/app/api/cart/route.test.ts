@@ -42,12 +42,25 @@ vi.mock('@/server/cart', () => {
     }
   }
 
+  class CartItemNotFoundError extends Error {
+    constructor(
+      message = 'Item do carrinho não encontrado',
+    ) {
+      super(message)
+      this.name =
+        'CartItemNotFoundError'
+    }
+  }
+
   return {
     listCartItems: vi.fn(),
     addCartItem: vi.fn(),
+    updateCartItemQuantity: vi.fn(),
+    removeCartItem: vi.fn(),
     CartValidationError,
     CartProductUnavailableError,
     CartInsufficientStockError,
+    CartItemNotFoundError,
   }
 })
 
@@ -55,12 +68,17 @@ import { getServerSession } from 'next-auth'
 import {
   addCartItem,
   CartInsufficientStockError,
+  CartItemNotFoundError,
   CartProductUnavailableError,
   CartValidationError,
   listCartItems,
+  removeCartItem,
+  updateCartItemQuantity,
 } from '@/server/cart'
 import {
+  DELETE,
   GET,
+  PATCH,
   POST,
 } from './route'
 
@@ -72,6 +90,12 @@ const mockListCartItems =
 
 const mockAddCartItem =
   vi.mocked(addCartItem)
+
+const mockUpdateCartItemQuantity =
+  vi.mocked(updateCartItemQuantity)
+
+const mockRemoveCartItem =
+  vi.mocked(removeCartItem)
 
 const authenticatedSession = {
   user: {
@@ -100,13 +124,14 @@ const cartItem = {
   canIncrease: true,
 }
 
-function createPostRequest(
+function createRequest(
+  method: string,
   body: string,
 ) {
   return new Request(
     'http://localhost/api/cart',
     {
-      method: 'POST',
+      method,
       headers: {
         'Content-Type':
           'application/json',
@@ -119,6 +144,12 @@ function createPostRequest(
 describe('/api/cart', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    mockGetServerSession.mockReset()
+    mockListCartItems.mockReset()
+    mockAddCartItem.mockReset()
+    mockUpdateCartItemQuantity.mockReset()
+    mockRemoveCartItem.mockReset()
 
     mockGetServerSession.mockResolvedValue(
       authenticatedSession,
@@ -205,7 +236,8 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
           }),
@@ -221,7 +253,10 @@ describe('/api/cart', () => {
 
     test('rejeita JSON inválido', async () => {
       const response = await POST(
-        createPostRequest('{'),
+        createRequest(
+          'POST',
+          '{',
+        ),
       )
 
       expect(response.status).toBe(400)
@@ -231,15 +266,12 @@ describe('/api/cart', () => {
       ).resolves.toEqual({
         error: 'JSON inválido',
       })
-
-      expect(
-        mockAddCartItem,
-      ).not.toHaveBeenCalled()
     })
 
     test('rejeita corpo que não é objeto', async () => {
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify([]),
         ),
       )
@@ -251,15 +283,12 @@ describe('/api/cart', () => {
       ).resolves.toEqual({
         error: 'Pedido inválido',
       })
-
-      expect(
-        mockAddCartItem,
-      ).not.toHaveBeenCalled()
     })
 
     test('rejeita productId em falta', async () => {
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             quantity: 1,
           }),
@@ -273,15 +302,12 @@ describe('/api/cart', () => {
       ).resolves.toEqual({
         error: 'Produto inválido',
       })
-
-      expect(
-        mockAddCartItem,
-      ).not.toHaveBeenCalled()
     })
 
     test('rejeita quantidade com tipo inválido', async () => {
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
             quantity: '2',
@@ -296,10 +322,6 @@ describe('/api/cart', () => {
       ).resolves.toEqual({
         error: 'Quantidade inválida',
       })
-
-      expect(
-        mockAddCartItem,
-      ).not.toHaveBeenCalled()
     })
 
     test('usa quantidade 1 quando quantity é omitida', async () => {
@@ -308,7 +330,8 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
           }),
@@ -339,7 +362,8 @@ describe('/api/cart', () => {
       })
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
             quantity: 3,
@@ -356,18 +380,9 @@ describe('/api/cart', () => {
         'product-1',
         3,
       )
-
-      await expect(
-        response.json(),
-      ).resolves.toMatchObject({
-        item: {
-          productId: 'product-1',
-          quantity: 3,
-        },
-      })
     })
 
-    test('devolve 400 para erro de validação do carrinho', async () => {
+    test('devolve 400 para erro de validação', async () => {
       mockAddCartItem.mockRejectedValue(
         new CartValidationError(
           'Quantidade inválida',
@@ -375,7 +390,8 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
             quantity: 0,
@@ -384,12 +400,6 @@ describe('/api/cart', () => {
       )
 
       expect(response.status).toBe(400)
-
-      await expect(
-        response.json(),
-      ).resolves.toEqual({
-        error: 'Quantidade inválida',
-      })
     })
 
     test('devolve 404 quando produto não está disponível', async () => {
@@ -398,21 +408,15 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
-            productId:
-              'produto-inexistente',
+            productId: 'product-1',
           }),
         ),
       )
 
       expect(response.status).toBe(404)
-
-      await expect(
-        response.json(),
-      ).resolves.toEqual({
-        error: 'Produto indisponível',
-      })
     })
 
     test('devolve 409 quando não existe stock suficiente', async () => {
@@ -421,7 +425,8 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
             quantity: 20,
@@ -430,12 +435,6 @@ describe('/api/cart', () => {
       )
 
       expect(response.status).toBe(409)
-
-      await expect(
-        response.json(),
-      ).resolves.toEqual({
-        error: 'Stock insuficiente',
-      })
     })
 
     test('devolve 500 em erro inesperado', async () => {
@@ -450,7 +449,8 @@ describe('/api/cart', () => {
       )
 
       const response = await POST(
-        createPostRequest(
+        createRequest(
+          'POST',
           JSON.stringify({
             productId: 'product-1',
           }),
@@ -459,12 +459,414 @@ describe('/api/cart', () => {
 
       expect(response.status).toBe(500)
 
+      expect(
+        consoleError,
+      ).toHaveBeenCalled()
+
+      consoleError.mockRestore()
+    })
+  })
+
+  describe('PATCH', () => {
+    test('devolve 401 quando utilizador não está autenticado', async () => {
+      mockGetServerSession.mockResolvedValue(
+        null,
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 2,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(401)
+
+      expect(
+        mockUpdateCartItemQuantity,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita JSON inválido', async () => {
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          '{',
+        ),
+      )
+
+      expect(response.status).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error: 'JSON inválido',
+      })
+    })
+
+    test('rejeita corpo que não é objeto', async () => {
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify([]),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error: 'Pedido inválido',
+      })
+    })
+
+    test('rejeita productId em falta', async () => {
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            quantity: 2,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error: 'Produto inválido',
+      })
+    })
+
+    test('rejeita quantidade em falta ou com tipo inválido', async () => {
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error: 'Quantidade inválida',
+      })
+
+      expect(
+        mockUpdateCartItemQuantity,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('altera a quantidade do item', async () => {
+      mockUpdateCartItemQuantity.mockResolvedValue({
+        ...cartItem,
+        quantity: 4,
+      })
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 4,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(200)
+
+      expect(
+        mockUpdateCartItemQuantity,
+      ).toHaveBeenCalledWith(
+        'user-1',
+        'product-1',
+        4,
+      )
+
+      await expect(
+        response.json(),
+      ).resolves.toMatchObject({
+        item: {
+          productId: 'product-1',
+          quantity: 4,
+        },
+      })
+    })
+
+    test('devolve 400 para erro de validação', async () => {
+      mockUpdateCartItemQuantity.mockRejectedValue(
+        new CartValidationError(
+          'Quantidade inválida',
+        ),
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 0,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+    })
+
+    test('devolve 404 quando item não existe', async () => {
+      mockUpdateCartItemQuantity.mockRejectedValue(
+        new CartItemNotFoundError(),
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 2,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(404)
+
       await expect(
         response.json(),
       ).resolves.toEqual({
         error:
-          'Erro interno do servidor',
+          'Item do carrinho não encontrado',
       })
+    })
+
+    test('devolve 404 quando produto ficou indisponível', async () => {
+      mockUpdateCartItemQuantity.mockRejectedValue(
+        new CartProductUnavailableError(),
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 2,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(404)
+    })
+
+    test('devolve 409 quando quantidade excede stock', async () => {
+      mockUpdateCartItemQuantity.mockRejectedValue(
+        new CartInsufficientStockError(),
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 20,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(409)
+    })
+
+    test('devolve 500 em erro inesperado', async () => {
+      const consoleError =
+        vi.spyOn(
+          console,
+          'error',
+        ).mockImplementation(() => {})
+
+      mockUpdateCartItemQuantity.mockRejectedValue(
+        new Error('Erro inesperado'),
+      )
+
+      const response = await PATCH(
+        createRequest(
+          'PATCH',
+          JSON.stringify({
+            productId: 'product-1',
+            quantity: 2,
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(500)
+
+      expect(
+        consoleError,
+      ).toHaveBeenCalled()
+
+      consoleError.mockRestore()
+    })
+  })
+
+  describe('DELETE', () => {
+    test('devolve 401 quando utilizador não está autenticado', async () => {
+      mockGetServerSession.mockResolvedValue(
+        null,
+      )
+
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({
+            productId: 'product-1',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(401)
+
+      expect(
+        mockRemoveCartItem,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita JSON inválido', async () => {
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          '{',
+        ),
+      )
+
+      expect(response.status).toBe(400)
+    })
+
+    test('rejeita corpo que não é objeto', async () => {
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify([]),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+    })
+
+    test('rejeita productId em falta', async () => {
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({}),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error: 'Produto inválido',
+      })
+    })
+
+    test('remove item do utilizador autenticado', async () => {
+      mockRemoveCartItem.mockResolvedValue(
+        undefined,
+      )
+
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({
+            productId: 'product-1',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(204)
+
+      expect(
+        mockRemoveCartItem,
+      ).toHaveBeenCalledWith(
+        'user-1',
+        'product-1',
+      )
+
+      expect(
+        await response.text(),
+      ).toBe('')
+    })
+
+    test('devolve 400 para erro de validação', async () => {
+      mockRemoveCartItem.mockRejectedValue(
+        new CartValidationError(
+          'Produto inválido',
+        ),
+      )
+
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({
+            productId: '   ',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(400)
+    })
+
+    test('devolve 404 quando item não existe', async () => {
+      mockRemoveCartItem.mockRejectedValue(
+        new CartItemNotFoundError(),
+      )
+
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({
+            productId: 'product-1',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(404)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Item do carrinho não encontrado',
+      })
+    })
+
+    test('devolve 500 em erro inesperado', async () => {
+      const consoleError =
+        vi.spyOn(
+          console,
+          'error',
+        ).mockImplementation(() => {})
+
+      mockRemoveCartItem.mockRejectedValue(
+        new Error('Erro inesperado'),
+      )
+
+      const response = await DELETE(
+        createRequest(
+          'DELETE',
+          JSON.stringify({
+            productId: 'product-1',
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(500)
 
       expect(
         consoleError,

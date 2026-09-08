@@ -34,6 +34,10 @@ type AddableProductRecord = {
   stockQuantity: number
 }
 
+type RemovableCartItemRecord = {
+  id: string
+}
+
 export type CartItem = {
   id: string
   productId: string
@@ -74,6 +78,15 @@ export class CartInsufficientStockError extends Error {
     super(message)
     this.name =
       'CartInsufficientStockError'
+  }
+}
+
+export class CartItemNotFoundError extends Error {
+  constructor(
+    message = 'Item do carrinho não encontrado',
+  ) {
+    super(message)
+    this.name = 'CartItemNotFoundError'
   }
 }
 
@@ -126,11 +139,19 @@ export interface CartClient {
           productId: string
         }
       }
-      select: {
-        id: true
-        quantity: true
-      }
-    }): Promise<ExistingCartItemRecord | null>
+      select:
+        | {
+            id: true
+            quantity: true
+          }
+        | {
+            id: true
+          }
+    }): Promise<
+      | ExistingCartItemRecord
+      | RemovableCartItemRecord
+      | null
+    >
 
     create(args: {
       data: {
@@ -150,6 +171,17 @@ export interface CartClient {
       }
       select: CartItemSelect
     }): Promise<CartItemRecord>
+
+    delete(args: {
+      where: {
+        id: string
+      }
+      select: {
+        id: true
+      }
+    }): Promise<{
+      id: string
+    }>
   }
 }
 
@@ -194,7 +226,9 @@ function normalizeId(
   return normalizedValue
 }
 
-function validateQuantity(quantity: number) {
+function validateQuantity(
+  quantity: number,
+) {
   if (
     !Number.isInteger(quantity) ||
     quantity <= 0
@@ -322,9 +356,14 @@ export async function addCartItem(
       },
     })
 
+  const existingQuantity =
+    existingItem &&
+    'quantity' in existingItem
+      ? existingItem.quantity
+      : 0
+
   const nextQuantity =
-    (existingItem?.quantity ?? 0) +
-    quantity
+    existingQuantity + quantity
 
   if (
     nextQuantity >
@@ -360,4 +399,127 @@ export async function addCartItem(
     })
 
   return toCartItem(createdItem)
+}
+
+export async function updateCartItemQuantity(
+  userId: string,
+  productId: string,
+  quantity: number,
+  client?: CartClient,
+): Promise<CartItem> {
+  const normalizedUserId = normalizeId(
+    userId,
+    'Utilizador',
+  )
+
+  const normalizedProductId =
+    normalizeId(
+      productId,
+      'Produto',
+    )
+
+  validateQuantity(quantity)
+
+  const db = getClient(client)
+
+  const existingItem =
+    await db.cartItem.findUnique({
+      where: {
+        userId_productId: {
+          userId: normalizedUserId,
+          productId:
+            normalizedProductId,
+        },
+      },
+      select: {
+        id: true,
+        quantity: true,
+      },
+    })
+
+  if (!existingItem) {
+    throw new CartItemNotFoundError()
+  }
+
+  const product =
+    await db.product.findFirst({
+      where: {
+        id: normalizedProductId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        stockQuantity: true,
+      },
+    })
+
+  if (!product) {
+    throw new CartProductUnavailableError()
+  }
+
+  if (
+    quantity >
+    product.stockQuantity
+  ) {
+    throw new CartInsufficientStockError()
+  }
+
+  const updatedItem =
+    await db.cartItem.update({
+      where: {
+        id: existingItem.id,
+      },
+      data: {
+        quantity,
+      },
+      select: cartItemSelect,
+    })
+
+  return toCartItem(updatedItem)
+}
+
+export async function removeCartItem(
+  userId: string,
+  productId: string,
+  client?: CartClient,
+): Promise<void> {
+  const normalizedUserId = normalizeId(
+    userId,
+    'Utilizador',
+  )
+
+  const normalizedProductId =
+    normalizeId(
+      productId,
+      'Produto',
+    )
+
+  const db = getClient(client)
+
+  const existingItem =
+    await db.cartItem.findUnique({
+      where: {
+        userId_productId: {
+          userId: normalizedUserId,
+          productId:
+            normalizedProductId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+  if (!existingItem) {
+    throw new CartItemNotFoundError()
+  }
+
+  await db.cartItem.delete({
+    where: {
+      id: existingItem.id,
+    },
+    select: {
+      id: true,
+    },
+  })
 }
