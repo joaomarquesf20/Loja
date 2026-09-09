@@ -1,21 +1,35 @@
 import { z } from 'zod'
 
 /**
- * Validação de email - string, email válido
+ * Email válido, sem espaços exteriores e normalizado para lowercase.
  */
-export const emailSchema = z.string().email()
+export const emailSchema = z
+  .string()
+  .trim()
+  .email()
+  .transform((value) =>
+    value.toLowerCase(),
+  )
 
 /**
- * Validação de password - string, mínimo 8 caracteres
+ * Password - string, mínimo 8 caracteres.
  */
-export const passwordSchema = z.string().min(8)
+export const passwordSchema = z
+  .string()
+  .min(8)
 
 /**
- * Validação de quantity - number, inteiro, > 0
+ * Quantity - number, inteiro, > 0.
  */
-export const quantitySchema = z.number().int().positive()
+export const quantitySchema = z
+  .number()
+  .int()
+  .positive()
 
 /**
- * Validação de id - string, não vazia (rejeita strings vazias ou só com espaços)
+ * ID - string não vazia.
  */
-export const idSchema = z.string().trim().min(1)
+export const idSchema = z
+  .string()
+  .trim()
+  .min(1)
