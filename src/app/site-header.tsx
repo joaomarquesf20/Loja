@@ -99,15 +99,16 @@ export default function SiteHeader() {
                 </Link>
               )}
 
-              <span
-                className="max-w-48 truncate px-2 text-sm text-neutral-600 dark:text-neutral-400"
+              <Link
+                href="/conta"
+                className="max-w-48 truncate rounded-lg px-2 py-2 text-sm text-neutral-600 transition hover:bg-neutral-50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:text-neutral-400 dark:hover:bg-neutral-900"
                 title={
                   user.email ??
                   undefined
                 }
               >
                 {accountLabel}
-              </span>
+              </Link>
 
               <button
                 type="button"

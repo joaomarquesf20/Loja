@@ -144,7 +144,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('mostra utilizador autenticado e logout', () => {
+  test('mostra utilizador autenticado com acesso à conta e logout', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -164,8 +164,28 @@ describe('SiteHeader', () => {
     render(<SiteHeader />)
 
     expect(
-      screen.getByText('Maria'),
-    ).toBeInTheDocument()
+      screen.getByRole(
+        'link',
+        {
+          name: 'Maria',
+        },
+      ),
+    ).toHaveAttribute(
+      'href',
+      '/conta',
+    )
+
+    expect(
+      screen.getByRole(
+        'link',
+        {
+          name: 'Maria',
+        },
+      ),
+    ).toHaveAttribute(
+      'title',
+      'maria@example.com',
+    )
 
     expect(
       screen.getByRole(
@@ -232,6 +252,18 @@ describe('SiteHeader', () => {
     ).toHaveAttribute(
       'href',
       '/admin',
+    )
+
+    expect(
+      screen.getByRole(
+        'link',
+        {
+          name: 'Admin',
+        },
+      ),
+    ).toHaveAttribute(
+      'href',
+      '/conta',
     )
 
     expect(
