@@ -28,17 +28,18 @@ enum PaymentStatus {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  name         String?
-  role         UserRole   @default(BUYER)
-  isActive     Boolean    @default(true)
-  addresses    Address[]
-  cartItems    CartItem[]
-  orders       Order[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String
+  name            String?
+  role            UserRole         @default(BUYER)
+  isActive        Boolean          @default(true)
+  addresses       Address[]
+  cartItems       CartItem[]
+  guestCartMerges GuestCartMerge[]
+  orders          Order[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model VehicleBrand {
@@ -165,6 +166,18 @@ model CartItem {
   product   Product @relation(fields: [productId], references: [id])
 
   @@unique([userId, productId])
+}
+
+model GuestCartMerge {
+  id              String   @id @default(cuid())
+  mergeKey        String   @unique
+  userId          String
+  payloadHash     String
+  mergedItemCount Int
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Address {
