@@ -78,10 +78,22 @@ vi.mock('@/server/cart-merge', () => {
     }
   }
 
+  class CartMergeConflictError extends Error {
+    constructor(
+      message =
+        'Identificador de merge já utilizado com dados diferentes',
+    ) {
+      super(message)
+      this.name =
+        'CartMergeConflictError'
+    }
+  }
+
   return {
     mergeGuestCartIntoUserCart:
       vi.fn(),
     CartMergeUserUnavailableError,
+    CartMergeConflictError,
   }
 })
 
@@ -92,6 +104,7 @@ import {
   CartValidationError,
 } from '@/server/cart'
 import {
+  CartMergeConflictError,
   CartMergeUserUnavailableError,
   mergeGuestCartIntoUserCart,
 } from '@/server/cart-merge'
@@ -160,6 +173,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [],
           }),
         ),
@@ -216,12 +231,43 @@ describe(
       ).resolves.toEqual({
         error: 'Pedido inválido',
       })
+
+      expect(
+        mockMergeGuestCart,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita mergeKey em falta ou com tipo inválido', async () => {
+      const response = await POST(
+        createRequest(
+          JSON.stringify({
+            items: [],
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(
+        400,
+      )
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Identificador de merge inválido',
+      })
+
+      expect(
+        mockMergeGuestCart,
+      ).not.toHaveBeenCalled()
     })
 
     test('rejeita items em falta ou que não sejam array', async () => {
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: 'invalid',
           }),
         ),
@@ -246,6 +292,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [null],
           }),
         ),
@@ -270,6 +318,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId: 123,
@@ -299,6 +349,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:
@@ -329,11 +381,13 @@ describe(
     test('faz merge usando apenas o utilizador autenticado da sessão', async () => {
       const items = [
         {
-          productId: 'product-1',
+          productId:
+            'product-1',
           quantity: 2,
         },
         {
-          productId: 'product-2',
+          productId:
+            'product-2',
           quantity: 1,
         },
       ]
@@ -341,6 +395,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items,
             userId:
               'attacker-user-id',
@@ -360,6 +416,7 @@ describe(
         mockMergeGuestCart,
       ).toHaveBeenCalledWith(
         'user-1',
+        'merge-key-1',
         items,
       )
 
@@ -380,6 +437,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:
@@ -406,13 +465,14 @@ describe(
     test('devolve 400 para erro de validação do carrinho', async () => {
       mockMergeGuestCart.mockRejectedValue(
         new CartValidationError(
-          'Quantidade inválida',
+          'Identificador de merge inválido',
         ),
       )
 
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey: '',
             items: [
               {
                 productId:
@@ -427,6 +487,13 @@ describe(
       expect(response.status).toBe(
         400,
       )
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Identificador de merge inválido',
+      })
     })
 
     test('devolve 403 quando utilizador autenticado ficou indisponível', async () => {
@@ -437,6 +504,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:
@@ -460,6 +529,39 @@ describe(
       })
     })
 
+    test('devolve 409 quando a mergeKey já foi usada com dados diferentes', async () => {
+      mockMergeGuestCart.mockRejectedValue(
+        new CartMergeConflictError(),
+      )
+
+      const response = await POST(
+        createRequest(
+          JSON.stringify({
+            mergeKey:
+              'merge-key-1',
+            items: [
+              {
+                productId:
+                  'product-1',
+                quantity: 1,
+              },
+            ],
+          }),
+        ),
+      )
+
+      expect(response.status).toBe(
+        409,
+      )
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Identificador de merge já utilizado com dados diferentes',
+      })
+    })
+
     test('devolve 404 quando produto está indisponível', async () => {
       mockMergeGuestCart.mockRejectedValue(
         new CartProductUnavailableError(),
@@ -468,6 +570,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:
@@ -499,6 +603,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:
@@ -538,6 +644,8 @@ describe(
       const response = await POST(
         createRequest(
           JSON.stringify({
+            mergeKey:
+              'merge-key-1',
             items: [
               {
                 productId:

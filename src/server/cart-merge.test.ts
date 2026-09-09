@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   describe,
   expect,
@@ -15,13 +16,15 @@ import {
   CartValidationError,
 } from './cart'
 import {
-  GuestCartServerValidationError,
-} from './guest-cart'
-import {
+  CartMergeConflictError,
   CartMergeUserUnavailableError,
   mergeGuestCartIntoUserCart,
   type CartMergeClient,
 } from './cart-merge'
+import {
+  GuestCartServerValidationError,
+  type GuestCartInputItem,
+} from './guest-cart'
 
 function createTransactionMock() {
   return {
@@ -35,6 +38,10 @@ function createTransactionMock() {
       findMany: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
+    },
+    guestCartMerge: {
+      createMany: vi.fn(),
+      findUnique: vi.fn(),
     },
   }
 }
@@ -75,6 +82,47 @@ function prepareUser(
   )
 }
 
+function claimNewReceipt(
+  tx: ReturnType<
+    typeof createTransactionMock
+  >,
+) {
+  tx.guestCartMerge.createMany.mockResolvedValue(
+    {
+      count: 1,
+    },
+  )
+}
+
+function createPayloadHash(
+  items: GuestCartInputItem[],
+) {
+  const canonicalItems = [
+    ...items,
+  ].sort((left, right) => {
+    if (
+      left.productId ===
+      right.productId
+    ) {
+      return 0
+    }
+
+    return left.productId <
+      right.productId
+      ? -1
+      : 1
+  })
+
+  return createHash('sha256')
+    .update(
+      JSON.stringify(
+        canonicalItems,
+      ),
+      'utf8',
+    )
+    .digest('hex')
+}
+
 describe(
   'mergeGuestCartIntoUserCart',
   () => {
@@ -90,6 +138,69 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           '   ',
+          'merge-key-1',
+          [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartValidationError,
+      )
+
+      expect(
+        transaction,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita mergeKey vazio antes de iniciar transação', async () => {
+      const tx =
+        createTransactionMock()
+
+      const {
+        client,
+        transaction,
+      } = createClient(tx)
+
+      await expect(
+        mergeGuestCartIntoUserCart(
+          'user-1',
+          '   ',
+          [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartValidationError,
+      )
+
+      expect(
+        transaction,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita mergeKey demasiado longo antes de iniciar transação', async () => {
+      const tx =
+        createTransactionMock()
+
+      const {
+        client,
+        transaction,
+      } = createClient(tx)
+
+      await expect(
+        mergeGuestCartIntoUserCart(
+          'user-1',
+          'a'.repeat(129),
           [
             {
               productId:
@@ -120,6 +231,7 @@ describe(
       const result =
         await mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [],
           client,
         )
@@ -145,6 +257,7 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -177,6 +290,7 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -191,6 +305,11 @@ describe(
       )
 
       expect(
+        tx.guestCartMerge
+          .createMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
         tx.product.findMany,
       ).not.toHaveBeenCalled()
 
@@ -199,11 +318,201 @@ describe(
       ).not.toHaveBeenCalled()
     })
 
+    test('devolve receipt existente quando o mesmo merge é repetido', async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareUser(tx)
+
+      const items = [
+        {
+          productId:
+            'product-1',
+          quantity: 2,
+        },
+      ]
+
+      tx.guestCartMerge.createMany.mockResolvedValue(
+        {
+          count: 0,
+        },
+      )
+
+      tx.guestCartMerge.findUnique.mockResolvedValue(
+        {
+          userId: 'user-1',
+          payloadHash:
+            createPayloadHash(
+              items,
+            ),
+          mergedItemCount: 1,
+        },
+      )
+
+      const { client } =
+        createClient(tx)
+
+      const result =
+        await mergeGuestCartIntoUserCart(
+          'user-1',
+          'merge-key-1',
+          items,
+          client,
+        )
+
+      expect(result).toEqual({
+        mergedItemCount: 1,
+      })
+
+      expect(
+        tx.guestCartMerge.findUnique,
+      ).toHaveBeenCalledWith({
+        where: {
+          mergeKey:
+            'merge-key-1',
+        },
+        select: {
+          userId: true,
+          payloadHash: true,
+          mergedItemCount: true,
+        },
+      })
+
+      expect(
+        tx.product.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.update,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.create,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita reutilização da mesma mergeKey com payload diferente', async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareUser(tx)
+
+      tx.guestCartMerge.createMany.mockResolvedValue(
+        {
+          count: 0,
+        },
+      )
+
+      tx.guestCartMerge.findUnique.mockResolvedValue(
+        {
+          userId: 'user-1',
+          payloadHash:
+            'different-payload-hash',
+          mergedItemCount: 1,
+        },
+      )
+
+      const { client } =
+        createClient(tx)
+
+      await expect(
+        mergeGuestCartIntoUserCart(
+          'user-1',
+          'merge-key-1',
+          [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartMergeConflictError,
+      )
+
+      expect(
+        tx.product.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.update,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.create,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita reutilização da mergeKey por outro utilizador', async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareUser(tx)
+
+      const items = [
+        {
+          productId:
+            'product-1',
+          quantity: 1,
+        },
+      ]
+
+      tx.guestCartMerge.createMany.mockResolvedValue(
+        {
+          count: 0,
+        },
+      )
+
+      tx.guestCartMerge.findUnique.mockResolvedValue(
+        {
+          userId: 'other-user',
+          payloadHash:
+            createPayloadHash(
+              items,
+            ),
+          mergedItemCount: 1,
+        },
+      )
+
+      const { client } =
+        createClient(tx)
+
+      await expect(
+        mergeGuestCartIntoUserCart(
+          'user-1',
+          'merge-key-1',
+          items,
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartMergeConflictError,
+      )
+
+      expect(
+        tx.product.findMany,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.update,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        tx.cartItem.create,
+      ).not.toHaveBeenCalled()
+    })
+
     test('rejeita produto inexistente ou inativo sem alterar carrinho', async () => {
       const tx =
         createTransactionMock()
 
       prepareUser(tx)
+      claimNewReceipt(tx)
 
       tx.product.findMany.mockResolvedValue(
         [],
@@ -219,6 +528,7 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -246,6 +556,7 @@ describe(
         createTransactionMock()
 
       prepareUser(tx)
+      claimNewReceipt(tx)
 
       tx.product.findMany.mockResolvedValue(
         [
@@ -285,6 +596,7 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -312,11 +624,12 @@ describe(
       ).not.toHaveBeenCalled()
     })
 
-    test('combina duplicados, incrementa itens existentes e cria novos itens', async () => {
+    test('combina duplicados, incrementa itens existentes, cria novos itens e regista receipt', async () => {
       const tx =
         createTransactionMock()
 
       prepareUser(tx)
+      claimNewReceipt(tx)
 
       tx.product.findMany.mockResolvedValue(
         [
@@ -364,6 +677,7 @@ describe(
       const result =
         await mergeGuestCartIntoUserCart(
           ' user-1 ',
+          ' merge-key-1 ',
           [
             {
               productId:
@@ -384,6 +698,19 @@ describe(
           client,
         )
 
+      const normalizedItems = [
+        {
+          productId:
+            'product-1',
+          quantity: 3,
+        },
+        {
+          productId:
+            'product-2',
+          quantity: 2,
+        },
+      ]
+
       expect(
         transaction,
       ).toHaveBeenCalledWith(
@@ -393,6 +720,25 @@ describe(
             'Serializable',
         },
       )
+
+      expect(
+        tx.guestCartMerge
+          .createMany,
+      ).toHaveBeenCalledWith({
+        data: [
+          {
+            mergeKey:
+              'merge-key-1',
+            userId: 'user-1',
+            payloadHash:
+              createPayloadHash(
+                normalizedItems,
+              ),
+            mergedItemCount: 2,
+          },
+        ],
+        skipDuplicates: true,
+      })
 
       expect(
         tx.product.findMany,
@@ -469,6 +815,7 @@ describe(
         createTransactionMock()
 
       prepareUser(tx)
+      claimNewReceipt(tx)
 
       tx.product.findMany.mockResolvedValue(
         [
@@ -497,6 +844,7 @@ describe(
       await expect(
         mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -520,6 +868,7 @@ describe(
         createTransactionMock()
 
       prepareUser(tx)
+      claimNewReceipt(tx)
 
       tx.product.findMany.mockResolvedValue(
         [
@@ -566,6 +915,145 @@ describe(
       const result =
         await mergeGuestCartIntoUserCart(
           'user-1',
+          'merge-key-1',
+          [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+          client,
+        )
+
+      expect(
+        transaction,
+      ).toHaveBeenCalledTimes(2)
+
+      expect(result).toEqual({
+        mergedItemCount: 1,
+      })
+    })
+
+    test('repete transação quando ocorre conflito único P2002', async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareUser(tx)
+      claimNewReceipt(tx)
+
+      tx.product.findMany.mockResolvedValue(
+        [
+          {
+            id: 'product-1',
+            stockQuantity: 10,
+            isActive: true,
+          },
+        ],
+      )
+
+      tx.cartItem.findMany.mockResolvedValue(
+        [],
+      )
+
+      tx.cartItem.create.mockResolvedValue(
+        {
+          id: 'cart-1',
+        },
+      )
+
+      const transaction =
+        vi.fn()
+
+      transaction
+        .mockRejectedValueOnce({
+          code: 'P2002',
+        })
+        .mockImplementationOnce(
+          async (
+            callback: (
+              transactionClient:
+                unknown,
+            ) => Promise<unknown>,
+          ) =>
+            callback(tx),
+        )
+
+      const client = {
+        $transaction:
+          transaction,
+      } as unknown as CartMergeClient
+
+      const result =
+        await mergeGuestCartIntoUserCart(
+          'user-1',
+          'merge-key-1',
+          [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+          client,
+        )
+
+      expect(
+        transaction,
+      ).toHaveBeenCalledTimes(2)
+
+      expect(result).toEqual({
+        mergedItemCount: 1,
+      })
+    })
+
+    test('repete transação quando o receipt concorrente ainda não está visível', async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareUser(tx)
+
+      tx.guestCartMerge.createMany
+        .mockResolvedValueOnce({
+          count: 0,
+        })
+        .mockResolvedValueOnce({
+          count: 1,
+        })
+
+      tx.guestCartMerge.findUnique.mockResolvedValue(
+        null,
+      )
+
+      tx.product.findMany.mockResolvedValue(
+        [
+          {
+            id: 'product-1',
+            stockQuantity: 10,
+            isActive: true,
+          },
+        ],
+      )
+
+      tx.cartItem.findMany.mockResolvedValue(
+        [],
+      )
+
+      tx.cartItem.create.mockResolvedValue(
+        {
+          id: 'cart-1',
+        },
+      )
+
+      const {
+        client,
+        transaction,
+      } = createClient(tx)
+
+      const result =
+        await mergeGuestCartIntoUserCart(
+          'user-1',
+          'merge-key-1',
           [
             {
               productId:
@@ -581,26 +1069,9 @@ describe(
       ).toHaveBeenCalledTimes(2)
 
       expect(
-        transaction,
-      ).toHaveBeenNthCalledWith(
-        1,
-        expect.any(Function),
-        {
-          isolationLevel:
-            'Serializable',
-        },
-      )
-
-      expect(
-        transaction,
-      ).toHaveBeenNthCalledWith(
-        2,
-        expect.any(Function),
-        {
-          isolationLevel:
-            'Serializable',
-        },
-      )
+        tx.guestCartMerge
+          .findUnique,
+      ).toHaveBeenCalledTimes(1)
 
       expect(result).toEqual({
         mergedItemCount: 1,

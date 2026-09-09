@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { prisma } from './db'
 import {
   CartInsufficientStockError,
@@ -21,12 +22,16 @@ type ExistingCartItemRecord = {
   quantity: number
 }
 
+type MergeReceiptRecord = {
+  userId: string
+  payloadHash: string
+  mergedItemCount: number
+}
+
 type PreparedMergeItem = {
   productId: string
   quantity: number
-  existingItemId:
-    | string
-    | null
+  existingItemId: string | null
 }
 
 export type CartMergeResult = {
@@ -35,12 +40,32 @@ export type CartMergeResult = {
 
 export class CartMergeUserUnavailableError extends Error {
   constructor(
-    message =
-      'Utilizador indisponível',
+    message = 'Utilizador indisponível',
   ) {
     super(message)
     this.name =
       'CartMergeUserUnavailableError'
+  }
+}
+
+export class CartMergeConflictError extends Error {
+  constructor(
+    message =
+      'Identificador de merge já utilizado com dados diferentes',
+  ) {
+    super(message)
+    this.name =
+      'CartMergeConflictError'
+  }
+}
+
+class CartMergeReceiptRaceError extends Error {
+  constructor() {
+    super(
+      'Receipt de merge ainda não visível',
+    )
+    this.name =
+      'CartMergeReceiptRaceError'
   }
 }
 
@@ -122,6 +147,33 @@ type CartMergeTransactionClient = {
       id: string
     }>
   }
+
+  guestCartMerge: {
+    createMany(args: {
+      data: Array<{
+        mergeKey: string
+        userId: string
+        payloadHash: string
+        mergedItemCount: number
+      }>
+      skipDuplicates: true
+    }): Promise<{
+      count: number
+    }>
+
+    findUnique(args: {
+      where: {
+        mergeKey: string
+      }
+      select: {
+        userId: true
+        payloadHash: true
+        mergedItemCount: true
+      }
+    }): Promise<
+      MergeReceiptRecord | null
+    >
+  }
 }
 
 export interface CartMergeClient {
@@ -130,14 +182,13 @@ export interface CartMergeClient {
       tx: CartMergeTransactionClient,
     ) => Promise<T>,
     options: {
-      isolationLevel:
-        'Serializable'
+      isolationLevel: 'Serializable'
     },
   ): Promise<T>
 }
 
-const MAX_TRANSACTION_ATTEMPTS =
-  3
+const MAX_TRANSACTION_ATTEMPTS = 3
+const MAX_MERGE_KEY_LENGTH = 128
 
 function getClient(
   client?: CartMergeClient,
@@ -163,24 +214,90 @@ function normalizeUserId(
   return normalizedUserId
 }
 
+function normalizeMergeKey(
+  mergeKey: string,
+) {
+  const normalizedMergeKey =
+    mergeKey.trim()
+
+  if (
+    !normalizedMergeKey ||
+    normalizedMergeKey.length >
+      MAX_MERGE_KEY_LENGTH
+  ) {
+    throw new CartValidationError(
+      'Identificador de merge inválido',
+    )
+  }
+
+  return normalizedMergeKey
+}
+
+function createPayloadHash(
+  items: GuestCartInputItem[],
+) {
+  const canonicalItems = [
+    ...items,
+  ].sort((left, right) => {
+    if (
+      left.productId ===
+      right.productId
+    ) {
+      return 0
+    }
+
+    return left.productId <
+      right.productId
+      ? -1
+      : 1
+  })
+
+  return createHash('sha256')
+    .update(
+      JSON.stringify(canonicalItems),
+      'utf8',
+    )
+    .digest('hex')
+}
+
+function getPrismaErrorCode(
+  error: unknown,
+) {
+  if (
+    typeof error !== 'object' ||
+    error === null ||
+    !('code' in error)
+  ) {
+    return null
+  }
+
+  const code = (
+    error as {
+      code?: unknown
+    }
+  ).code
+
+  return typeof code === 'string'
+    ? code
+    : null
+}
+
 function isRetryableTransactionError(
   error: unknown,
 ) {
   if (
-    typeof error !==
-      'object' ||
-    error === null ||
-    !('code' in error)
+    error instanceof
+    CartMergeReceiptRaceError
   ) {
-    return false
+    return true
   }
 
+  const code =
+    getPrismaErrorCode(error)
+
   return (
-    (
-      error as {
-        code?: unknown
-      }
-    ).code === 'P2034'
+    code === 'P2034' ||
+    code === 'P2002'
   )
 }
 
@@ -224,11 +341,15 @@ async function runSerializableTransaction<T>(
 
 export async function mergeGuestCartIntoUserCart(
   userId: string,
+  mergeKey: string,
   items: GuestCartInputItem[],
   client?: CartMergeClient,
 ): Promise<CartMergeResult> {
   const normalizedUserId =
     normalizeUserId(userId)
+
+  const normalizedMergeKey =
+    normalizeMergeKey(mergeKey)
 
   const normalizedItems =
     normalizeGuestCartInputItems(
@@ -236,13 +357,17 @@ export async function mergeGuestCartIntoUserCart(
     )
 
   if (
-    normalizedItems.length ===
-    0
+    normalizedItems.length === 0
   ) {
     return {
       mergedItemCount: 0,
     }
   }
+
+  const payloadHash =
+    createPayloadHash(
+      normalizedItems,
+    )
 
   const db = getClient(client)
 
@@ -262,6 +387,58 @@ export async function mergeGuestCartIntoUserCart(
 
       if (!user) {
         throw new CartMergeUserUnavailableError()
+      }
+
+      const receiptClaim =
+        await tx.guestCartMerge.createMany(
+          {
+            data: [
+              {
+                mergeKey:
+                  normalizedMergeKey,
+                userId: user.id,
+                payloadHash,
+                mergedItemCount:
+                  normalizedItems.length,
+              },
+            ],
+            skipDuplicates: true,
+          },
+        )
+
+      if (receiptClaim.count === 0) {
+        const existingReceipt =
+          await tx.guestCartMerge.findUnique(
+            {
+              where: {
+                mergeKey:
+                  normalizedMergeKey,
+              },
+              select: {
+                userId: true,
+                payloadHash: true,
+                mergedItemCount: true,
+              },
+            },
+          )
+
+        if (!existingReceipt) {
+          throw new CartMergeReceiptRaceError()
+        }
+
+        if (
+          existingReceipt.userId !==
+            user.id ||
+          existingReceipt.payloadHash !==
+            payloadHash
+        ) {
+          throw new CartMergeConflictError()
+        }
+
+        return {
+          mergedItemCount:
+            existingReceipt.mergedItemCount,
+        }
       }
 
       const productIds =
@@ -344,8 +521,7 @@ export async function mergeGuestCartIntoUserCart(
           )
 
         const existingQuantity =
-          existingItem?.quantity ??
-          0
+          existingItem?.quantity ?? 0
 
         if (
           existingItem &&
@@ -353,8 +529,7 @@ export async function mergeGuestCartIntoUserCart(
             !Number.isSafeInteger(
               existingQuantity,
             ) ||
-            existingQuantity <=
-              0
+            existingQuantity <= 0
           )
         ) {
           throw new CartValidationError(

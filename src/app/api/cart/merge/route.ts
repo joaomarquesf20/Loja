@@ -7,6 +7,7 @@ import {
   CartValidationError,
 } from '@/server/cart'
 import {
+  CartMergeConflictError,
   CartMergeUserUnavailableError,
   mergeGuestCartIntoUserCart,
 } from '@/server/cart-merge'
@@ -76,21 +77,23 @@ function handleMergeError(
 
   if (
     error instanceof
-    CartProductUnavailableError
+      CartMergeConflictError ||
+    error instanceof
+      CartInsufficientStockError
   ) {
     return errorResponse(
       error.message,
-      404,
+      409,
     )
   }
 
   if (
     error instanceof
-    CartInsufficientStockError
+    CartProductUnavailableError
   ) {
     return errorResponse(
       error.message,
-      409,
+      404,
     )
   }
 
@@ -130,8 +133,26 @@ export async function POST(
       )
     }
 
+    if (!isRecord(body)) {
+      return errorResponse(
+        'Pedido inválido',
+        400,
+      )
+    }
+
+    const mergeKey =
+      body.mergeKey
+
     if (
-      !isRecord(body) ||
+      typeof mergeKey !== 'string'
+    ) {
+      return errorResponse(
+        'Identificador de merge inválido',
+        400,
+      )
+    }
+
+    if (
       !Array.isArray(body.items)
     ) {
       return errorResponse(
@@ -140,10 +161,12 @@ export async function POST(
       )
     }
 
-    const items: GuestCartInputItem[] =
-      []
+    const items:
+      GuestCartInputItem[] = []
 
-    for (const rawItem of body.items) {
+    for (
+      const rawItem of body.items
+    ) {
       if (!isRecord(rawItem)) {
         return errorResponse(
           'Item inválido',
@@ -186,6 +209,7 @@ export async function POST(
     const result =
       await mergeGuestCartIntoUserCart(
         userId,
+        mergeKey,
         items,
       )
 
