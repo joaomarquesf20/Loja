@@ -173,6 +173,18 @@ describe('LoginPage', () => {
   test('inicia sessão sem fazer merge quando não existe carrinho convidado', async () => {
     render(<LoginPage />)
 
+    expect(
+      screen.getByRole(
+        'link',
+        {
+          name: 'Criar conta',
+        },
+      ),
+    ).toHaveAttribute(
+      'href',
+      '/registar',
+    )
+
     submitLogin()
 
     await waitFor(() => {
