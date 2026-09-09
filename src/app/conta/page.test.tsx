@@ -24,6 +24,17 @@ vi.mock(
   }),
 )
 
+vi.mock(
+  './addresses-client',
+  () => ({
+    AddressesClient: () => (
+      <section data-testid="addresses-client">
+        Moradas reais
+      </section>
+    ),
+  }),
+)
+
 import AccountPage from './page'
 
 describe('AccountPage', () => {
@@ -63,6 +74,12 @@ describe('AccountPage', () => {
         },
       ),
     ).not.toBeInTheDocument()
+
+    expect(
+      screen.queryByTestId(
+        'addresses-client',
+      ),
+    ).not.toBeInTheDocument()
   })
 
   test('encaminha utilizador sem sessão para o login', () => {
@@ -94,9 +111,15 @@ describe('AccountPage', () => {
         'Ver carrinho',
       ),
     ).not.toBeInTheDocument()
+
+    expect(
+      screen.queryByTestId(
+        'addresses-client',
+      ),
+    ).not.toBeInTheDocument()
   })
 
-  test('mostra dados reais da sessão autenticada', () => {
+  test('mostra dados reais da sessão autenticada e gestão de moradas', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -160,6 +183,14 @@ describe('AccountPage', () => {
       'href',
       '/',
     )
+
+    expect(
+      screen.getByTestId(
+        'addresses-client',
+      ),
+    ).toHaveTextContent(
+      'Moradas reais',
+    )
   })
 
   test('não inventa dados ausentes na sessão', () => {
@@ -187,14 +218,14 @@ describe('AccountPage', () => {
     ).toHaveLength(2)
 
     expect(
-      screen.queryByText(
-        'Encomendas',
+      screen.getByTestId(
+        'addresses-client',
       ),
-    ).not.toBeInTheDocument()
+    ).toBeInTheDocument()
 
     expect(
       screen.queryByText(
-        'Moradas',
+        'Encomendas',
       ),
     ).not.toBeInTheDocument()
   })

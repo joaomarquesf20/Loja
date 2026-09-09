@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
+import { AddressesClient } from './addresses-client'
 
 export default function AccountPage() {
   const {
@@ -53,8 +54,8 @@ export default function AccountPage() {
     session.user.email?.trim() || null
 
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-12">
-      <section className="w-full max-w-md">
+    <main className="flex flex-1 justify-center px-4 py-12">
+      <div className="w-full max-w-2xl">
         <Link
           href="/"
           className="text-sm font-medium hover:underline"
@@ -62,55 +63,59 @@ export default function AccountPage() {
           ← Voltar à loja
         </Link>
 
-        <div className="mt-6 rounded-xl border p-6">
-          <h1 className="text-2xl font-bold tracking-tight">
-            A minha conta
-          </h1>
+        <div className="mt-6 space-y-6">
+          <section className="rounded-xl border p-6">
+            <h1 className="text-2xl font-bold tracking-tight">
+              A minha conta
+            </h1>
 
-          <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-            Dados associados à tua
-            sessão atual.
-          </p>
+            <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
+              Dados associados à tua
+              sessão atual.
+            </p>
 
-          <dl className="mt-6 space-y-4">
-            <div>
-              <dt className="text-sm font-semibold">
-                Nome
-              </dt>
+            <dl className="mt-6 space-y-4">
+              <div>
+                <dt className="text-sm font-semibold">
+                  Nome
+                </dt>
 
-              <dd className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                {name ?? 'Não definido'}
-              </dd>
+                <dd className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                  {name ?? 'Não definido'}
+                </dd>
+              </div>
+
+              <div>
+                <dt className="text-sm font-semibold">
+                  Email
+                </dt>
+
+                <dd className="mt-1 break-all text-sm text-neutral-600 dark:text-neutral-400">
+                  {email ?? 'Não definido'}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                href="/carrinho"
+                className="inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+              >
+                Ver carrinho
+              </Link>
+
+              <Link
+                href="/"
+                className="inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+              >
+                Continuar a comprar
+              </Link>
             </div>
+          </section>
 
-            <div>
-              <dt className="text-sm font-semibold">
-                Email
-              </dt>
-
-              <dd className="mt-1 break-all text-sm text-neutral-600 dark:text-neutral-400">
-                {email ?? 'Não definido'}
-              </dd>
-            </div>
-          </dl>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <Link
-              href="/carrinho"
-              className="inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
-            >
-              Ver carrinho
-            </Link>
-
-            <Link
-              href="/"
-              className="inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
-            >
-              Continuar a comprar
-            </Link>
-          </div>
+          <AddressesClient />
         </div>
-      </section>
+      </div>
     </main>
   )
 }
