@@ -83,6 +83,15 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole('link', {
+        name: 'Criar conta',
+      }),
+    ).toHaveAttribute(
+      'href',
+      '/registar',
+    )
+
+    expect(
+      screen.getByRole('link', {
         name: 'Entrar',
       }),
     ).toHaveAttribute(
@@ -100,7 +109,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('não apresenta login enquanto a sessão está a carregar', () => {
+  test('não apresenta autenticação enquanto a sessão está a carregar', () => {
     mocks.useSession.mockReturnValue(
       {
         data: null,
@@ -115,6 +124,15 @@ describe('SiteHeader', () => {
         'A verificar sessão…',
       ),
     ).toBeInTheDocument()
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
+          name: 'Criar conta',
+        },
+      ),
+    ).not.toBeInTheDocument()
 
     expect(
       screen.queryByRole(
@@ -162,6 +180,24 @@ describe('SiteHeader', () => {
       screen.queryByRole(
         'link',
         {
+          name: 'Criar conta',
+        },
+      ),
+    ).not.toBeInTheDocument()
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
+          name: 'Entrar',
+        },
+      ),
+    ).not.toBeInTheDocument()
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
           name:
             'Administração',
         },
@@ -197,6 +233,15 @@ describe('SiteHeader', () => {
       'href',
       '/admin',
     )
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
+          name: 'Criar conta',
+        },
+      ),
+    ).not.toBeInTheDocument()
   })
 
   test('não mostra o cabeçalho público dentro do admin', () => {

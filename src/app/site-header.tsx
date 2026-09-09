@@ -10,6 +10,7 @@ import { useState } from 'react'
 
 export default function SiteHeader() {
   const pathname = usePathname()
+
   const {
     data: session,
     status,
@@ -54,6 +55,7 @@ export default function SiteHeader() {
       })
     } catch {
       setIsSigningOut(false)
+
       setSignOutError(
         'Não foi possível terminar a sessão.',
       )
@@ -87,7 +89,8 @@ export default function SiteHeader() {
             </span>
           ) : user ? (
             <>
-              {user.role === 'ADMIN' && (
+              {user.role ===
+                'ADMIN' && (
                 <Link
                   href="/admin"
                   className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
@@ -131,12 +134,21 @@ export default function SiteHeader() {
               )}
             </>
           ) : (
-            <Link
-              href="/login"
-              className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
-            >
-              Entrar
-            </Link>
+            <>
+              <Link
+                href="/registar"
+                className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+              >
+                Criar conta
+              </Link>
+
+              <Link
+                href="/login"
+                className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+              >
+                Entrar
+              </Link>
+            </>
           )}
         </nav>
       </div>
