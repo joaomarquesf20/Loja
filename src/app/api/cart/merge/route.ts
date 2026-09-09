@@ -16,13 +16,31 @@ import {
   type GuestCartInputItem,
 } from '@/server/guest-cart'
 
+type CartMergeErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'INVALID_JSON'
+  | 'INVALID_REQUEST'
+  | 'INVALID_MERGE_KEY'
+  | 'INVALID_ITEM'
+  | 'INVALID_PRODUCT'
+  | 'INVALID_QUANTITY'
+  | 'GUEST_CART_VALIDATION'
+  | 'CART_VALIDATION'
+  | 'USER_UNAVAILABLE'
+  | 'MERGE_CONFLICT'
+  | 'PRODUCT_UNAVAILABLE'
+  | 'INSUFFICIENT_STOCK'
+  | 'INTERNAL_ERROR'
+
 function errorResponse(
   message: string,
+  code: CartMergeErrorCode,
   status: number,
 ) {
   return NextResponse.json(
     {
       error: message,
+      code,
     },
     {
       status,
@@ -55,12 +73,22 @@ function handleMergeError(
 ) {
   if (
     error instanceof
-      GuestCartServerValidationError ||
-    error instanceof
-      CartValidationError
+    GuestCartServerValidationError
   ) {
     return errorResponse(
       error.message,
+      'GUEST_CART_VALIDATION',
+      400,
+    )
+  }
+
+  if (
+    error instanceof
+    CartValidationError
+  ) {
+    return errorResponse(
+      error.message,
+      'CART_VALIDATION',
       400,
     )
   }
@@ -71,18 +99,18 @@ function handleMergeError(
   ) {
     return errorResponse(
       error.message,
+      'USER_UNAVAILABLE',
       403,
     )
   }
 
   if (
     error instanceof
-      CartMergeConflictError ||
-    error instanceof
-      CartInsufficientStockError
+    CartMergeConflictError
   ) {
     return errorResponse(
       error.message,
+      'MERGE_CONFLICT',
       409,
     )
   }
@@ -93,7 +121,19 @@ function handleMergeError(
   ) {
     return errorResponse(
       error.message,
+      'PRODUCT_UNAVAILABLE',
       404,
+    )
+  }
+
+  if (
+    error instanceof
+    CartInsufficientStockError
+  ) {
+    return errorResponse(
+      error.message,
+      'INSUFFICIENT_STOCK',
+      409,
     )
   }
 
@@ -104,6 +144,7 @@ function handleMergeError(
 
   return errorResponse(
     'Erro interno do servidor',
+    'INTERNAL_ERROR',
     500,
   )
 }
@@ -118,6 +159,7 @@ export async function POST(
     if (!userId) {
       return errorResponse(
         'Não autenticado',
+        'UNAUTHENTICATED',
         401,
       )
     }
@@ -129,6 +171,7 @@ export async function POST(
     } catch {
       return errorResponse(
         'JSON inválido',
+        'INVALID_JSON',
         400,
       )
     }
@@ -136,6 +179,7 @@ export async function POST(
     if (!isRecord(body)) {
       return errorResponse(
         'Pedido inválido',
+        'INVALID_REQUEST',
         400,
       )
     }
@@ -148,6 +192,7 @@ export async function POST(
     ) {
       return errorResponse(
         'Identificador de merge inválido',
+        'INVALID_MERGE_KEY',
         400,
       )
     }
@@ -157,6 +202,7 @@ export async function POST(
     ) {
       return errorResponse(
         'Pedido inválido',
+        'INVALID_REQUEST',
         400,
       )
     }
@@ -170,6 +216,7 @@ export async function POST(
       if (!isRecord(rawItem)) {
         return errorResponse(
           'Item inválido',
+          'INVALID_ITEM',
           400,
         )
       }
@@ -186,6 +233,7 @@ export async function POST(
       ) {
         return errorResponse(
           'Produto inválido',
+          'INVALID_PRODUCT',
           400,
         )
       }
@@ -196,6 +244,7 @@ export async function POST(
       ) {
         return errorResponse(
           'Quantidade inválida',
+          'INVALID_QUANTITY',
           400,
         )
       }

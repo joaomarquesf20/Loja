@@ -188,6 +188,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'Não autenticado',
+        code: 'UNAUTHENTICATED',
       })
 
       expect(
@@ -208,6 +209,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'JSON inválido',
+        code: 'INVALID_JSON',
       })
 
       expect(
@@ -230,6 +232,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'Pedido inválido',
+        code: 'INVALID_REQUEST',
       })
 
       expect(
@@ -255,6 +258,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Identificador de merge inválido',
+        code: 'INVALID_MERGE_KEY',
       })
 
       expect(
@@ -281,6 +285,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'Pedido inválido',
+        code: 'INVALID_REQUEST',
       })
 
       expect(
@@ -307,6 +312,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'Item inválido',
+        code: 'INVALID_ITEM',
       })
 
       expect(
@@ -338,6 +344,7 @@ describe(
         response.json(),
       ).resolves.toEqual({
         error: 'Produto inválido',
+        code: 'INVALID_PRODUCT',
       })
 
       expect(
@@ -371,6 +378,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Quantidade inválida',
+        code: 'INVALID_QUANTITY',
       })
 
       expect(
@@ -459,6 +467,8 @@ describe(
       ).resolves.toEqual({
         error:
           'Quantidade inválida',
+        code:
+          'GUEST_CART_VALIDATION',
       })
     })
 
@@ -493,6 +503,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Identificador de merge inválido',
+        code: 'CART_VALIDATION',
       })
     })
 
@@ -526,6 +537,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Utilizador indisponível',
+        code: 'USER_UNAVAILABLE',
       })
     })
 
@@ -559,6 +571,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Identificador de merge já utilizado com dados diferentes',
+        code: 'MERGE_CONFLICT',
       })
     })
 
@@ -592,6 +605,8 @@ describe(
       ).resolves.toEqual({
         error:
           'Produto indisponível',
+        code:
+          'PRODUCT_UNAVAILABLE',
       })
     })
 
@@ -625,6 +640,8 @@ describe(
       ).resolves.toEqual({
         error:
           'Stock insuficiente',
+        code:
+          'INSUFFICIENT_STOCK',
       })
     })
 
@@ -666,6 +683,7 @@ describe(
       ).resolves.toEqual({
         error:
           'Erro interno do servidor',
+        code: 'INTERNAL_ERROR',
       })
 
       expect(
