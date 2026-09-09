@@ -4,12 +4,143 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   signIn,
+  signOut,
   useSession,
 } from 'next-auth/react'
 import {
   useState,
   type FormEvent,
 } from 'react'
+import {
+  completeGuestCartMerge,
+  discardGuestCartMergeAttempt,
+  getOrCreateGuestCartMergeAttempt,
+} from '@/lib/guest-cart'
+
+type CartMergeErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'INVALID_JSON'
+  | 'INVALID_REQUEST'
+  | 'INVALID_MERGE_KEY'
+  | 'INVALID_ITEM'
+  | 'INVALID_PRODUCT'
+  | 'INVALID_QUANTITY'
+  | 'GUEST_CART_VALIDATION'
+  | 'CART_VALIDATION'
+  | 'USER_UNAVAILABLE'
+  | 'MERGE_CONFLICT'
+  | 'PRODUCT_UNAVAILABLE'
+  | 'INSUFFICIENT_STOCK'
+  | 'INTERNAL_ERROR'
+
+const DISCARDABLE_MERGE_ERROR_CODES =
+  new Set<CartMergeErrorCode>([
+    'UNAUTHENTICATED',
+    'INVALID_JSON',
+    'INVALID_REQUEST',
+    'INVALID_MERGE_KEY',
+    'INVALID_ITEM',
+    'INVALID_PRODUCT',
+    'INVALID_QUANTITY',
+    'GUEST_CART_VALIDATION',
+    'CART_VALIDATION',
+    'USER_UNAVAILABLE',
+    'PRODUCT_UNAVAILABLE',
+    'INSUFFICIENT_STOCK',
+  ])
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  )
+}
+
+function isCartMergeErrorCode(
+  value: unknown,
+): value is CartMergeErrorCode {
+  return (
+    typeof value === 'string' &&
+    [
+      'UNAUTHENTICATED',
+      'INVALID_JSON',
+      'INVALID_REQUEST',
+      'INVALID_MERGE_KEY',
+      'INVALID_ITEM',
+      'INVALID_PRODUCT',
+      'INVALID_QUANTITY',
+      'GUEST_CART_VALIDATION',
+      'CART_VALIDATION',
+      'USER_UNAVAILABLE',
+      'MERGE_CONFLICT',
+      'PRODUCT_UNAVAILABLE',
+      'INSUFFICIENT_STOCK',
+      'INTERNAL_ERROR',
+    ].includes(value)
+  )
+}
+
+async function readMergeErrorCode(
+  response: Response,
+): Promise<CartMergeErrorCode | null> {
+  try {
+    const body: unknown =
+      await response.json()
+
+    if (
+      !isRecord(body) ||
+      !isCartMergeErrorCode(
+        body.code,
+      )
+    ) {
+      return null
+    }
+
+    return body.code
+  } catch {
+    return null
+  }
+}
+
+function getMergeErrorMessage(
+  code: CartMergeErrorCode | null,
+) {
+  if (
+    code === 'INSUFFICIENT_STOCK'
+  ) {
+    return 'Não foi possível juntar o carrinho porque já não existe stock suficiente. O carrinho de convidado foi preservado.'
+  }
+
+  if (
+    code === 'PRODUCT_UNAVAILABLE'
+  ) {
+    return 'Não foi possível juntar o carrinho porque um dos produtos deixou de estar disponível. O carrinho de convidado foi preservado.'
+  }
+
+  if (
+    code === 'USER_UNAVAILABLE'
+  ) {
+    return 'A tua conta deixou de estar disponível. O carrinho de convidado foi preservado.'
+  }
+
+  if (
+    code === 'MERGE_CONFLICT'
+  ) {
+    return 'Não foi possível confirmar com segurança a fusão do carrinho. O carrinho foi preservado para evitar duplicações. Tenta iniciar sessão novamente.'
+  }
+
+  if (
+    code === 'INTERNAL_ERROR' ||
+    code === null
+  ) {
+    return 'Não foi possível confirmar a fusão do carrinho. O carrinho foi preservado para evitar duplicações. Tenta iniciar sessão novamente.'
+  }
+
+  return 'Não foi possível juntar o carrinho à conta. O carrinho de convidado foi preservado.'
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -48,6 +179,8 @@ export default function LoginPage() {
     setError(null)
     setIsSubmitting(true)
 
+    let signedIn = false
+
     try {
       const result =
         await signIn(
@@ -69,11 +202,97 @@ export default function LoginPage() {
         return
       }
 
+      signedIn = true
+
+      const mergeAttempt =
+        getOrCreateGuestCartMergeAttempt()
+
+      if (mergeAttempt) {
+        let response: Response
+
+        try {
+          response = await fetch(
+            '/api/cart/merge',
+            {
+              method: 'POST',
+              headers: {
+                'content-type':
+                  'application/json',
+              },
+              body: JSON.stringify({
+                mergeKey:
+                  mergeAttempt.mergeKey,
+                items:
+                  mergeAttempt.items,
+              }),
+            },
+          )
+        } catch {
+          await signOut({
+            redirect: false,
+          })
+
+          signedIn = false
+
+          setError(
+            'Não foi possível confirmar a fusão do carrinho. O carrinho foi preservado para evitar duplicações. Tenta iniciar sessão novamente.',
+          )
+
+          return
+        }
+
+        if (!response.ok) {
+          const code =
+            await readMergeErrorCode(
+              response,
+            )
+
+          await signOut({
+            redirect: false,
+          })
+
+          signedIn = false
+
+          if (
+            code &&
+            DISCARDABLE_MERGE_ERROR_CODES.has(
+              code,
+            )
+          ) {
+            discardGuestCartMergeAttempt(
+              mergeAttempt.mergeKey,
+            )
+          }
+
+          setError(
+            getMergeErrorMessage(code),
+          )
+
+          return
+        }
+
+        completeGuestCartMerge(
+          mergeAttempt.mergeKey,
+        )
+      }
+
       await update()
 
       router.replace('/')
       router.refresh()
     } catch {
+      if (signedIn) {
+        try {
+          await signOut({
+            redirect: false,
+          })
+        } catch {
+          // A tentativa de merge mantém-se
+          // quando o estado não pode ser
+          // confirmado com segurança.
+        }
+      }
+
       setError(
         'Não foi possível iniciar sessão.',
       )
@@ -176,8 +395,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(event) =>
                   setEmail(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 required
@@ -204,8 +422,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(event) =>
                   setPassword(
-                    event.target
-                      .value,
+                    event.target.value,
                   )
                 }
                 required
