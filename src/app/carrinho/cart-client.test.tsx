@@ -14,6 +14,7 @@ import {
   vi,
 } from 'vitest'
 import {
+  GUEST_CART_MERGE_STORAGE_KEY,
   GUEST_CART_STORAGE_KEY,
 } from '@/lib/guest-cart'
 import { CartClient } from './cart-client'
@@ -62,6 +63,35 @@ function createItem(
     canIncrease:
       overrides?.canIncrease ??
       true,
+  }
+}
+
+function setPendingGuestCartMerge() {
+  const guestItems = [
+    {
+      productId: 'product-1',
+      quantity: 1,
+    },
+  ]
+
+  const mergeAttempt = {
+    mergeKey: 'merge-key-1',
+    items: guestItems,
+  }
+
+  window.localStorage.setItem(
+    GUEST_CART_STORAGE_KEY,
+    JSON.stringify(guestItems),
+  )
+
+  window.localStorage.setItem(
+    GUEST_CART_MERGE_STORAGE_KEY,
+    JSON.stringify(mergeAttempt),
+  )
+
+  return {
+    guestItems,
+    mergeAttempt,
   }
 }
 
@@ -244,7 +274,8 @@ describe('CartClient', () => {
       await screen.findByRole(
         'button',
         {
-          name: 'Aumentar quantidade de Produto 1',
+          name:
+            'Aumentar quantidade de Produto 1',
         },
       )
 
@@ -283,7 +314,8 @@ describe('CartClient', () => {
         ),
       ),
     ).toEqual({
-      productId: 'product-1',
+      productId:
+        'product-1',
       quantity: 2,
     })
   })
@@ -331,7 +363,8 @@ describe('CartClient', () => {
       await screen.findByRole(
         'button',
         {
-          name: 'Aumentar quantidade de Produto 1',
+          name:
+            'Aumentar quantidade de Produto 1',
         },
       )
 
@@ -355,10 +388,88 @@ describe('CartClient', () => {
       ),
     ).toEqual([
       {
-        productId: 'product-1',
+        productId:
+          'product-1',
         quantity: 2,
       },
     ])
+  })
+
+  test('bloqueia aumento no carrinho convidado quando existe merge pendente', async () => {
+    const {
+      guestItems,
+      mergeAttempt,
+    } =
+      setPendingGuestCartMerge()
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error:
+              'Não autenticado',
+          },
+          401,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(1),
+          ],
+        }),
+      )
+
+    render(<CartClient />)
+
+    const increaseButton =
+      await screen.findByRole(
+        'button',
+        {
+          name:
+            'Aumentar quantidade de Produto 1',
+        },
+      )
+
+    fireEvent.click(
+      increaseButton,
+    )
+
+    expect(
+      await screen.findByText(
+        'Existe uma fusão do carrinho pendente. Inicia sessão novamente para a concluir.',
+      ),
+    ).toBeTruthy()
+
+    expect(
+      screen.getByText(
+        'Quantidade: 1',
+      ),
+    ).toBeTruthy()
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          GUEST_CART_STORAGE_KEY,
+        ) ?? 'null',
+      ),
+    ).toEqual(
+      guestItems,
+    )
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          GUEST_CART_MERGE_STORAGE_KEY,
+        ) ?? 'null',
+      ),
+    ).toEqual(
+      mergeAttempt,
+    )
+
+    expect(
+      fetchMock,
+    ).toHaveBeenCalledTimes(2)
   })
 
   test('remove produto do carrinho convidado', async () => {
@@ -425,6 +536,88 @@ describe('CartClient', () => {
     ).toEqual([])
   })
 
+  test('bloqueia remoção no carrinho convidado quando existe merge pendente', async () => {
+    const {
+      guestItems,
+      mergeAttempt,
+    } =
+      setPendingGuestCartMerge()
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error:
+              'Não autenticado',
+          },
+          401,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(),
+          ],
+        }),
+      )
+
+    render(<CartClient />)
+
+    const removeButton =
+      await screen.findByRole(
+        'button',
+        {
+          name: 'Remover',
+        },
+      )
+
+    fireEvent.click(
+      removeButton,
+    )
+
+    expect(
+      await screen.findByText(
+        'Existe uma fusão do carrinho pendente. Inicia sessão novamente para a concluir.',
+      ),
+    ).toBeTruthy()
+
+    expect(
+      screen.getByText(
+        'Produto 1',
+      ),
+    ).toBeTruthy()
+
+    expect(
+      screen.getByText(
+        'Quantidade: 1',
+      ),
+    ).toBeTruthy()
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          GUEST_CART_STORAGE_KEY,
+        ) ?? 'null',
+      ),
+    ).toEqual(
+      guestItems,
+    )
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          GUEST_CART_MERGE_STORAGE_KEY,
+        ) ?? 'null',
+      ),
+    ).toEqual(
+      mergeAttempt,
+    )
+
+    expect(
+      fetchMock,
+    ).toHaveBeenCalledTimes(2)
+  })
+
   test('desativa aumento quando não existe stock suficiente', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -447,7 +640,8 @@ describe('CartClient', () => {
       await screen.findByRole(
         'button',
         {
-          name: 'Aumentar quantidade de Produto 1',
+          name:
+            'Aumentar quantidade de Produto 1',
         },
       )
 

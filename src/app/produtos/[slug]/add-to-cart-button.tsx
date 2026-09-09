@@ -1,7 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { addGuestCartItem } from '@/lib/guest-cart'
+import {
+  addGuestCartItem,
+  GuestCartMergePendingError,
+} from '@/lib/guest-cart'
 
 type AddToCartButtonProps = {
   productId: string
@@ -108,7 +111,18 @@ export default function AddToCartButton({
       setMessage(
         'Produto adicionado ao carrinho.',
       )
-    } catch {
+    } catch (caughtError) {
+      if (
+        caughtError instanceof
+        GuestCartMergePendingError
+      ) {
+        setError(
+          caughtError.message,
+        )
+
+        return
+      }
+
       setError(
         'Não foi possível adicionar o produto ao carrinho',
       )
