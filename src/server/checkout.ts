@@ -1,5 +1,17 @@
 import { randomUUID } from 'node:crypto'
+
+import {
+  CommercialSettingsConfigurationError,
+  getCommercialSettings,
+  type CommercialCheckoutRegion,
+  type CommercialSettingsClient,
+  type CommercialShippingClass,
+} from './commercial-settings'
 import { prisma } from './db'
+import {
+  calculateShippingPricing,
+  ShippingPricingError,
+} from './shipping-pricing'
 
 type CheckoutPrice =
   | number
@@ -13,6 +25,11 @@ type CheckoutUserRecord = {
   email: string
 }
 
+type CheckoutProductShippingRateRecord = {
+  region: 'PORTUGAL_MAINLAND'
+  shippingCost: CheckoutPrice
+}
+
 type CheckoutProductRecord = {
   id: string
   name: string
@@ -20,6 +37,8 @@ type CheckoutProductRecord = {
   price: CheckoutPrice
   stockQuantity: number
   isActive: boolean
+  shippingClass: CommercialShippingClass
+  shippingRates: CheckoutProductShippingRateRecord[]
 }
 
 type CheckoutCartItemRecord = {
@@ -44,6 +63,7 @@ export type CheckoutShippingInput = {
   city: string
   postalCode: string
   country: string
+  region: CommercialCheckoutRegion
 }
 
 export type CheckoutShipping = {
@@ -53,20 +73,9 @@ export type CheckoutShipping = {
   addressLine2: string | null
   city: string
   postalCode: string
-  country: string
+  country: 'Portugal'
+  region: 'PORTUGAL_MAINLAND'
 }
-
-export type CheckoutPricing = {
-  shippingCostCents: number
-  taxCents: number
-}
-
-export type CheckoutPricingPolicy = (
-  input: {
-    subtotalCents: number
-    shipping: CheckoutShipping
-  },
-) => CheckoutPricing
 
 export type CheckoutResult = {
   id: string
@@ -152,123 +161,156 @@ export class CheckoutPricingError extends Error {
   }
 }
 
-type CheckoutTransactionClient = {
-  user: {
-    findFirst(args: {
-      where: {
-        id: string
-        isActive: true
-      }
-      select: {
-        id: true
-        email: true
-      }
-    }): Promise<
-      CheckoutUserRecord | null
-    >
-  }
+type CheckoutTransactionClient =
+  CommercialSettingsClient & {
+    user: {
+      findFirst(args: {
+        where: {
+          id: string
+          isActive: true
+        }
+        select: {
+          id: true
+          email: true
+        }
+      }): Promise<
+        CheckoutUserRecord | null
+      >
+    }
 
-  cartItem: {
-    findMany(args: {
-      where: {
-        userId: string
-      }
-      orderBy: {
-        id: 'asc'
-      }
-      select: {
-        id: true
-        productId: true
-        quantity: true
-        product: {
-          select: {
-            id: true
-            name: true
-            sku: true
-            price: true
-            stockQuantity: true
-            isActive: true
+    cartItem: {
+      findMany(args: {
+        where: {
+          userId: string
+        }
+        orderBy: {
+          id: 'asc'
+        }
+        select: {
+          id: true
+          productId: true
+          quantity: true
+          product: {
+            select: {
+              id: true
+              name: true
+              sku: true
+              price: true
+              stockQuantity: true
+              isActive: true
+              shippingClass: true
+              shippingRates: {
+                where: {
+                  region:
+                    'PORTUGAL_MAINLAND'
+                }
+                select: {
+                  region: true
+                  shippingCost: true
+                }
+              }
+            }
           }
         }
-      }
-    }): Promise<
-      CheckoutCartItemRecord[]
-    >
+      }): Promise<
+        CheckoutCartItemRecord[]
+      >
 
-    deleteMany(args: {
-      where: {
-        userId: string
-        id: {
-          in: string[]
+      deleteMany(args: {
+        where: {
+          userId: string
+          id: {
+            in: string[]
+          }
         }
-      }
-    }): Promise<{
-      count: number
-    }>
-  }
-
-  product: {
-    updateMany(args: {
-      where: {
-        id: string
-        isActive: true
-        stockQuantity: {
-          gte: number
-        }
-      }
-      data: {
-        stockQuantity: {
-          decrement: number
-        }
-      }
-    }): Promise<{
-      count: number
-    }>
-  }
-
-  order: {
-    create(args: {
-      data: {
-        orderNumber: string
-        userId: string
-        subtotal: string
-        shippingCost: string
-        tax: string
-        total: string
-        shippingName: string
-        shippingEmail: string
-        shippingPhone: string
-        shippingAddressLine1: string
-        shippingAddressLine2: string | null
-        shippingCity: string
-        shippingPostalCode: string
-        shippingCountry: string
-      }
-      select: {
-        id: true
-        orderNumber: true
-        status: true
-        paymentStatus: true
-      }
-    }): Promise<CheckoutOrderRecord>
-  }
-
-  orderItem: {
-    createMany(args: {
-      data: Array<{
-        orderId: string
-        productId: string
-        productNameAtPurchase: string
-        productSkuAtPurchase: string
-        priceAtPurchase: string
-        quantity: number
-        subtotalAtPurchase: string
+      }): Promise<{
+        count: number
       }>
-    }): Promise<{
-      count: number
-    }>
+    }
+
+    product: {
+      updateMany(args: {
+        where: {
+          id: string
+          isActive: true
+          stockQuantity: {
+            gte: number
+          }
+        }
+        data: {
+          stockQuantity: {
+            decrement: number
+          }
+        }
+      }): Promise<{
+        count: number
+      }>
+    }
+
+    order: {
+      create(args: {
+        data: {
+          orderNumber: string
+          userId: string
+          subtotal: string
+          shippingCost: string
+          tax: string
+          total: string
+          shippingName: string
+          shippingEmail: string
+          shippingPhone: string
+          shippingAddressLine1: string
+          shippingAddressLine2:
+            | string
+            | null
+          shippingCity: string
+          shippingPostalCode: string
+          shippingCountry: string
+          shippingRegion:
+            'PORTUGAL_MAINLAND'
+          shippingClassApplied:
+            | CommercialShippingClass
+            | null
+          taxRatePercent: string
+          pricesIncludeTax: true
+          nonVolumousSubtotal: string
+          nonVolumousShippingCost: string
+          bulkyShippingCost: string
+          freeShippingThreshold:
+            | string
+            | null
+          freeShippingApplied: boolean
+        }
+        select: {
+          id: true
+          orderNumber: true
+          status: true
+          paymentStatus: true
+        }
+      }): Promise<CheckoutOrderRecord>
+    }
+
+    orderItem: {
+      createMany(args: {
+        data: Array<{
+          orderId: string
+          productId: string
+          productNameAtPurchase: string
+          productSkuAtPurchase: string
+          priceAtPurchase: string
+          quantity: number
+          subtotalAtPurchase: string
+          shippingClassAtPurchase:
+            CommercialShippingClass
+          shippingCostAtPurchase:
+            | string
+            | null
+        }>
+      }): Promise<{
+        count: number
+      }>
+    }
   }
-}
 
 export interface CheckoutClient {
   $transaction<T>(
@@ -288,8 +330,14 @@ type PreparedCheckoutItem = {
   name: string
   sku: string
   quantity: number
+  price: CheckoutPrice
   priceCents: number
   subtotalCents: number
+  shippingClass:
+    CommercialShippingClass
+  mainlandShippingCost:
+    | CheckoutPrice
+    | null
 }
 
 const MAX_TRANSACTION_ATTEMPTS = 3
@@ -357,6 +405,44 @@ function normalizeOptionalText(
   return normalizedValue
 }
 
+function normalizeCountry(
+  value: string,
+): 'Portugal' {
+  const country =
+    normalizeRequiredText(
+      value,
+      'País',
+      100,
+    )
+
+  if (
+    country.toLocaleLowerCase(
+      'pt-PT',
+    ) !== 'portugal'
+  ) {
+    throw new CheckoutValidationError(
+      'As entregas estão disponíveis apenas em Portugal Continental',
+    )
+  }
+
+  return 'Portugal'
+}
+
+function normalizeRegion(
+  value: CommercialCheckoutRegion,
+): 'PORTUGAL_MAINLAND' {
+  if (
+    value !==
+    'PORTUGAL_MAINLAND'
+  ) {
+    throw new CheckoutValidationError(
+      'As entregas estão disponíveis apenas em Portugal Continental',
+    )
+  }
+
+  return value
+}
+
 function normalizeShipping(
   input: CheckoutShippingInput,
 ): CheckoutShipping {
@@ -394,10 +480,11 @@ function normalizeShipping(
         'Código postal',
         20,
       ),
-    country: normalizeRequiredText(
+    country: normalizeCountry(
       input.country,
-      'País',
-      100,
+    ),
+    region: normalizeRegion(
+      input.region,
     ),
   }
 }
@@ -412,8 +499,9 @@ function normalizeUserId(
   )
 }
 
-function priceToCents(
+function decimalValueToCents(
   value: CheckoutPrice,
+  createError: () => Error,
 ) {
   const rawValue =
     value.toString().trim()
@@ -424,32 +512,54 @@ function priceToCents(
     )
 
   if (!match) {
-    throw new CheckoutProductUnavailableError(
-      'Existe um produto com preço inválido no carrinho',
-    )
+    throw createError()
   }
 
   const wholePart =
     Number(match[1])
 
   const decimalPart =
-    (match[2] ?? '')
-      .padEnd(2, '0')
+    Number(
+      (match[2] ?? '')
+        .padEnd(2, '0'),
+    )
 
   const cents =
     wholePart * 100 +
-    Number(decimalPart)
+    decimalPart
 
   if (
     !Number.isSafeInteger(cents) ||
     cents < 0
   ) {
-    throw new CheckoutProductUnavailableError(
-      'Existe um produto com preço inválido no carrinho',
-    )
+    throw createError()
   }
 
   return cents
+}
+
+function priceToCents(
+  value: CheckoutPrice,
+) {
+  return decimalValueToCents(
+    value,
+    () =>
+      new CheckoutProductUnavailableError(
+        'Existe um produto com preço inválido no carrinho',
+      ),
+  )
+}
+
+function shippingCostToCents(
+  value: CheckoutPrice,
+) {
+  return decimalValueToCents(
+    value,
+    () =>
+      new CheckoutPricingError(
+        'Existe uma tarifa de transporte inválida no carrinho',
+      ),
+  )
 }
 
 function multiplyCents(
@@ -486,33 +596,6 @@ function addCents(
   return result
 }
 
-function validatePricingCents(
-  value: number,
-) {
-  return (
-    Number.isSafeInteger(value) &&
-    value >= 0
-  )
-}
-
-function validatePricing(
-  pricing: CheckoutPricing,
-) {
-  if (
-    !pricing ||
-    !validatePricingCents(
-      pricing.shippingCostCents,
-    ) ||
-    !validatePricingCents(
-      pricing.taxCents,
-    )
-  ) {
-    throw new CheckoutPricingError()
-  }
-
-  return pricing
-}
-
 function centsToString(
   cents: number,
 ) {
@@ -532,6 +615,62 @@ function centsToNumber(
   cents: number,
 ) {
   return cents / 100
+}
+
+function getMainlandShippingCost(
+  product: CheckoutProductRecord,
+) {
+  return (
+    product.shippingRates.find(
+      (rate) =>
+        rate.region ===
+        'PORTUGAL_MAINLAND',
+    )?.shippingCost ?? null
+  )
+}
+
+function getShippingCostSnapshot(
+  item: PreparedCheckoutItem,
+) {
+  if (
+    item.shippingClass !== 'BULKY'
+  ) {
+    return null
+  }
+
+  if (
+    item.mainlandShippingCost ===
+    null
+  ) {
+    throw new CheckoutPricingError(
+      `O produto ${item.productId} não tem tarifa de transporte para Portugal Continental`,
+    )
+  }
+
+  return centsToString(
+    shippingCostToCents(
+      item.mainlandShippingCost,
+    ),
+  )
+}
+
+function getSingleShippingClass(
+  items: PreparedCheckoutItem[],
+): CommercialShippingClass | null {
+  const firstClass =
+    items[0]?.shippingClass
+
+  if (!firstClass) {
+    return null
+  }
+
+  return items.every(
+    (item) =>
+      item.shippingClass ===
+      firstClass,
+  )
+    ? firstClass
+    : null
 }
 
 function createOrderNumber() {
@@ -606,8 +745,6 @@ export async function createCheckoutOrder(
   userId: string,
   shippingInput:
     CheckoutShippingInput,
-  pricingPolicy:
-    CheckoutPricingPolicy,
   client?: CheckoutClient,
 ): Promise<CheckoutResult> {
   const normalizedUserId =
@@ -617,13 +754,6 @@ export async function createCheckoutOrder(
     normalizeShipping(
       shippingInput,
     )
-
-  if (
-    typeof pricingPolicy !==
-    'function'
-  ) {
-    throw new CheckoutPricingError()
-  }
 
   const db = getClient(client)
 
@@ -675,6 +805,17 @@ export async function createCheckoutOrder(
                 price: true,
                 stockQuantity: true,
                 isActive: true,
+                shippingClass: true,
+                shippingRates: {
+                  where: {
+                    region:
+                      'PORTUGAL_MAINLAND',
+                  },
+                  select: {
+                    region: true,
+                    shippingCost: true,
+                  },
+                },
               },
             },
           },
@@ -742,31 +883,72 @@ export async function createCheckoutOrder(
           name: item.product.name,
           sku: item.product.sku,
           quantity: item.quantity,
+          price: item.product.price,
           priceCents,
           subtotalCents:
             itemSubtotalCents,
+          shippingClass:
+            item.product
+              .shippingClass,
+          mainlandShippingCost:
+            getMainlandShippingCost(
+              item.product,
+            ),
         })
       }
 
-      const pricing =
-        validatePricing(
-          pricingPolicy({
-            subtotalCents,
-            shipping,
-          }),
-        )
+      let pricing
 
-      const subtotalWithShipping =
-        addCents(
-          subtotalCents,
-          pricing.shippingCostCents,
-        )
+      try {
+        const settings =
+          await getCommercialSettings(
+            tx,
+          )
 
-      const totalCents =
-        addCents(
-          subtotalWithShipping,
-          pricing.taxCents,
+        pricing =
+          calculateShippingPricing({
+            settings,
+            region:
+              shipping.region,
+            items:
+              preparedItems.map(
+                (item) => ({
+                  productId:
+                    item.productId,
+                  quantity:
+                    item.quantity,
+                  unitPrice:
+                    item.price,
+                  shippingClass:
+                    item.shippingClass,
+                  mainlandShippingCost:
+                    item.mainlandShippingCost,
+                }),
+              ),
+          })
+      } catch (error) {
+        if (
+          error instanceof
+            ShippingPricingError ||
+          error instanceof
+            CommercialSettingsConfigurationError
+        ) {
+          throw new CheckoutPricingError(
+            error.message,
+          )
+        }
+
+        throw error
+      }
+
+      if (
+        pricing.productsSubtotalCents !==
+        subtotalCents
+      ) {
+        throw new CheckoutPricingError(
+          'O subtotal comercial não corresponde ao subtotal do carrinho',
         )
+      }
 
       for (
         const item of preparedItems
@@ -805,18 +987,22 @@ export async function createCheckoutOrder(
             userId: user.id,
             subtotal:
               centsToString(
-                subtotalCents,
+                pricing
+                  .productsSubtotalCents,
               ),
             shippingCost:
               centsToString(
-                pricing.shippingCostCents,
+                pricing
+                  .shippingTotalCents,
               ),
-            tax: centsToString(
-              pricing.taxCents,
-            ),
+            tax:
+              centsToString(
+                pricing
+                  .includedTaxCents,
+              ),
             total:
               centsToString(
-                totalCents,
+                pricing.totalCents,
               ),
             shippingName:
               shipping.name,
@@ -833,6 +1019,43 @@ export async function createCheckoutOrder(
               shipping.postalCode,
             shippingCountry:
               shipping.country,
+            shippingRegion:
+              pricing.region,
+            shippingClassApplied:
+              getSingleShippingClass(
+                preparedItems,
+              ),
+            taxRatePercent:
+              pricing.taxRatePercent,
+            pricesIncludeTax:
+              pricing.pricesIncludeTax,
+            nonVolumousSubtotal:
+              centsToString(
+                pricing
+                  .nonVolumousSubtotalCents,
+              ),
+            nonVolumousShippingCost:
+              centsToString(
+                pricing
+                  .nonVolumousShippingCents,
+              ),
+            bulkyShippingCost:
+              centsToString(
+                pricing
+                  .bulkyShippingCents,
+              ),
+            freeShippingThreshold:
+              pricing
+                .freeShippingThresholdCents ===
+              null
+                ? null
+                : centsToString(
+                    pricing
+                      .freeShippingThresholdCents,
+                  ),
+            freeShippingApplied:
+              pricing
+                .freeShippingApplied,
           },
           select: {
             id: true,
@@ -862,6 +1085,12 @@ export async function createCheckoutOrder(
               centsToString(
                 item.subtotalCents,
               ),
+            shippingClassAtPurchase:
+              item.shippingClass,
+            shippingCostAtPurchase:
+              getShippingCostSnapshot(
+                item,
+              ),
           }),
         ),
       })
@@ -884,18 +1113,20 @@ export async function createCheckoutOrder(
           order.orderNumber,
         subtotal:
           centsToNumber(
-            subtotalCents,
+            pricing
+              .productsSubtotalCents,
           ),
         shippingCost:
           centsToNumber(
-            pricing.shippingCostCents,
+            pricing
+              .shippingTotalCents,
           ),
         tax: centsToNumber(
-          pricing.taxCents,
+          pricing.includedTaxCents,
         ),
         total:
           centsToNumber(
-            totalCents,
+            pricing.totalCents,
           ),
         status: order.status,
         paymentStatus:
