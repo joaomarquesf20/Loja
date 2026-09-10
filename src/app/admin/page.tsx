@@ -1,12 +1,16 @@
 import Link from 'next/link'
 import { getServerSession } from 'next-auth'
-import { notFound, redirect } from 'next/navigation'
+import {
+  notFound,
+  redirect,
+} from 'next/navigation'
 
 import { authOptions } from '@/server/auth'
 import LogoutButton from './logout-button'
 
 export default async function AdminPage() {
-  const session = await getServerSession(authOptions)
+  const session =
+    await getServerSession(authOptions)
 
   if (!session) {
     redirect('/login')
@@ -26,7 +30,8 @@ export default async function AdminPage() {
             </h1>
 
             <p className="mt-2 text-gray-600">
-              Selecione uma área para gerir o catálogo.
+              Selecione uma área para
+              gerir a loja.
             </p>
           </div>
 
@@ -41,8 +46,10 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Categorias
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir categorias e hierarquia do catálogo
+              Gerir categorias e
+              hierarquia do catálogo
             </p>
           </Link>
 
@@ -53,6 +60,7 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Produtos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
               Gerir produtos do catálogo
             </p>
@@ -65,8 +73,25 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Marcas de produtos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir marcas dos produtos do catálogo
+              Gerir marcas dos produtos
+              do catálogo
+            </p>
+          </Link>
+
+          <Link
+            href="/admin/commercial-settings"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Configuração comercial
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-600">
+              Gerir IVA, regiões de
+              checkout e regras de
+              transporte.
             </p>
           </Link>
 
@@ -77,8 +102,10 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Marcas de veículos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir marcas usadas na compatibilidade de veículos.
+              Gerir marcas usadas na
+              compatibilidade de veículos.
             </p>
           </Link>
 
@@ -89,8 +116,10 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Modelos de veículos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir modelos associados às marcas de veículos.
+              Gerir modelos associados às
+              marcas de veículos.
             </p>
           </Link>
 
@@ -101,8 +130,10 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Gerações de veículos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir gerações associadas aos modelos de veículos.
+              Gerir gerações associadas
+              aos modelos de veículos.
             </p>
           </Link>
 
@@ -113,8 +144,11 @@ export default async function AdminPage() {
             <h2 className="text-lg font-semibold">
               Configurações de veículos
             </h2>
+
             <p className="mt-1 text-sm text-gray-600">
-              Gerir motorizações e configurações associadas às gerações de veículos.
+              Gerir motorizações e
+              configurações associadas às
+              gerações de veículos.
             </p>
           </Link>
         </nav>
