@@ -29,6 +29,7 @@ enum PaymentStatus {
 
 enum ShippingClass {
   UNASSIGNED
+  SMALL
   STANDARD
   BULKY
   HEAVY
@@ -148,6 +149,7 @@ model Product {
   compatibilities ProductVehicleCompatibility[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
+  shippingRates   ProductShippingRate[]
 
   @@index([categoryId])
   @@index([shippingClass])
@@ -233,6 +235,7 @@ model ShippingRule {
   shippingClass         ShippingClass
   checkoutEnabled       Boolean            @default(false)
   shippingCost          Decimal?           @db.Decimal(10, 2)
+  maximumShippingCost   Decimal?           @db.Decimal(10, 2)
   freeShippingThreshold Decimal?           @db.Decimal(10, 2)
   regionRule            CheckoutRegionRule @relation(fields: [region], references: [region], onDelete: Restrict)
   createdAt             DateTime           @default(now())
@@ -240,6 +243,19 @@ model ShippingRule {
 
   @@unique([region, shippingClass])
   @@index([shippingClass])
+}
+
+model ProductShippingRate {
+  id           String         @id @default(cuid())
+  productId    String
+  region       CheckoutRegion
+  shippingCost Decimal        @db.Decimal(10, 2)
+  product      Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([productId, region])
+  @@index([region])
 }
 
 model Order {
