@@ -192,13 +192,14 @@ describe('productBrandUpdateSchema', () => {
 
 describe('productSchema', () => {
   const validProduct = {
-    name: 'Produto Teste',
-    slug: 'produto-teste',
-    sku: 'SKU-TESTE-001',
-    price: 0,
-    stockQuantity: 0,
-    categoryId: 'category-test',
-  }
+  name: 'Produto Teste',
+  slug: 'produto-teste',
+  sku: 'SKU-TESTE-001',
+  price: 0,
+  stockQuantity: 0,
+  categoryId: 'category-test',
+  shippingClass: 'STANDARD',
+}
 
   test('aceita objeto mínimo válido', () => {
     const result = productSchema.parse(validProduct)
