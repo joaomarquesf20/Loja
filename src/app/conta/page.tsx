@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { AddressesClient } from './addresses-client'
+import { OrdersClient } from './orders-client'
 
 export default function AccountPage() {
   const {
@@ -114,6 +115,8 @@ export default function AccountPage() {
           </section>
 
           <AddressesClient />
+
+          <OrdersClient />
         </div>
       </div>
     </main>
