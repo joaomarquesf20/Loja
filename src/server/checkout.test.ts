@@ -445,6 +445,72 @@ describe(
     )
 
     test(
+      'rejeita código postal português com formato inválido antes de iniciar transação',
+      async () => {
+        const tx =
+          createTransactionMock()
+
+        const {
+          client,
+          transaction,
+        } = createClient(tx)
+
+        await expect(
+          createCheckoutOrder(
+            'user-1',
+            {
+              ...shipping,
+              postalCode:
+                '4000123',
+            },
+            client,
+          ),
+        ).rejects.toThrow(
+          'Código postal inválido',
+        )
+
+        expect(
+          transaction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test.each([
+      '9000-001',
+      '9500-001',
+    ])(
+      'rejeita código postal insular %s mesmo quando a região enviada é Continental',
+      async (postalCode) => {
+        const tx =
+          createTransactionMock()
+
+        const {
+          client,
+          transaction,
+        } = createClient(tx)
+
+        await expect(
+          createCheckoutOrder(
+            'user-1',
+            {
+              ...shipping,
+              postalCode,
+              region:
+                'PORTUGAL_MAINLAND',
+            },
+            client,
+          ),
+        ).rejects.toThrow(
+          /Portugal Continental/,
+        )
+
+        expect(
+          transaction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'rejeita região diferente de Portugal Continental antes de iniciar transação',
       async () => {
         const tx =

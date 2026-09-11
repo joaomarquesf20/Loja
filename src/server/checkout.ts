@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 
 import {
+  parsePortugalPostalCode,
+} from '../lib/portugal-postal-code'
+import {
   CommercialSettingsConfigurationError,
   getCommercialSettings,
   type CommercialCheckoutRegion,
@@ -443,6 +446,39 @@ function normalizeRegion(
   return value
 }
 
+function normalizeMainlandPostalCode(
+  value: string,
+) {
+  const postalCode =
+    normalizeRequiredText(
+      value,
+      'Código postal',
+      20,
+    )
+
+  const parsed =
+    parsePortugalPostalCode(
+      postalCode,
+    )
+
+  if (!parsed.valid) {
+    throw new CheckoutValidationError(
+      'Código postal inválido',
+    )
+  }
+
+  if (
+    parsed.region !==
+    'PORTUGAL_MAINLAND'
+  ) {
+    throw new CheckoutValidationError(
+      'As entregas estão disponíveis apenas em Portugal Continental',
+    )
+  }
+
+  return parsed.postalCode
+}
+
 function normalizeShipping(
   input: CheckoutShippingInput,
 ): CheckoutShipping {
@@ -475,10 +511,8 @@ function normalizeShipping(
       100,
     ),
     postalCode:
-      normalizeRequiredText(
+      normalizeMainlandPostalCode(
         input.postalCode,
-        'Código postal',
-        20,
       ),
     country: normalizeCountry(
       input.country,
