@@ -91,6 +91,13 @@ export type CheckoutResult = {
   paymentStatus: string
 }
 
+export type CheckoutPreviewResult = {
+  subtotal: number
+  shippingCost: number
+  tax: number
+  total: number
+}
+
 export class CheckoutValidationError extends Error {
   constructor(message: string) {
     super(message)
@@ -775,6 +782,266 @@ async function runSerializableTransaction<T>(
   )
 }
 
+async function prepareCheckout(
+  tx: CheckoutTransactionClient,
+  normalizedUserId: string,
+  shipping: CheckoutShipping,
+) {
+  const user =
+    await tx.user.findFirst({
+      where: {
+        id: normalizedUserId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    })
+
+  if (!user) {
+    throw new CheckoutUserUnavailableError()
+  }
+
+  const shippingEmail =
+    user.email.trim()
+
+  if (!shippingEmail) {
+    throw new CheckoutUserUnavailableError(
+      'O utilizador não tem um email válido',
+    )
+  }
+
+  const cartItems =
+    await tx.cartItem.findMany({
+      where: {
+        userId: user.id,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      select: {
+        id: true,
+        productId: true,
+        quantity: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            sku: true,
+            price: true,
+            stockQuantity: true,
+            isActive: true,
+            shippingClass: true,
+            shippingRates: {
+              where: {
+                region:
+                  'PORTUGAL_MAINLAND',
+              },
+              select: {
+                region: true,
+                shippingCost: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+  if (
+    cartItems.length === 0
+  ) {
+    throw new CheckoutEmptyCartError()
+  }
+
+  const preparedItems:
+    PreparedCheckoutItem[] = []
+
+  let subtotalCents = 0
+
+  for (
+    const item of cartItems
+  ) {
+    if (
+      !Number.isSafeInteger(
+        item.quantity,
+      ) ||
+      item.quantity <= 0
+    ) {
+      throw new CheckoutCartChangedError(
+        'Existe uma quantidade inválida no carrinho',
+      )
+    }
+
+    if (
+      !item.product.isActive
+    ) {
+      throw new CheckoutProductUnavailableError()
+    }
+
+    if (
+      item.product.stockQuantity <
+      item.quantity
+    ) {
+      throw new CheckoutInsufficientStockError()
+    }
+
+    const priceCents =
+      priceToCents(
+        item.product.price,
+      )
+
+    const itemSubtotalCents =
+      multiplyCents(
+        priceCents,
+        item.quantity,
+      )
+
+    subtotalCents =
+      addCents(
+        subtotalCents,
+        itemSubtotalCents,
+      )
+
+    preparedItems.push({
+      cartItemId: item.id,
+      productId:
+        item.productId,
+      name: item.product.name,
+      sku: item.product.sku,
+      quantity: item.quantity,
+      price: item.product.price,
+      priceCents,
+      subtotalCents:
+        itemSubtotalCents,
+      shippingClass:
+        item.product
+          .shippingClass,
+      mainlandShippingCost:
+        getMainlandShippingCost(
+          item.product,
+        ),
+    })
+  }
+
+  let pricing
+
+  try {
+    const settings =
+      await getCommercialSettings(
+        tx,
+      )
+
+    pricing =
+      calculateShippingPricing({
+        settings,
+        region:
+          shipping.region,
+        items:
+          preparedItems.map(
+            (item) => ({
+              productId:
+                item.productId,
+              quantity:
+                item.quantity,
+              unitPrice:
+                item.price,
+              shippingClass:
+                item.shippingClass,
+              mainlandShippingCost:
+                item.mainlandShippingCost,
+            }),
+          ),
+      })
+  } catch (error) {
+    if (
+      error instanceof
+        ShippingPricingError ||
+      error instanceof
+        CommercialSettingsConfigurationError
+    ) {
+      throw new CheckoutPricingError(
+        error.message,
+      )
+    }
+
+    throw error
+  }
+
+  if (
+    pricing.productsSubtotalCents !==
+    subtotalCents
+  ) {
+    throw new CheckoutPricingError(
+      'O subtotal comercial não corresponde ao subtotal do carrinho',
+    )
+  }
+
+  return {
+    user,
+    shippingEmail,
+    preparedItems,
+    pricing,
+  }
+}
+
+function createCheckoutPreviewResult(
+  pricing: ReturnType<
+    typeof calculateShippingPricing
+  >,
+): CheckoutPreviewResult {
+  return {
+    subtotal:
+      centsToNumber(
+        pricing.productsSubtotalCents,
+      ),
+    shippingCost:
+      centsToNumber(
+        pricing.shippingTotalCents,
+      ),
+    tax: centsToNumber(
+      pricing.includedTaxCents,
+    ),
+    total:
+      centsToNumber(
+        pricing.totalCents,
+      ),
+  }
+}
+
+export async function previewCheckout(
+  userId: string,
+  shippingInput:
+    CheckoutShippingInput,
+  client?: CheckoutClient,
+): Promise<CheckoutPreviewResult> {
+  const normalizedUserId =
+    normalizeUserId(userId)
+
+  const shipping =
+    normalizeShipping(
+      shippingInput,
+    )
+
+  const db = getClient(client)
+
+  return runSerializableTransaction(
+    db,
+    async (tx) => {
+      const { pricing } =
+        await prepareCheckout(
+          tx,
+          normalizedUserId,
+          shipping,
+        )
+
+      return createCheckoutPreviewResult(
+        pricing,
+      )
+    },
+  )
+}
+
 export async function createCheckoutOrder(
   userId: string,
   shippingInput:
@@ -794,195 +1061,16 @@ export async function createCheckoutOrder(
   return runSerializableTransaction(
     db,
     async (tx) => {
-      const user =
-        await tx.user.findFirst({
-          where: {
-            id: normalizedUserId,
-            isActive: true,
-          },
-          select: {
-            id: true,
-            email: true,
-          },
-        })
-
-      if (!user) {
-        throw new CheckoutUserUnavailableError()
-      }
-
-      const shippingEmail =
-        user.email.trim()
-
-      if (!shippingEmail) {
-        throw new CheckoutUserUnavailableError(
-          'O utilizador não tem um email válido',
-        )
-      }
-
-      const cartItems =
-        await tx.cartItem.findMany({
-          where: {
-            userId: user.id,
-          },
-          orderBy: {
-            id: 'asc',
-          },
-          select: {
-            id: true,
-            productId: true,
-            quantity: true,
-            product: {
-              select: {
-                id: true,
-                name: true,
-                sku: true,
-                price: true,
-                stockQuantity: true,
-                isActive: true,
-                shippingClass: true,
-                shippingRates: {
-                  where: {
-                    region:
-                      'PORTUGAL_MAINLAND',
-                  },
-                  select: {
-                    region: true,
-                    shippingCost: true,
-                  },
-                },
-              },
-            },
-          },
-        })
-
-      if (
-        cartItems.length === 0
-      ) {
-        throw new CheckoutEmptyCartError()
-      }
-
-      const preparedItems:
-        PreparedCheckoutItem[] = []
-
-      let subtotalCents = 0
-
-      for (
-        const item of cartItems
-      ) {
-        if (
-          !Number.isSafeInteger(
-            item.quantity,
-          ) ||
-          item.quantity <= 0
-        ) {
-          throw new CheckoutCartChangedError(
-            'Existe uma quantidade inválida no carrinho',
-          )
-        }
-
-        if (
-          !item.product.isActive
-        ) {
-          throw new CheckoutProductUnavailableError()
-        }
-
-        if (
-          item.product.stockQuantity <
-          item.quantity
-        ) {
-          throw new CheckoutInsufficientStockError()
-        }
-
-        const priceCents =
-          priceToCents(
-            item.product.price,
-          )
-
-        const itemSubtotalCents =
-          multiplyCents(
-            priceCents,
-            item.quantity,
-          )
-
-        subtotalCents =
-          addCents(
-            subtotalCents,
-            itemSubtotalCents,
-          )
-
-        preparedItems.push({
-          cartItemId: item.id,
-          productId:
-            item.productId,
-          name: item.product.name,
-          sku: item.product.sku,
-          quantity: item.quantity,
-          price: item.product.price,
-          priceCents,
-          subtotalCents:
-            itemSubtotalCents,
-          shippingClass:
-            item.product
-              .shippingClass,
-          mainlandShippingCost:
-            getMainlandShippingCost(
-              item.product,
-            ),
-        })
-      }
-
-      let pricing
-
-      try {
-        const settings =
-          await getCommercialSettings(
-            tx,
-          )
-
-        pricing =
-          calculateShippingPricing({
-            settings,
-            region:
-              shipping.region,
-            items:
-              preparedItems.map(
-                (item) => ({
-                  productId:
-                    item.productId,
-                  quantity:
-                    item.quantity,
-                  unitPrice:
-                    item.price,
-                  shippingClass:
-                    item.shippingClass,
-                  mainlandShippingCost:
-                    item.mainlandShippingCost,
-                }),
-              ),
-          })
-      } catch (error) {
-        if (
-          error instanceof
-            ShippingPricingError ||
-          error instanceof
-            CommercialSettingsConfigurationError
-        ) {
-          throw new CheckoutPricingError(
-            error.message,
-          )
-        }
-
-        throw error
-      }
-
-      if (
-        pricing.productsSubtotalCents !==
-        subtotalCents
-      ) {
-        throw new CheckoutPricingError(
-          'O subtotal comercial não corresponde ao subtotal do carrinho',
-        )
-      }
+      const {
+        user,
+        shippingEmail,
+        preparedItems,
+        pricing,
+      } = await prepareCheckout(
+        tx,
+        normalizedUserId,
+        shipping,
+      )
 
       for (
         const item of preparedItems
@@ -1145,23 +1233,9 @@ export async function createCheckoutOrder(
         id: order.id,
         orderNumber:
           order.orderNumber,
-        subtotal:
-          centsToNumber(
-            pricing
-              .productsSubtotalCents,
-          ),
-        shippingCost:
-          centsToNumber(
-            pricing
-              .shippingTotalCents,
-          ),
-        tax: centsToNumber(
-          pricing.includedTaxCents,
+        ...createCheckoutPreviewResult(
+          pricing,
         ),
-        total:
-          centsToNumber(
-            pricing.totalCents,
-          ),
         status: order.status,
         paymentStatus:
           order.paymentStatus,

@@ -19,6 +19,7 @@ import {
   CheckoutUserUnavailableError,
   CheckoutValidationError,
   createCheckoutOrder,
+  previewCheckout,
   type CheckoutClient,
   type CheckoutShippingInput,
 } from './checkout'
@@ -289,8 +290,15 @@ function createClient(
         transactionClient:
           unknown,
       ) => Promise<unknown>,
-    ) =>
-      callback(tx),
+      options: {
+        isolationLevel:
+          'Serializable'
+      },
+    ) => {
+      void options
+
+      return callback(tx)
+    },
   )
 
   return {
@@ -1480,6 +1488,263 @@ describe(
         expect(
           transaction,
         ).toHaveBeenCalledOnce()
+      },
+    )
+  },
+)
+
+describe(
+  'previewCheckout',
+  () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    test(
+      'rejeita utilizador vazio antes de iniciar transação',
+      async () => {
+        const tx =
+          createTransactionMock()
+
+        const {
+          client,
+          transaction,
+        } = createClient(tx)
+
+        await expect(
+          previewCheckout(
+            '   ',
+            shipping,
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          CheckoutValidationError,
+        )
+
+        expect(
+          transaction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'devolve os mesmos totais comerciais do checkout real sem alterar carrinho, stock ou encomendas',
+      async () => {
+        const previewTx =
+          createTransactionMock()
+
+        prepareSuccessfulCheckout(
+          previewTx,
+        )
+
+        const {
+          client: previewClient,
+          transaction:
+            previewTransaction,
+        } = createClient(
+          previewTx,
+        )
+
+        const orderTx =
+          createTransactionMock()
+
+        prepareSuccessfulCheckout(
+          orderTx,
+        )
+
+        const { client: orderClient } =
+          createClient(orderTx)
+
+        const preview =
+          await previewCheckout(
+            'user-1',
+            shipping,
+            previewClient,
+          )
+
+        const order =
+          await createCheckoutOrder(
+            'user-1',
+            shipping,
+            orderClient,
+          )
+
+        expect(preview).toEqual({
+          subtotal: order.subtotal,
+          shippingCost:
+            order.shippingCost,
+          tax: order.tax,
+          total: order.total,
+        })
+
+        expect(preview).toEqual({
+          subtotal: 39.98,
+          shippingCost: 5.9,
+          tax: 8.58,
+          total: 45.88,
+        })
+
+        expect(
+          previewTransaction,
+        ).toHaveBeenCalledOnce()
+
+        expect(
+          previewTransaction.mock
+            .calls[0][1],
+        ).toEqual({
+          isolationLevel:
+            'Serializable',
+        })
+
+        expect(
+          previewTx.product
+            .updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          previewTx.order.create,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          previewTx.orderItem
+            .createMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          previewTx.cartItem
+            .deleteMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'calcula carrinho misto com portes grátis apenas na componente não volumosa sem alterar stock, carrinho ou encomendas',
+      async () => {
+        const tx =
+          createTransactionMock()
+
+        prepareSuccessfulCheckout(
+          tx,
+          [
+            createCartItem({
+              id: 'cart-standard',
+              productId:
+                'standard',
+              quantity: 1,
+              product:
+                createProduct({
+                  id: 'standard',
+                  sku: 'STD-1',
+                  price: '160.00',
+                  shippingClass:
+                    'STANDARD',
+                }),
+            }),
+            createCartItem({
+              id: 'cart-bulky',
+              productId: 'bulky',
+              quantity: 1,
+              product:
+                createProduct({
+                  id: 'bulky',
+                  sku: 'BLK-1',
+                  price: '100.00',
+                  shippingClass:
+                    'BULKY',
+                  shippingRates: [
+                    {
+                      region:
+                        'PORTUGAL_MAINLAND',
+                      shippingCost:
+                        '24.90',
+                    },
+                  ],
+                }),
+            }),
+          ],
+        )
+
+        const { client } =
+          createClient(tx)
+
+        await expect(
+          previewCheckout(
+            'user-1',
+            shipping,
+            client,
+          ),
+        ).resolves.toEqual({
+          subtotal: 260,
+          shippingCost: 24.9,
+          tax: 53.27,
+          total: 284.9,
+        })
+
+        expect(
+          tx.product.updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.order.create,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.orderItem.createMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.cartItem.deleteMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'bloqueia preview para produto sem checkout automático antes de qualquer escrita comercial',
+      async () => {
+        const tx =
+          createTransactionMock()
+
+        prepareSuccessfulCheckout(
+          tx,
+          [
+            createCartItem({
+              product:
+                createProduct({
+                  shippingClass:
+                    'UNASSIGNED',
+                }),
+            }),
+          ],
+        )
+
+        const { client } =
+          createClient(tx)
+
+        await expect(
+          previewCheckout(
+            'user-1',
+            shipping,
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          CheckoutPricingError,
+        )
+
+        expect(
+          tx.product.updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.order.create,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.orderItem.createMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.cartItem.deleteMany,
+        ).not.toHaveBeenCalled()
       },
     )
   },
