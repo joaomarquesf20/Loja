@@ -47,6 +47,7 @@ function createAddress() {
 
 function createPreview() {
   return {
+    fingerprint: 'ab'.repeat(32),
     subtotal: 100,
     shippingCost: 5.9,
     tax: 19.8,
@@ -71,6 +72,20 @@ function createOrder() {
 
 const fetchMock = vi.fn()
 
+async function requestPreview(
+  preview: unknown = createPreview(),
+  addresses = [createAddress()],
+) {
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({ addresses }))
+    .mockResolvedValueOnce(jsonResponse({ preview }))
+  render(<CheckoutClient />)
+  fireEvent.change(await screen.findByLabelText('Telefone'), {
+    target: { value: '910000000' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Calcular total' }))
+}
+
 describe(
   'CheckoutClient',
   () => {
@@ -86,6 +101,79 @@ describe(
     afterEach(() => {
       cleanup()
       vi.unstubAllGlobals()
+    })
+
+    test.each([
+      undefined, null, 123, '', 'a'.repeat(63), 'a'.repeat(65),
+      'A'.repeat(64), 'g'.repeat(64), 'a'.repeat(64) + '\n',
+    ])('rejeita preview com fingerprint inválido %j', async (fingerprint) => {
+      await requestPreview({ ...createPreview(), fingerprint })
+      expect(await screen.findByRole('alert')).toHaveTextContent('Resposta inválida do servidor')
+      expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    test.each(['Morada', 'Telefone'])(
+      'alterar %s exige novo preview antes de submeter', async (field) => {
+        await requestPreview(createPreview(), [
+          createAddress(), { ...createAddress(), id: 'address-2', addressLine1: 'Rua Nova 20' },
+        ])
+        await screen.findByRole('button', { name: 'Criar encomenda' })
+        fireEvent.change(screen.getByLabelText(field), {
+          target: { value: field === 'Morada' ? 'address-2' : '910000001' },
+        })
+        expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
+        expect(screen.getByRole('button', { name: 'Calcular total' })).toBeEnabled()
+        expect(fetchMock).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    test.each([
+      {
+        error: 'O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.',
+        code: 'CHECKOUT_PREVIEW_CHANGED',
+      },
+      { error: 'Existe stock insuficiente para um produto do carrinho' },
+      { error: 'O carrinho está vazio' },
+      { error: 'Existe um produto indisponível no carrinho' },
+      { error: 'O carrinho ou o stock foi alterado durante o checkout' },
+      { error: 'Configuração de preços do checkout inválida' },
+    ])('invalida preview após conflito e exige ações explícitas (%j)', async (conflict) => {
+      await requestPreview()
+      const checkoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
+      fetchMock.mockResolvedValueOnce(jsonResponse(conflict, 409))
+      fireEvent.click(checkoutButton)
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(conflict.error)
+      expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Calcular total' })).toBeEnabled()
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+
+      const freshPreview = { ...createPreview(), fingerprint: 'cd'.repeat(32) }
+      fetchMock.mockResolvedValueOnce(jsonResponse({ preview: freshPreview }))
+      fireEvent.click(screen.getByRole('button', { name: 'Calcular total' }))
+      const freshCheckoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
+      expect(screen.queryByText('Encomenda criada')).toBeNull()
+      expect(fetchMock).toHaveBeenCalledTimes(4)
+      expect(fetchMock.mock.calls.filter(([url]) => url === '/api/checkout')).toHaveLength(1)
+
+      fetchMock.mockResolvedValueOnce(jsonResponse({ order: createOrder() }, 201))
+      fireEvent.click(freshCheckoutButton)
+      await screen.findByText('Encomenda criada')
+      expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toMatchObject({
+        expectedFingerprint: freshPreview.fingerprint,
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    })
+
+    test.each([400, 500])('não invalida preview por erro sem conflito (%s)', async (status) => {
+      await requestPreview()
+      const checkoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
+      fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Erro no pedido' }, status))
+      fireEvent.click(checkoutButton)
+      expect(await screen.findByRole('alert')).toHaveTextContent('Erro no pedido')
+      expect(screen.getByRole('button', { name: 'Criar encomenda' })).toBeEnabled()
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
     test(
@@ -487,6 +575,7 @@ describe(
             ),
           ),
         ).toEqual({
+          expectedFingerprint: createPreview().fingerprint,
           shipping: {
             name: 'Maria Silva',
             phone:

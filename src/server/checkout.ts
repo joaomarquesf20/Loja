@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 import {
   parsePortugalPostalCode,
@@ -91,11 +91,15 @@ export type CheckoutResult = {
   paymentStatus: string
 }
 
-export type CheckoutPreviewResult = {
+type CheckoutAmounts = {
   subtotal: number
   shippingCost: number
   tax: number
   total: number
+}
+
+export type CheckoutPreviewResult = CheckoutAmounts & {
+  fingerprint: string
 }
 
 export class CheckoutValidationError extends Error {
@@ -168,6 +172,16 @@ export class CheckoutPricingError extends Error {
     super(message)
     this.name =
       'CheckoutPricingError'
+  }
+}
+
+export class CheckoutPreviewChangedError extends Error {
+  constructor(
+    message =
+      'O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.',
+  ) {
+    super(message)
+    this.name = 'CheckoutPreviewChangedError'
   }
 }
 
@@ -538,6 +552,20 @@ function normalizeUserId(
     'Utilizador',
     200,
   )
+}
+
+function validateExpectedFingerprint(
+  value: unknown,
+): asserts value is string {
+  if (
+    typeof value !== 'string' ||
+    value.length !== 64 ||
+    !/^[0-9a-f]{64}$/.test(value)
+  ) {
+    throw new CheckoutValidationError(
+      'Referência de preview inválida. Calcula novamente o total.',
+    )
+  }
 }
 
 function decimalValueToCents(
@@ -985,11 +1013,80 @@ async function prepareCheckout(
   }
 }
 
-function createCheckoutPreviewResult(
+function createCheckoutFingerprint(
+  prepared: Awaited<ReturnType<typeof prepareCheckout>>,
+  shipping: CheckoutShipping,
+) {
+  const { user, shippingEmail, preparedItems, pricing } = prepared
+
+  // Only effective order terms belong here: stock and cart-row IDs are not material.
+  const snapshot = {
+    schemaVersion: 1,
+    userId: user.id,
+    shippingEmail,
+    shipping: {
+      name: shipping.name,
+      phone: shipping.phone,
+      addressLine1: shipping.addressLine1,
+      addressLine2: shipping.addressLine2,
+      city: shipping.city,
+      postalCode: shipping.postalCode,
+      country: shipping.country,
+      region: shipping.region,
+    },
+    items: [...preparedItems]
+      .sort((first, second) => {
+        if (first.productId === second.productId) {
+          return 0
+        }
+        return first.productId < second.productId ? -1 : 1
+      })
+      .map((item) => {
+        const shippingCost = getShippingCostSnapshot(item)
+
+        return {
+          productId: item.productId,
+          name: item.name,
+          sku: item.sku,
+          quantity: item.quantity,
+          unitPriceCents: item.priceCents,
+          subtotalCents: item.subtotalCents,
+          shippingClass: item.shippingClass,
+          bulkyShippingUnitCostCents:
+            shippingCost === null ? null : shippingCostToCents(shippingCost),
+        }
+      }),
+    pricing: {
+      region: pricing.region,
+      pricesIncludeTax: pricing.pricesIncludeTax,
+      taxRatePercent: centsToString(
+        decimalValueToCents(
+          pricing.taxRatePercent,
+          () => new CheckoutPricingError(),
+        ),
+      ),
+      productsSubtotalCents: pricing.productsSubtotalCents,
+      nonVolumousSubtotalCents: pricing.nonVolumousSubtotalCents,
+      nonVolumousShippingCents: pricing.nonVolumousShippingCents,
+      bulkyShippingCents: pricing.bulkyShippingCents,
+      shippingTotalCents: pricing.shippingTotalCents,
+      includedTaxCents: pricing.includedTaxCents,
+      totalCents: pricing.totalCents,
+      freeShippingApplied: pricing.freeShippingApplied,
+      freeShippingThresholdCents: pricing.freeShippingThresholdCents,
+    },
+  }
+
+  return createHash('sha256')
+    .update(JSON.stringify(snapshot), 'utf8')
+    .digest('hex')
+}
+
+function createCheckoutAmounts(
   pricing: ReturnType<
     typeof calculateShippingPricing
   >,
-): CheckoutPreviewResult {
+): CheckoutAmounts {
   return {
     subtotal:
       centsToNumber(
@@ -1028,16 +1125,17 @@ export async function previewCheckout(
   return runSerializableTransaction(
     db,
     async (tx) => {
-      const { pricing } =
+      const prepared =
         await prepareCheckout(
           tx,
           normalizedUserId,
           shipping,
         )
 
-      return createCheckoutPreviewResult(
-        pricing,
-      )
+      return {
+        ...createCheckoutAmounts(prepared.pricing),
+        fingerprint: createCheckoutFingerprint(prepared, shipping),
+      }
     },
   )
 }
@@ -1046,6 +1144,7 @@ export async function createCheckoutOrder(
   userId: string,
   shippingInput:
     CheckoutShippingInput,
+  expectedFingerprint: string,
   client?: CheckoutClient,
 ): Promise<CheckoutResult> {
   const normalizedUserId =
@@ -1056,21 +1155,25 @@ export async function createCheckoutOrder(
       shippingInput,
     )
 
+  validateExpectedFingerprint(expectedFingerprint)
+
   const db = getClient(client)
 
   return runSerializableTransaction(
     db,
     async (tx) => {
-      const {
-        user,
-        shippingEmail,
-        preparedItems,
-        pricing,
-      } = await prepareCheckout(
+      const prepared = await prepareCheckout(
         tx,
         normalizedUserId,
         shipping,
       )
+
+      // Recheck the original precondition on every serializable transaction attempt.
+      if (createCheckoutFingerprint(prepared, shipping) !== expectedFingerprint) {
+        throw new CheckoutPreviewChangedError()
+      }
+
+      const { user, shippingEmail, preparedItems, pricing } = prepared
 
       for (
         const item of preparedItems
@@ -1233,7 +1336,7 @@ export async function createCheckoutOrder(
         id: order.id,
         orderNumber:
           order.orderNumber,
-        ...createCheckoutPreviewResult(
+        ...createCheckoutAmounts(
           pricing,
         ),
         status: order.status,

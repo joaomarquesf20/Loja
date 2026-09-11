@@ -89,6 +89,13 @@ const mocks = vi.hoisted(
       }
     }
 
+    class CheckoutPreviewChangedError extends Error {
+      constructor() {
+        super('O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.')
+        this.name = 'CheckoutPreviewChangedError'
+      }
+    }
+
     return {
       getServerSession:
         vi.fn(),
@@ -101,6 +108,7 @@ const mocks = vi.hoisted(
       CheckoutInsufficientStockError,
       CheckoutCartChangedError,
       CheckoutPricingError,
+      CheckoutPreviewChangedError,
     }
   },
 )
@@ -139,10 +147,14 @@ vi.mock(
       mocks.CheckoutCartChangedError,
     CheckoutPricingError:
       mocks.CheckoutPricingError,
+    CheckoutPreviewChangedError:
+      mocks.CheckoutPreviewChangedError,
   }),
 )
 
 import { POST } from './route'
+
+const validFingerprint = 'ab'.repeat(32)
 
 function authenticatedSession() {
   return {
@@ -219,6 +231,33 @@ describe('/api/checkout', () => {
       )
   })
 
+  test.each([
+    undefined, null, 123, {}, [], '', 'a'.repeat(63), 'a'.repeat(65),
+    'A'.repeat(64), 'g'.repeat(64), 'a'.repeat(64) + '\n',
+    ' ' + 'a'.repeat(64),
+  ])('devolve 400 para fingerprint inválido %j', async (expectedFingerprint) => {
+    const response = await POST(createRequest(JSON.stringify({
+      shipping: createShipping(), expectedFingerprint,
+    })))
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Referência de preview inválida. Calcula novamente o total.',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test('devolve conflito estável quando o preview foi alterado', async () => {
+    mocks.createCheckoutOrder.mockRejectedValue(new mocks.CheckoutPreviewChangedError())
+    const response = await POST(createRequest(JSON.stringify({
+      shipping: createShipping(), expectedFingerprint: validFingerprint,
+    })))
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: 'O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.',
+      code: 'CHECKOUT_PREVIEW_CHANGED',
+    })
+  })
+
   test(
     'devolve 401 quando utilizador não está autenticado',
     async () => {
@@ -229,6 +268,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),
@@ -266,6 +306,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),
@@ -366,6 +407,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping: {
                 ...createShipping(),
                 phone: 910000000,
@@ -398,6 +440,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping: {
                 ...createShipping(),
                 addressLine2: 123,
@@ -434,6 +477,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping,
             }),
           ),
@@ -452,6 +496,7 @@ describe('/api/checkout', () => {
       ).toHaveBeenCalledWith(
         'user-1',
         shipping,
+        validFingerprint,
       )
 
       await expect(
@@ -486,6 +531,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping,
             }),
           ),
@@ -504,6 +550,7 @@ describe('/api/checkout', () => {
           addressLine2:
             undefined,
         },
+        validFingerprint,
       )
     },
   )
@@ -522,6 +569,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),
@@ -553,6 +601,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),
@@ -614,6 +663,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),
@@ -654,6 +704,7 @@ describe('/api/checkout', () => {
         await POST(
           createRequest(
             JSON.stringify({
+              expectedFingerprint: validFingerprint,
               shipping:
                 createShipping(),
             }),

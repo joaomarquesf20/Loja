@@ -22,6 +22,7 @@ type CheckoutPreview = {
   shippingCost: number
   tax: number
   total: number
+  fingerprint: string
 }
 
 type CheckoutOrder = {
@@ -102,7 +103,10 @@ function isCheckoutPreview(
       value.shippingCost,
     ) &&
     isMoneyValue(value.tax) &&
-    isMoneyValue(value.total)
+    isMoneyValue(value.total) &&
+    typeof value.fingerprint === 'string' &&
+    value.fingerprint.length === 64 &&
+    /^[0-9a-f]{64}$/.test(value.fingerprint)
   )
 }
 
@@ -451,7 +455,7 @@ export function CheckoutClient() {
   async function handleCheckout() {
     if (
       pendingAction ||
-      !preview
+      !isCheckoutPreview(preview)
     ) {
       return
     }
@@ -478,11 +482,17 @@ export function CheckoutClient() {
             },
             body: JSON.stringify({
               shipping,
+              expectedFingerprint: preview.fingerprint,
             }),
           },
         )
 
       if (!response.ok) {
+        // Checkout 409s signal changed cart, stock, availability, or pricing terms.
+        if (response.status === 409) {
+          setPreview(null)
+        }
+
         throw new Error(
           await getResponseError(
             response,

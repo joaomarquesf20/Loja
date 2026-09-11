@@ -169,6 +169,7 @@ function createShipping() {
 
 function createPreview() {
   return {
+    fingerprint: 'ab'.repeat(32),
     subtotal: 100,
     shippingCost: 5.9,
     tax: 19.8,

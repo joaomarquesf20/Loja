@@ -6,6 +6,7 @@ import {
   CheckoutCartChangedError,
   CheckoutEmptyCartError,
   CheckoutInsufficientStockError,
+  CheckoutPreviewChangedError,
   CheckoutPricingError,
   CheckoutProductUnavailableError,
   type CheckoutShippingInput,
@@ -102,6 +103,16 @@ function parseShippingInput(
 function handleCheckoutError(
   error: unknown,
 ) {
+  if (error instanceof CheckoutPreviewChangedError) {
+    return NextResponse.json(
+      {
+        error: error.message,
+        code: 'CHECKOUT_PREVIEW_CHANGED',
+      },
+      { status: 409 },
+    )
+  }
+
   if (
     error instanceof
     CheckoutValidationError
@@ -195,10 +206,24 @@ export async function POST(
       )
     }
 
+    const expectedFingerprint = body.expectedFingerprint
+
+    if (
+      typeof expectedFingerprint !== 'string' ||
+      expectedFingerprint.length !== 64 ||
+      !/^[0-9a-f]{64}$/.test(expectedFingerprint)
+    ) {
+      return errorResponse(
+        'Referência de preview inválida. Calcula novamente o total.',
+        400,
+      )
+    }
+
     const order =
       await createCheckoutOrder(
         userId,
         shipping,
+        expectedFingerprint,
       )
 
     return NextResponse.json(
