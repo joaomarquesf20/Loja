@@ -1,6 +1,5 @@
-import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
-import { authOptions } from '@/server/auth'
+
 import {
   addCartItem,
   CartInsufficientStockError,
@@ -11,6 +10,18 @@ import {
   removeCartItem,
   updateCartItemQuantity,
 } from '@/server/cart'
+import {
+  InvalidJsonBodyError,
+  RequestPayloadTooLargeError,
+  readJsonBody,
+} from '@/server/http-request'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
+
+const CART_BODY_LIMIT_BYTES =
+  64 * 1024
 
 function errorResponse(
   message: string,
@@ -28,7 +39,10 @@ function errorResponse(
 
 function isRecord(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<
+  string,
+  unknown
+> {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -36,17 +50,39 @@ function isRecord(
   )
 }
 
-async function getAuthenticatedUserId() {
-  const session =
-    await getServerSession(authOptions)
+function handleCartError(
+  error: unknown,
+) {
+  if (
+    error instanceof
+    UnauthorizedUserError
+  ) {
+    return errorResponse(
+      'Não autenticado',
+      401,
+    )
+  }
 
-  const userId =
-    session?.user?.id?.trim()
+  if (
+    error instanceof
+    RequestPayloadTooLargeError
+  ) {
+    return errorResponse(
+      'Pedido demasiado grande',
+      413,
+    )
+  }
 
-  return userId || null
-}
+  if (
+    error instanceof
+    InvalidJsonBodyError
+  ) {
+    return errorResponse(
+      'JSON inválido',
+      400,
+    )
+  }
 
-function handleCartError(error: unknown) {
   if (
     error instanceof
     CartValidationError
@@ -101,17 +137,12 @@ function handleCartError(error: unknown) {
 export async function GET() {
   try {
     const userId =
-      await getAuthenticatedUserId()
-
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
-      )
-    }
+      await requireActiveUserId()
 
     const items =
-      await listCartItems(userId)
+      await listCartItems(
+        userId,
+      )
 
     return NextResponse.json({
       items,
@@ -126,25 +157,13 @@ export async function POST(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        CART_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body = await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -153,10 +172,16 @@ export async function POST(
       )
     }
 
-    const productId = body.productId
-    const quantity = body.quantity
+    const productId =
+      body.productId
 
-    if (typeof productId !== 'string') {
+    const quantity =
+      body.quantity
+
+    if (
+      typeof productId !==
+      'string'
+    ) {
       return errorResponse(
         'Produto inválido',
         400,
@@ -165,7 +190,8 @@ export async function POST(
 
     if (
       quantity !== undefined &&
-      typeof quantity !== 'number'
+      typeof quantity !==
+        'number'
     ) {
       return errorResponse(
         'Quantidade inválida',
@@ -173,13 +199,14 @@ export async function POST(
       )
     }
 
-    const item = await addCartItem(
-      userId,
-      productId,
-      quantity === undefined
-        ? 1
-        : quantity,
-    )
+    const item =
+      await addCartItem(
+        userId,
+        productId,
+        quantity === undefined
+          ? 1
+          : quantity,
+      )
 
     return NextResponse.json({
       item,
@@ -194,25 +221,13 @@ export async function PATCH(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        CART_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body = await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -221,17 +236,26 @@ export async function PATCH(
       )
     }
 
-    const productId = body.productId
-    const quantity = body.quantity
+    const productId =
+      body.productId
 
-    if (typeof productId !== 'string') {
+    const quantity =
+      body.quantity
+
+    if (
+      typeof productId !==
+      'string'
+    ) {
       return errorResponse(
         'Produto inválido',
         400,
       )
     }
 
-    if (typeof quantity !== 'number') {
+    if (
+      typeof quantity !==
+      'number'
+    ) {
       return errorResponse(
         'Quantidade inválida',
         400,
@@ -258,25 +282,13 @@ export async function DELETE(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        CART_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body = await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -285,9 +297,13 @@ export async function DELETE(
       )
     }
 
-    const productId = body.productId
+    const productId =
+      body.productId
 
-    if (typeof productId !== 'string') {
+    if (
+      typeof productId !==
+      'string'
+    ) {
       return errorResponse(
         'Produto inválido',
         400,
