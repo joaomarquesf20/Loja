@@ -74,6 +74,31 @@ describe('registerBuyer', () => {
     ).not.toHaveBeenCalled()
   })
 
+  test('rejeita nome demasiado longo antes de criar utilizador', async () => {
+    await expect(
+      registerBuyer({
+        name: 'a'.repeat(121),
+        email:
+          'buyer@example.com',
+        password:
+          'password123',
+      }),
+    ).rejects.toMatchObject({
+      name:
+        'RegistrationValidationError',
+      field: 'name',
+      message: 'Nome inválido',
+    })
+
+    expect(
+      mocks.hash,
+    ).not.toHaveBeenCalled()
+
+    expect(
+      mocks.create,
+    ).not.toHaveBeenCalled()
+  })
+
   test('rejeita email inválido antes de criar utilizador', async () => {
     await expect(
       registerBuyer({
@@ -113,6 +138,32 @@ describe('registerBuyer', () => {
       field: 'password',
       message:
         'A palavra-passe deve ter pelo menos 8 caracteres',
+    })
+
+    expect(
+      mocks.hash,
+    ).not.toHaveBeenCalled()
+
+    expect(
+      mocks.create,
+    ).not.toHaveBeenCalled()
+  })
+
+  test('rejeita password acima de 72 bytes antes de executar bcrypt', async () => {
+    await expect(
+      registerBuyer({
+        name: 'Buyer Teste',
+        email:
+          'buyer@example.com',
+        password:
+          'a'.repeat(73),
+      }),
+    ).rejects.toMatchObject({
+      name:
+        'RegistrationValidationError',
+      field: 'password',
+      message:
+        'A palavra-passe é demasiado longa',
     })
 
     expect(

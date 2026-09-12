@@ -53,6 +53,19 @@ describe('emailSchema', () => {
       false,
     )
   })
+
+  test('email demasiado longo falha', () => {
+    const result =
+      emailSchema.safeParse(
+        `${'a'.repeat(
+          245,
+        )}@example.com`,
+      )
+
+    expect(result.success).toBe(
+      false,
+    )
+  })
 })
 
 describe('passwordSchema', () => {
@@ -71,6 +84,39 @@ describe('passwordSchema', () => {
     const result =
       passwordSchema.safeParse(
         '1234567',
+      )
+
+    expect(result.success).toBe(
+      false,
+    )
+  })
+
+  test('72 bytes ASCII passam', () => {
+    const result =
+      passwordSchema.safeParse(
+        'a'.repeat(72),
+      )
+
+    expect(result.success).toBe(
+      true,
+    )
+  })
+
+  test('mais de 72 bytes falha', () => {
+    const result =
+      passwordSchema.safeParse(
+        'a'.repeat(73),
+      )
+
+    expect(result.success).toBe(
+      false,
+    )
+  })
+
+  test('limite usa bytes UTF-8', () => {
+    const result =
+      passwordSchema.safeParse(
+        'á'.repeat(37),
       )
 
     expect(result.success).toBe(
@@ -115,6 +161,17 @@ describe('quantitySchema', () => {
       false,
     )
   })
+
+  test('quantidade acima do limite falha', () => {
+    const result =
+      quantitySchema.safeParse(
+        1001,
+      )
+
+    expect(result.success).toBe(
+      false,
+    )
+  })
 })
 
 describe('idSchema', () => {
@@ -141,6 +198,17 @@ describe('idSchema', () => {
   test('string só com espaços falha', () => {
     const result =
       idSchema.safeParse('   ')
+
+    expect(result.success).toBe(
+      false,
+    )
+  })
+
+  test('id demasiado longo falha', () => {
+    const result =
+      idSchema.safeParse(
+        'a'.repeat(201),
+      )
 
     expect(result.success).toBe(
       false,

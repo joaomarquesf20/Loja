@@ -3,7 +3,12 @@ import type {
 } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { compare } from 'bcryptjs'
-import { emailSchema } from '@/lib/validation'
+
+import {
+  emailSchema,
+  passwordSchema,
+} from '@/lib/validation'
+
 import { prisma } from './db'
 
 type CredentialsInput =
@@ -28,7 +33,15 @@ export async function authorizeCredentials(
       credentials.email,
     )
 
-  if (!emailResult.success) {
+  const passwordResult =
+    passwordSchema.safeParse(
+      credentials.password,
+    )
+
+  if (
+    !emailResult.success ||
+    !passwordResult.success
+  ) {
     return null
   }
 
@@ -57,7 +70,7 @@ export async function authorizeCredentials(
 
   const isPasswordValid =
     await compare(
-      credentials.password,
+      passwordResult.data,
       user.passwordHash,
     )
 
@@ -96,7 +109,10 @@ export const authOptions:
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({
+      token,
+      user,
+    }) {
       if (user) {
         token.id = user.id
         token.role = user.role
@@ -104,6 +120,7 @@ export const authOptions:
 
       return token
     },
+
     async session({
       session,
       token,

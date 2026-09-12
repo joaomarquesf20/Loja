@@ -1,11 +1,14 @@
 import { hash } from 'bcryptjs'
+
 import {
   emailSchema,
   passwordSchema,
 } from '@/lib/validation'
+
 import { prisma } from './db'
 
 const PASSWORD_HASH_ROUNDS = 12
+const MAX_NAME_LENGTH = 120
 
 export type RegistrationField =
   | 'name'
@@ -55,7 +58,10 @@ function validateName(
 
   const name = value.trim()
 
-  if (name.length === 0) {
+  if (
+    name.length === 0 ||
+    name.length > MAX_NAME_LENGTH
+  ) {
     throw new RegistrationValidationError(
       'name',
       'Nome inválido',
@@ -88,9 +94,15 @@ function validatePassword(
     passwordSchema.safeParse(value)
 
   if (!result.success) {
+    const message =
+      typeof value === 'string' &&
+      value.length >= 8
+        ? 'A palavra-passe é demasiado longa'
+        : 'A palavra-passe deve ter pelo menos 8 caracteres'
+
     throw new RegistrationValidationError(
       'password',
-      'A palavra-passe deve ter pelo menos 8 caracteres',
+      message,
     )
   }
 
@@ -109,8 +121,11 @@ function isUniqueConstraintError(
   }
 
   return (
-    (error as { code?: unknown })
-      .code === 'P2002'
+    (
+      error as {
+        code?: unknown
+      }
+    ).code === 'P2002'
   )
 }
 

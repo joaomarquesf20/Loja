@@ -1,53 +1,193 @@
-import { describe, expect, it, vi } from 'vitest'
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+
+const mocks = vi.hoisted(
+  () => ({
+    getServerSession: vi.fn(),
+    findUnique: vi.fn(),
+  }),
+)
 
 vi.mock('next-auth', () => ({
-  getServerSession: vi.fn(),
+  getServerSession:
+    mocks.getServerSession,
 }))
 
 vi.mock('./auth', () => ({
   authOptions: {},
 }))
 
-import { getServerSession } from 'next-auth'
+vi.mock('./db', () => ({
+  prisma: {
+    user: {
+      findUnique:
+        mocks.findUnique,
+    },
+  },
+}))
+
 import {
   ForbiddenError,
   UnauthorizedError,
   requireAdmin,
 } from './admin-auth'
 
-const mockGetServerSession = vi.mocked(getServerSession)
-
 describe('requireAdmin()', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
   it('should throw UnauthorizedError when no session', async () => {
-    mockGetServerSession.mockResolvedValue(null)
+    mocks.getServerSession.mockResolvedValue(
+      null,
+    )
 
-    await expect(requireAdmin()).rejects.toThrow(UnauthorizedError)
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      UnauthorizedError,
+    )
+
+    expect(
+      mocks.findUnique,
+    ).not.toHaveBeenCalled()
   })
 
-  it('should throw ForbiddenError when role is BUYER', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { role: 'BUYER' }
+  it('should throw UnauthorizedError when session has no user id', async () => {
+    mocks.getServerSession.mockResolvedValue({
+      user: {
+        id: '   ',
+        role: 'ADMIN',
+      },
     })
 
-    await expect(requireAdmin()).rejects.toThrow(ForbiddenError)
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      UnauthorizedError,
+    )
+
+    expect(
+      mocks.findUnique,
+    ).not.toHaveBeenCalled()
   })
 
-  it('should throw ForbiddenError when role is SELLER', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { role: 'SELLER' }
+  it('should throw UnauthorizedError when user no longer exists', async () => {
+    mocks.getServerSession.mockResolvedValue({
+      user: {
+        id: 'admin-1',
+        role: 'ADMIN',
+      },
     })
 
-    await expect(requireAdmin()).rejects.toThrow(ForbiddenError)
+    mocks.findUnique.mockResolvedValue(
+      null,
+    )
+
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      UnauthorizedError,
+    )
   })
 
-  it('should return session when role is ADMIN', async () => {
-    mockGetServerSession.mockResolvedValue({
-      user: { role: 'ADMIN' }
+  it('should throw UnauthorizedError when admin is inactive', async () => {
+    mocks.getServerSession.mockResolvedValue({
+      user: {
+        id: 'admin-1',
+        role: 'ADMIN',
+      },
     })
 
-    const session = await requireAdmin()
+    mocks.findUnique.mockResolvedValue({
+      role: 'ADMIN',
+      isActive: false,
+    })
 
-    expect(session).toBeDefined()
-    expect(session.user.role).toBe('ADMIN')
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      UnauthorizedError,
+    )
+  })
+
+  it('should throw ForbiddenError when current role is BUYER', async () => {
+    mocks.getServerSession.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        role: 'ADMIN',
+      },
+    })
+
+    mocks.findUnique.mockResolvedValue({
+      role: 'BUYER',
+      isActive: true,
+    })
+
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      ForbiddenError,
+    )
+  })
+
+  it('should throw ForbiddenError when current role is SELLER', async () => {
+    mocks.getServerSession.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        role: 'ADMIN',
+      },
+    })
+
+    mocks.findUnique.mockResolvedValue({
+      role: 'SELLER',
+      isActive: true,
+    })
+
+    await expect(
+      requireAdmin(),
+    ).rejects.toThrow(
+      ForbiddenError,
+    )
+  })
+
+  it('should return session when current database role is active ADMIN', async () => {
+    const session = {
+      user: {
+        id: ' admin-1 ',
+        role: 'BUYER',
+      },
+    }
+
+    mocks.getServerSession.mockResolvedValue(
+      session,
+    )
+
+    mocks.findUnique.mockResolvedValue({
+      role: 'ADMIN',
+      isActive: true,
+    })
+
+    const result =
+      await requireAdmin()
+
+    expect(result).toBe(session)
+
+    expect(
+      mocks.findUnique,
+    ).toHaveBeenCalledWith({
+      where: {
+        id: 'admin-1',
+      },
+      select: {
+        role: true,
+        isActive: true,
+      },
+    })
   })
 })

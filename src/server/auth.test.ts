@@ -74,6 +74,50 @@ describe(
       ).not.toHaveBeenCalled()
     })
 
+    test('rejeita password curta antes de consultar a base de dados', async () => {
+      const result =
+        await authorizeCredentials(
+          {
+            email:
+              'buyer@example.com',
+            password:
+              '1234567',
+          },
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        mocks.findUnique,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.compare,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita password com mais de 72 bytes antes de consultar a base de dados', async () => {
+      const result =
+        await authorizeCredentials(
+          {
+            email:
+              'buyer@example.com',
+            password:
+              'a'.repeat(73),
+          },
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        mocks.findUnique,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.compare,
+      ).not.toHaveBeenCalled()
+    })
+
     test('normaliza email antes da pesquisa', async () => {
       mocks.findUnique.mockResolvedValue(
         {
