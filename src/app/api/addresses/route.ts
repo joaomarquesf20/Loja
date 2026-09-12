@@ -1,5 +1,5 @@
-import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
+
 import {
   AddressNotFoundError,
   AddressValidationError,
@@ -8,7 +8,18 @@ import {
   listUserAddresses,
   updateUserAddress,
 } from '@/server/addresses'
-import { authOptions } from '@/server/auth'
+import {
+  InvalidJsonBodyError,
+  RequestPayloadTooLargeError,
+  readJsonBody,
+} from '@/server/http-request'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
+
+const ADDRESSES_BODY_LIMIT_BYTES =
+  64 * 1024
 
 function errorResponse(
   message: string,
@@ -26,7 +37,10 @@ function errorResponse(
 
 function isRecord(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<
+  string,
+  unknown
+> {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -34,18 +48,11 @@ function isRecord(
   )
 }
 
-async function getAuthenticatedUserId() {
-  const session =
-    await getServerSession(authOptions)
-
-  const userId =
-    session?.user?.id?.trim()
-
-  return userId || null
-}
-
 function getAddressInput(
-  body: Record<string, unknown>,
+  body: Record<
+    string,
+    unknown
+  >,
 ) {
   return {
     name: body.name,
@@ -63,6 +70,36 @@ function getAddressInput(
 function handleAddressError(
   error: unknown,
 ) {
+  if (
+    error instanceof
+    UnauthorizedUserError
+  ) {
+    return errorResponse(
+      'Não autenticado',
+      401,
+    )
+  }
+
+  if (
+    error instanceof
+    RequestPayloadTooLargeError
+  ) {
+    return errorResponse(
+      'Pedido demasiado grande',
+      413,
+    )
+  }
+
+  if (
+    error instanceof
+    InvalidJsonBodyError
+  ) {
+    return errorResponse(
+      'JSON inválido',
+      400,
+    )
+  }
+
   if (
     error instanceof
     AddressValidationError
@@ -97,14 +134,7 @@ function handleAddressError(
 export async function GET() {
   try {
     const userId =
-      await getAuthenticatedUserId()
-
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
-      )
-    }
+      await requireActiveUserId()
 
     const addresses =
       await listUserAddresses(
@@ -126,26 +156,13 @@ export async function POST(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        ADDRESSES_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body =
-        await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -180,26 +197,13 @@ export async function PATCH(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        ADDRESSES_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body =
-        await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -243,26 +247,13 @@ export async function DELETE(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        ADDRESSES_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body =
-        await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(

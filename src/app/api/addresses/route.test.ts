@@ -33,8 +33,20 @@ const mocks = vi.hoisted(
       }
     }
 
+    class UnauthorizedUserError
+      extends Error {
+      constructor(
+        message =
+          'Não autenticado',
+      ) {
+        super(message)
+        this.name =
+          'UnauthorizedUserError'
+      }
+    }
+
     return {
-      getServerSession:
+      requireActiveUserId:
         vi.fn(),
       listUserAddresses:
         vi.fn(),
@@ -46,22 +58,18 @@ const mocks = vi.hoisted(
         vi.fn(),
       AddressValidationError,
       AddressNotFoundError,
+      UnauthorizedUserError,
     }
   },
 )
 
 vi.mock(
-  'next-auth',
+  '@/server/user-auth',
   () => ({
-    getServerSession:
-      mocks.getServerSession,
-  }),
-)
-
-vi.mock(
-  '@/server/auth',
-  () => ({
-    authOptions: {},
+    requireActiveUserId:
+      mocks.requireActiveUserId,
+    UnauthorizedUserError:
+      mocks.UnauthorizedUserError,
   }),
 )
 
@@ -89,18 +97,6 @@ import {
   PATCH,
   POST,
 } from './route'
-
-function authenticatedSession() {
-  return {
-    user: {
-      id: ' user-1 ',
-      name: 'Maria',
-      email:
-        'maria@example.com',
-      role: 'BUYER',
-    },
-  }
-}
 
 function createAddress() {
   return {
@@ -150,166 +146,336 @@ function invalidJsonRequest(
   )
 }
 
-describe('/api/addresses', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+function oversizedJsonRequest(
+  method: string,
+) {
+  return new Request(
+    'http://localhost/api/addresses',
+    {
+      method,
+      headers: {
+        'Content-Type':
+          'application/json',
+      },
+      body: JSON.stringify({
+        padding:
+          'x'.repeat(
+            70 * 1024,
+          ),
+      }),
+    },
+  )
+}
 
-    mocks.getServerSession
-      .mockResolvedValue(
-        authenticatedSession(),
-      )
-  })
+describe(
+  '/api/addresses',
+  () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
 
-  test('GET devolve 401 sem sessão', async () => {
-    mocks.getServerSession
-      .mockResolvedValue(null)
-
-    const response =
-      await GET()
-
-    expect(
-      response.status,
-    ).toBe(401)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Não autenticado',
+      mocks.requireActiveUserId
+        .mockResolvedValue(
+          'user-1',
+        )
     })
 
-    expect(
-      mocks.listUserAddresses,
-    ).not.toHaveBeenCalled()
-  })
+    test(
+      'GET devolve 401 quando o utilizador não está autenticado ou ativo',
+      async () => {
+        mocks.requireActiveUserId
+          .mockRejectedValue(
+            new mocks
+              .UnauthorizedUserError(),
+          )
 
-  test('GET lista apenas moradas do utilizador autenticado', async () => {
-    const address =
-      createAddress()
+        const response =
+          await GET()
 
-    mocks.listUserAddresses
-      .mockResolvedValue([
-        address,
-      ])
+        expect(
+          response.status,
+        ).toBe(401)
 
-    const response =
-      await GET()
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Não autenticado',
+        })
 
-    expect(
-      response.status,
-    ).toBe(200)
+        expect(
+          mocks.listUserAddresses,
+        ).not.toHaveBeenCalled()
+      },
+    )
 
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      addresses: [
-        address,
+    test(
+      'GET lista apenas moradas do utilizador autenticado e ativo',
+      async () => {
+        const address =
+          createAddress()
+
+        mocks.listUserAddresses
+          .mockResolvedValue([
+            address,
+          ])
+
+        const response =
+          await GET()
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          addresses: [
+            address,
+          ],
+        })
+
+        expect(
+          mocks
+            .requireActiveUserId,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+
+        expect(
+          mocks.listUserAddresses,
+        ).toHaveBeenCalledWith(
+          'user-1',
+        )
+      },
+    )
+
+    test(
+      'GET devolve 500 genérico em erro inesperado',
+      async () => {
+        const consoleError =
+          vi.spyOn(
+            console,
+            'error',
+          ).mockImplementation(
+            () => {},
+          )
+
+        mocks.listUserAddresses
+          .mockRejectedValue(
+            new Error('erro'),
+          )
+
+        const response =
+          await GET()
+
+        expect(
+          response.status,
+        ).toBe(500)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Erro interno do servidor',
+        })
+
+        expect(
+          consoleError,
+        ).toHaveBeenCalledWith(
+          'Unexpected addresses API error:',
+          expect.any(Error),
+        )
+
+        consoleError.mockRestore()
+      },
+    )
+
+    test(
+      'POST devolve 401 quando o utilizador não está autenticado ou ativo',
+      async () => {
+        mocks.requireActiveUserId
+          .mockRejectedValue(
+            new mocks
+              .UnauthorizedUserError(),
+          )
+
+        const response =
+          await POST(
+            jsonRequest(
+              'POST',
+              {},
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(401)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Não autenticado',
+        })
+
+        expect(
+          mocks.createUserAddress,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'POST rejeita JSON inválido',
+      async () => {
+        const response =
+          await POST(
+            invalidJsonRequest(
+              'POST',
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(400)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'JSON inválido',
+        })
+
+        expect(
+          mocks.createUserAddress,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test.each([
+      [
+        'POST',
+        POST,
       ],
-    })
+      [
+        'PATCH',
+        PATCH,
+      ],
+      [
+        'DELETE',
+        DELETE,
+      ],
+    ])(
+      '%s rejeita payload demasiado grande',
+      async (
+        method,
+        handler,
+      ) => {
+        const response =
+          await handler(
+            oversizedJsonRequest(
+              method,
+            ),
+          )
 
-    expect(
-      mocks.listUserAddresses,
-    ).toHaveBeenCalledWith(
-      'user-1',
+        expect(
+          response.status,
+        ).toBe(413)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Pedido demasiado grande',
+        })
+
+        expect(
+          mocks.createUserAddress,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mocks.updateUserAddress,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mocks.deleteUserAddress,
+        ).not.toHaveBeenCalled()
+      },
     )
-  })
 
-  test('GET devolve 500 genérico em erro inesperado', async () => {
-    mocks.listUserAddresses
-      .mockRejectedValue(
-        new Error('erro'),
-      )
+    test(
+      'POST rejeita corpo que não seja objeto',
+      async () => {
+        const response =
+          await POST(
+            jsonRequest(
+              'POST',
+              [],
+            ),
+          )
 
-    const response =
-      await GET()
+        expect(
+          response.status,
+        ).toBe(400)
 
-    expect(
-      response.status,
-    ).toBe(500)
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Pedido inválido',
+        })
+      },
+    )
 
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Erro interno do servidor',
-    })
-  })
+    test(
+      'POST cria morada para o utilizador autenticado e ignora proprietário enviado pelo cliente',
+      async () => {
+        const address =
+          createAddress()
 
-  test('POST devolve 401 sem sessão', async () => {
-    mocks.getServerSession
-      .mockResolvedValue(null)
+        mocks.createUserAddress
+          .mockResolvedValue(
+            address,
+          )
 
-    const response =
-      await POST(
-        jsonRequest(
-          'POST',
-          {},
-        ),
-      )
+        const response =
+          await POST(
+            jsonRequest(
+              'POST',
+              {
+                name:
+                  'Maria Silva',
+                addressLine1:
+                  'Rua Central 10',
+                addressLine2:
+                  null,
+                city:
+                  'Porto',
+                postalCode:
+                  '4000-001',
+                country:
+                  'Portugal',
+                userId:
+                  'user-atacante',
+                id:
+                  'address-atacante',
+              },
+            ),
+          )
 
-    expect(
-      response.status,
-    ).toBe(401)
+        expect(
+          response.status,
+        ).toBe(201)
 
-    expect(
-      mocks.createUserAddress,
-    ).not.toHaveBeenCalled()
-  })
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          address,
+        })
 
-  test('POST rejeita JSON inválido', async () => {
-    const response =
-      await POST(
-        invalidJsonRequest(
-          'POST',
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'JSON inválido',
-    })
-  })
-
-  test('POST rejeita corpo que não seja objeto', async () => {
-    const response =
-      await POST(
-        jsonRequest(
-          'POST',
-          [],
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Pedido inválido',
-    })
-  })
-
-  test('POST cria morada para o utilizador autenticado e ignora proprietário enviado pelo cliente', async () => {
-    const address =
-      createAddress()
-
-    mocks.createUserAddress
-      .mockResolvedValue(
-        address,
-      )
-
-    const response =
-      await POST(
-        jsonRequest(
-          'POST',
+        expect(
+          mocks.createUserAddress,
+        ).toHaveBeenCalledWith(
+          'user-1',
           {
             name:
               'Maria Silva',
@@ -317,285 +483,287 @@ describe('/api/addresses', () => {
               'Rua Central 10',
             addressLine2:
               null,
-            city: 'Porto',
+            city:
+              'Porto',
             postalCode:
               '4000-001',
             country:
               'Portugal',
-            userId:
-              'user-atacante',
-            id:
-              'address-atacante',
           },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(201)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      address,
-    })
-
-    expect(
-      mocks.createUserAddress,
-    ).toHaveBeenCalledWith(
-      'user-1',
-      {
-        name:
-          'Maria Silva',
-        addressLine1:
-          'Rua Central 10',
-        addressLine2:
-          null,
-        city: 'Porto',
-        postalCode:
-          '4000-001',
-        country:
-          'Portugal',
+        )
       },
     )
-  })
 
-  test('POST devolve 400 para validação da morada', async () => {
-    mocks.createUserAddress
-      .mockRejectedValue(
-        new mocks.AddressValidationError(
-          'city',
-          'Localidade é obrigatória',
-        ),
-      )
+    test(
+      'POST devolve 400 para validação da morada',
+      async () => {
+        mocks.createUserAddress
+          .mockRejectedValue(
+            new mocks
+              .AddressValidationError(
+                'city',
+                'Localidade é obrigatória',
+              ),
+          )
 
-    const response =
-      await POST(
-        jsonRequest(
-          'POST',
+        const response =
+          await POST(
+            jsonRequest(
+              'POST',
+              {
+                name:
+                  'Maria Silva',
+              },
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(400)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Localidade é obrigatória',
+        })
+      },
+    )
+
+    test(
+      'PATCH rejeita id de morada com tipo inválido',
+      async () => {
+        const response =
+          await PATCH(
+            jsonRequest(
+              'PATCH',
+              {
+                addressId:
+                  123,
+              },
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(400)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Morada inválida',
+        })
+
+        expect(
+          mocks.updateUserAddress,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'PATCH atualiza morada dentro da conta autenticada',
+      async () => {
+        const address =
+          createAddress()
+
+        mocks.updateUserAddress
+          .mockResolvedValue(
+            address,
+          )
+
+        const response =
+          await PATCH(
+            jsonRequest(
+              'PATCH',
+              {
+                addressId:
+                  'address-1',
+                name:
+                  'Maria Silva',
+                addressLine1:
+                  'Rua Central 10',
+                addressLine2:
+                  null,
+                city:
+                  'Porto',
+                postalCode:
+                  '4000-001',
+                country:
+                  'Portugal',
+                userId:
+                  'user-atacante',
+              },
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          address,
+        })
+
+        expect(
+          mocks.updateUserAddress,
+        ).toHaveBeenCalledWith(
+          'user-1',
+          'address-1',
           {
-            name:
-              'Maria Silva',
-          },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Localidade é obrigatória',
-    })
-  })
-
-  test('PATCH rejeita id de morada com tipo inválido', async () => {
-    const response =
-      await PATCH(
-        jsonRequest(
-          'PATCH',
-          {
-            addressId: 123,
-          },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Morada inválida',
-    })
-
-    expect(
-      mocks.updateUserAddress,
-    ).not.toHaveBeenCalled()
-  })
-
-  test('PATCH atualiza morada dentro da conta autenticada', async () => {
-    const address =
-      createAddress()
-
-    mocks.updateUserAddress
-      .mockResolvedValue(
-        address,
-      )
-
-    const response =
-      await PATCH(
-        jsonRequest(
-          'PATCH',
-          {
-            addressId:
-              'address-1',
             name:
               'Maria Silva',
             addressLine1:
               'Rua Central 10',
             addressLine2:
               null,
-            city: 'Porto',
+            city:
+              'Porto',
             postalCode:
               '4000-001',
             country:
               'Portugal',
-            userId:
-              'user-atacante',
           },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(200)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      address,
-    })
-
-    expect(
-      mocks.updateUserAddress,
-    ).toHaveBeenCalledWith(
-      'user-1',
-      'address-1',
-      {
-        name:
-          'Maria Silva',
-        addressLine1:
-          'Rua Central 10',
-        addressLine2:
-          null,
-        city: 'Porto',
-        postalCode:
-          '4000-001',
-        country:
-          'Portugal',
+        )
       },
     )
-  })
 
-  test('PATCH devolve 404 quando a morada não pertence ao utilizador', async () => {
-    mocks.updateUserAddress
-      .mockRejectedValue(
-        new mocks.AddressNotFoundError(),
-      )
+    test(
+      'PATCH devolve 404 quando a morada não pertence ao utilizador',
+      async () => {
+        mocks.updateUserAddress
+          .mockRejectedValue(
+            new mocks
+              .AddressNotFoundError(),
+          )
 
-    const response =
-      await PATCH(
-        jsonRequest(
-          'PATCH',
-          {
-            addressId:
-              'address-user-2',
-            name:
-              'Maria Silva',
-            addressLine1:
-              'Rua Central 10',
-            city: 'Porto',
-            postalCode:
-              '4000-001',
-            country:
-              'Portugal',
-          },
-        ),
-      )
+        const response =
+          await PATCH(
+            jsonRequest(
+              'PATCH',
+              {
+                addressId:
+                  'address-user-2',
+                name:
+                  'Maria Silva',
+                addressLine1:
+                  'Rua Central 10',
+                city:
+                  'Porto',
+                postalCode:
+                  '4000-001',
+                country:
+                  'Portugal',
+              },
+            ),
+          )
 
-    expect(
-      response.status,
-    ).toBe(404)
+        expect(
+          response.status,
+        ).toBe(404)
 
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Morada não encontrada',
-    })
-  })
-
-  test('DELETE rejeita id de morada com tipo inválido', async () => {
-    const response =
-      await DELETE(
-        jsonRequest(
-          'DELETE',
-          {
-            addressId: null,
-          },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    expect(
-      mocks.deleteUserAddress,
-    ).not.toHaveBeenCalled()
-  })
-
-  test('DELETE apaga morada apenas dentro da conta autenticada', async () => {
-    mocks.deleteUserAddress
-      .mockResolvedValue(
-        undefined,
-      )
-
-    const response =
-      await DELETE(
-        jsonRequest(
-          'DELETE',
-          {
-            addressId:
-              'address-1',
-          },
-        ),
-      )
-
-    expect(
-      response.status,
-    ).toBe(204)
-
-    expect(
-      mocks.deleteUserAddress,
-    ).toHaveBeenCalledWith(
-      'user-1',
-      'address-1',
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Morada não encontrada',
+        })
+      },
     )
-  })
 
-  test('DELETE devolve 404 quando a morada não pertence ao utilizador', async () => {
-    mocks.deleteUserAddress
-      .mockRejectedValue(
-        new mocks.AddressNotFoundError(),
-      )
+    test(
+      'DELETE rejeita id de morada com tipo inválido',
+      async () => {
+        const response =
+          await DELETE(
+            jsonRequest(
+              'DELETE',
+              {
+                addressId:
+                  null,
+              },
+            ),
+          )
 
-    const response =
-      await DELETE(
-        jsonRequest(
-          'DELETE',
-          {
-            addressId:
-              'address-user-2',
-          },
-        ),
-      )
+        expect(
+          response.status,
+        ).toBe(400)
 
-    expect(
-      response.status,
-    ).toBe(404)
+        expect(
+          mocks.deleteUserAddress,
+        ).not.toHaveBeenCalled()
+      },
+    )
 
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Morada não encontrada',
-    })
-  })
-})
+    test(
+      'DELETE apaga morada apenas dentro da conta autenticada',
+      async () => {
+        mocks.deleteUserAddress
+          .mockResolvedValue(
+            undefined,
+          )
+
+        const response =
+          await DELETE(
+            jsonRequest(
+              'DELETE',
+              {
+                addressId:
+                  'address-1',
+              },
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(204)
+
+        expect(
+          mocks.deleteUserAddress,
+        ).toHaveBeenCalledWith(
+          'user-1',
+          'address-1',
+        )
+
+        expect(
+          await response.text(),
+        ).toBe('')
+      },
+    )
+
+    test(
+      'DELETE devolve 404 quando a morada não pertence ao utilizador',
+      async () => {
+        mocks.deleteUserAddress
+          .mockRejectedValue(
+            new mocks
+              .AddressNotFoundError(),
+          )
+
+        const response =
+          await DELETE(
+            jsonRequest(
+              'DELETE',
+              {
+                addressId:
+                  'address-user-2',
+              },
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(404)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Morada não encontrada',
+        })
+      },
+    )
+  },
+)
