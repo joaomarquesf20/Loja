@@ -1,10 +1,13 @@
-import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
+
 import {
   OrderValidationError,
   listUserOrders,
 } from '@/server/orders'
-import { authOptions } from '@/server/auth'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
 
 function errorResponse(
   message: string,
@@ -20,27 +23,10 @@ function errorResponse(
   )
 }
 
-async function getAuthenticatedUserId() {
-  const session =
-    await getServerSession(authOptions)
-
-  const userId =
-    session?.user?.id?.trim()
-
-  return userId || null
-}
-
 export async function GET() {
   try {
     const userId =
-      await getAuthenticatedUserId()
-
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
-      )
-    }
+      await requireActiveUserId()
 
     const orders =
       await listUserOrders(
@@ -51,6 +37,16 @@ export async function GET() {
       orders,
     })
   } catch (error) {
+    if (
+      error instanceof
+      UnauthorizedUserError
+    ) {
+      return errorResponse(
+        'Não autenticado',
+        401,
+      )
+    }
+
     if (
       error instanceof
       OrderValidationError

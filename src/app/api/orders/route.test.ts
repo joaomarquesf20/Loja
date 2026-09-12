@@ -11,8 +11,6 @@ const mocks = vi.hoisted(
     class OrderValidationError
       extends Error {
       constructor(
-        public readonly field:
-          string,
         message: string,
       ) {
         super(message)
@@ -21,29 +19,27 @@ const mocks = vi.hoisted(
       }
     }
 
+    class UnauthorizedUserError
+      extends Error {
+      constructor(
+        message =
+          'Não autenticado',
+      ) {
+        super(message)
+        this.name =
+          'UnauthorizedUserError'
+      }
+    }
+
     return {
-      getServerSession:
+      requireActiveUserId:
         vi.fn(),
       listUserOrders:
         vi.fn(),
       OrderValidationError,
+      UnauthorizedUserError,
     }
   },
-)
-
-vi.mock(
-  'next-auth',
-  () => ({
-    getServerSession:
-      mocks.getServerSession,
-  }),
-)
-
-vi.mock(
-  '@/server/auth',
-  () => ({
-    authOptions: {},
-  }),
 )
 
 vi.mock(
@@ -56,198 +52,196 @@ vi.mock(
   }),
 )
 
+vi.mock(
+  '@/server/user-auth',
+  () => ({
+    UnauthorizedUserError:
+      mocks.UnauthorizedUserError,
+    requireActiveUserId:
+      mocks.requireActiveUserId,
+  }),
+)
+
 import { GET } from './route'
-
-function authenticatedSession() {
-  return {
-    user: {
-      id: ' user-1 ',
-      name: 'Maria',
-      email:
-        'maria@example.com',
-      role: 'BUYER',
-    },
-  }
-}
-
-function createOrder() {
-  return {
-    id: 'order-1',
-    orderNumber:
-      'PFA-ABC123',
-    subtotal: '100.00',
-    shippingCost: '5.50',
-    tax: '23.00',
-    total: '128.50',
-    status: 'CONFIRMED',
-    paymentStatus: 'PAID',
-    shippingName:
-      'Maria Silva',
-    shippingEmail:
-      'maria@example.com',
-    shippingPhone:
-      '910000000',
-    shippingAddressLine1:
-      'Rua Central 10',
-    shippingAddressLine2:
-      null,
-    shippingCity:
-      'Porto',
-    shippingPostalCode:
-      '4000-001',
-    shippingCountry:
-      'Portugal',
-    createdAt:
-      new Date(
-        '2026-09-01T10:00:00.000Z',
-      ),
-    items: [
-      {
-        id: 'item-1',
-        productNameAtPurchase:
-          'Filtro de óleo',
-        productSkuAtPurchase:
-          'FLT-001',
-        priceAtPurchase:
-          '50.00',
-        quantity: 2,
-        subtotalAtPurchase:
-          '100.00',
-      },
-    ],
-  }
-}
 
 describe('/api/orders', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    mocks.getServerSession
+    mocks.requireActiveUserId
       .mockResolvedValue(
-        authenticatedSession(),
+        'user-1',
       )
+
+    mocks.listUserOrders
+      .mockResolvedValue([])
   })
 
-  test('devolve 401 sem sessão', async () => {
-    mocks.getServerSession
-      .mockResolvedValue(null)
+  test(
+    'devolve 401 quando o utilizador não está autenticado ou ativo',
+    async () => {
+      mocks.requireActiveUserId
+        .mockRejectedValue(
+          new mocks
+            .UnauthorizedUserError(),
+        )
 
-    const response =
-      await GET()
+      const response =
+        await GET()
 
-    expect(
-      response.status,
-    ).toBe(401)
+      expect(
+        response.status,
+      ).toBe(401)
 
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Não autenticado',
-    })
-
-    expect(
-      mocks.listUserOrders,
-    ).not.toHaveBeenCalled()
-  })
-
-  test('devolve 401 quando a sessão não tem utilizador válido', async () => {
-    mocks.getServerSession
-      .mockResolvedValue({
-        user: {
-          id: '   ',
-        },
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Não autenticado',
       })
 
-    const response =
-      await GET()
+      expect(
+        mocks.listUserOrders,
+      ).not.toHaveBeenCalled()
+    },
+  )
 
-    expect(
-      response.status,
-    ).toBe(401)
-
-    expect(
-      mocks.listUserOrders,
-    ).not.toHaveBeenCalled()
-  })
-
-  test('lista apenas encomendas do utilizador autenticado', async () => {
-    const order =
-      createOrder()
-
-    mocks.listUserOrders
-      .mockResolvedValue([
-        order,
-      ])
-
-    const response =
-      await GET()
-
-    expect(
-      response.status,
-    ).toBe(200)
-
-    expect(
-      mocks.listUserOrders,
-    ).toHaveBeenCalledWith(
-      'user-1',
-    )
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      orders: [
+  test(
+    'lista as encomendas do utilizador autenticado e ativo',
+    async () => {
+      const orders = [
         {
-          ...order,
-          createdAt:
-            '2026-09-01T10:00:00.000Z',
+          id: 'order-1',
         },
-      ],
-    })
-  })
+        {
+          id: 'order-2',
+        },
+      ]
 
-  test('devolve 400 para erro de validação do serviço', async () => {
-    mocks.listUserOrders
-      .mockRejectedValue(
-        new mocks.OrderValidationError(
-          'userId',
+      mocks.listUserOrders
+        .mockResolvedValue(
+          orders,
+        )
+
+      const response =
+        await GET()
+
+      expect(
+        response.status,
+      ).toBe(200)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        orders,
+      })
+
+      expect(
+        mocks.requireActiveUserId,
+      ).toHaveBeenCalledTimes(
+        1,
+      )
+
+      expect(
+        mocks.listUserOrders,
+      ).toHaveBeenCalledWith(
+        'user-1',
+      )
+    },
+  )
+
+  test(
+    'devolve lista vazia quando o utilizador não tem encomendas',
+    async () => {
+      mocks.listUserOrders
+        .mockResolvedValue([])
+
+      const response =
+        await GET()
+
+      expect(
+        response.status,
+      ).toBe(200)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        orders: [],
+      })
+
+      expect(
+        mocks.listUserOrders,
+      ).toHaveBeenCalledWith(
+        'user-1',
+      )
+    },
+  )
+
+  test(
+    'devolve 400 para erro de validação',
+    async () => {
+      mocks.listUserOrders
+        .mockRejectedValue(
+          new mocks
+            .OrderValidationError(
+              'Utilizador inválido',
+            ),
+        )
+
+      const response =
+        await GET()
+
+      expect(
+        response.status,
+      ).toBe(400)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
           'Utilizador inválido',
-        ),
+      })
+    },
+  )
+
+  test(
+    'devolve 500 genérico em erro inesperado',
+    async () => {
+      const consoleError =
+        vi.spyOn(
+          console,
+          'error',
+        ).mockImplementation(
+          () => {},
+        )
+
+      mocks.listUserOrders
+        .mockRejectedValue(
+          new Error('erro'),
+        )
+
+      const response =
+        await GET()
+
+      expect(
+        response.status,
+      ).toBe(500)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        error:
+          'Erro interno do servidor',
+      })
+
+      expect(
+        consoleError,
+      ).toHaveBeenCalledWith(
+        'Unexpected orders API error:',
+        expect.any(Error),
       )
 
-    const response =
-      await GET()
-
-    expect(
-      response.status,
-    ).toBe(400)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Utilizador inválido',
-    })
-  })
-
-  test('devolve 500 genérico em erro inesperado', async () => {
-    mocks.listUserOrders
-      .mockRejectedValue(
-        new Error('erro'),
-      )
-
-    const response =
-      await GET()
-
-    expect(
-      response.status,
-    ).toBe(500)
-
-    await expect(
-      response.json(),
-    ).resolves.toEqual({
-      error:
-        'Erro interno do servidor',
-    })
-  })
+      consoleError.mockRestore()
+    },
+  )
 })
