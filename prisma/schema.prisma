@@ -44,18 +44,21 @@ enum CheckoutRegion {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String
-  name            String?
-  role            UserRole         @default(BUYER)
-  isActive        Boolean          @default(true)
-  addresses       Address[]
-  cartItems       CartItem[]
-  guestCartMerges GuestCartMerge[]
-  orders          Order[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                         String           @id @default(cuid())
+  email                      String           @unique
+  passwordHash               String
+  name                       String?
+  role                       UserRole         @default(BUYER)
+  isActive                   Boolean          @default(true)
+  failedLoginAttempts        Int              @default(0)
+  failedLoginWindowStartedAt DateTime?
+  loginBlockedUntil          DateTime?
+  addresses                  Address[]
+  cartItems                  CartItem[]
+  guestCartMerges            GuestCartMerge[]
+  orders                     Order[]
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
 }
 
 model VehicleBrand {

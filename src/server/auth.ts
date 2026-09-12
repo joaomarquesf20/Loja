@@ -10,6 +10,11 @@ import {
 } from '@/lib/validation'
 
 import { prisma } from './db'
+import {
+  clearFailedLogins,
+  isLoginBlocked,
+  recordFailedLogin,
+} from './login-security'
 
 type CredentialsInput =
   | {
@@ -17,6 +22,28 @@ type CredentialsInput =
       password?: string
     }
   | undefined
+
+/*
+ * Hash bcrypt fictício com cost 12.
+ *
+ * É usado apenas para fazer trabalho bcrypt
+ * quando não existe uma conta válida para
+ * comparar, reduzindo diferenças de timing.
+ *
+ * Não corresponde a nenhuma password real
+ * da aplicação.
+ */
+const DUMMY_PASSWORD_HASH =
+  '$2a$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+
+async function performDummyPasswordCheck(
+  password: string,
+) {
+  await compare(
+    password,
+    DUMMY_PASSWORD_HASH,
+  )
+}
 
 export async function authorizeCredentials(
   credentials: CredentialsInput,
@@ -57,14 +84,38 @@ export async function authorizeCredentials(
         role: true,
         isActive: true,
         passwordHash: true,
+        failedLoginAttempts: true,
+        failedLoginWindowStartedAt:
+          true,
+        loginBlockedUntil: true,
       },
     })
 
   if (!user) {
+    await performDummyPasswordCheck(
+      passwordResult.data,
+    )
+
     return null
   }
 
-  if (user.isActive === false) {
+  if (!user.isActive) {
+    await performDummyPasswordCheck(
+      passwordResult.data,
+    )
+
+    return null
+  }
+
+  if (
+    isLoginBlocked(
+      user.loginBlockedUntil,
+    )
+  ) {
+    await performDummyPasswordCheck(
+      passwordResult.data,
+    )
+
     return null
   }
 
@@ -75,8 +126,16 @@ export async function authorizeCredentials(
     )
 
   if (!isPasswordValid) {
+    await recordFailedLogin(
+      user.id,
+    )
+
     return null
   }
+
+  await clearFailedLogins(
+    user.id,
+  )
 
   return {
     id: user.id,

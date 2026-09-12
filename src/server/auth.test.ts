@@ -10,6 +10,9 @@ const mocks = vi.hoisted(
   () => ({
     findUnique: vi.fn(),
     compare: vi.fn(),
+    isLoginBlocked: vi.fn(),
+    recordFailedLogin: vi.fn(),
+    clearFailedLogins: vi.fn(),
   }),
 )
 
@@ -26,6 +29,18 @@ vi.mock('bcryptjs', () => ({
   compare: mocks.compare,
 }))
 
+vi.mock(
+  './login-security',
+  () => ({
+    isLoginBlocked:
+      mocks.isLoginBlocked,
+    recordFailedLogin:
+      mocks.recordFailedLogin,
+    clearFailedLogins:
+      mocks.clearFailedLogins,
+  }),
+)
+
 import {
   authorizeCredentials,
 } from './auth'
@@ -35,6 +50,19 @@ describe(
   () => {
     beforeEach(() => {
       vi.resetAllMocks()
+
+      mocks.isLoginBlocked
+        .mockReturnValue(false)
+
+      mocks.recordFailedLogin
+        .mockResolvedValue(
+          undefined,
+        )
+
+      mocks.clearFailedLogins
+        .mockResolvedValue(
+          undefined,
+        )
     })
 
     test('rejeita credenciais incompletas', async () => {
@@ -54,6 +82,10 @@ describe(
       expect(
         mocks.findUnique,
       ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.compare,
+      ).not.toHaveBeenCalled()
     })
 
     test('rejeita email inválido antes de consultar a base de dados', async () => {
@@ -71,6 +103,10 @@ describe(
 
       expect(
         mocks.findUnique,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.compare,
       ).not.toHaveBeenCalled()
     })
 
@@ -118,7 +154,48 @@ describe(
       ).not.toHaveBeenCalled()
     })
 
-    test('normaliza email antes da pesquisa', async () => {
+    test('faz comparação bcrypt fictícia quando o utilizador não existe', async () => {
+      mocks.findUnique
+        .mockResolvedValue(null)
+
+      mocks.compare
+        .mockResolvedValue(false)
+
+      const result =
+        await authorizeCredentials(
+          {
+            email:
+              'missing@example.com',
+            password:
+              'password123',
+          },
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        mocks.compare,
+      ).toHaveBeenCalledTimes(1)
+
+      expect(
+        mocks.compare,
+      ).toHaveBeenCalledWith(
+        'password123',
+        expect.stringMatching(
+          /^\$2[aby]\$12\$/,
+        ),
+      )
+
+      expect(
+        mocks.recordFailedLogin,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.clearFailedLogins,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('normaliza email antes da pesquisa e limpa falhas após login válido', async () => {
       mocks.findUnique.mockResolvedValue(
         {
           id: 'user-1',
@@ -129,6 +206,10 @@ describe(
           isActive: true,
           passwordHash:
             'password-hash',
+          failedLoginAttempts: 2,
+          failedLoginWindowStartedAt:
+            new Date(),
+          loginBlockedUntil: null,
         },
       )
 
@@ -160,6 +241,10 @@ describe(
           role: true,
           isActive: true,
           passwordHash: true,
+          failedLoginAttempts: true,
+          failedLoginWindowStartedAt:
+            true,
+          loginBlockedUntil: true,
         },
       })
 
@@ -170,6 +255,16 @@ describe(
         'password-hash',
       )
 
+      expect(
+        mocks.clearFailedLogins,
+      ).toHaveBeenCalledWith(
+        'user-1',
+      )
+
+      expect(
+        mocks.recordFailedLogin,
+      ).not.toHaveBeenCalled()
+
       expect(result).toEqual({
         id: 'user-1',
         email:
@@ -179,7 +274,7 @@ describe(
       })
     })
 
-    test('rejeita utilizador inativo sem verificar password', async () => {
+    test('rejeita utilizador inativo com trabalho bcrypt fictício', async () => {
       mocks.findUnique.mockResolvedValue(
         {
           id: 'user-1',
@@ -190,7 +285,15 @@ describe(
           isActive: false,
           passwordHash:
             'password-hash',
+          failedLoginAttempts: 0,
+          failedLoginWindowStartedAt:
+            null,
+          loginBlockedUntil: null,
         },
+      )
+
+      mocks.compare.mockResolvedValue(
+        false,
       )
 
       const result =
@@ -207,10 +310,18 @@ describe(
 
       expect(
         mocks.compare,
+      ).toHaveBeenCalledTimes(1)
+
+      expect(
+        mocks.recordFailedLogin,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.clearFailedLogins,
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita password incorreta', async () => {
+    test('rejeita conta temporariamente bloqueada antes de validar a password real', async () => {
       mocks.findUnique.mockResolvedValue(
         {
           id: 'user-1',
@@ -221,6 +332,70 @@ describe(
           isActive: true,
           passwordHash:
             'password-hash',
+          failedLoginAttempts: 5,
+          failedLoginWindowStartedAt:
+            new Date(),
+          loginBlockedUntil:
+            new Date(
+              Date.now() +
+                60_000,
+            ),
+        },
+      )
+
+      mocks.isLoginBlocked
+        .mockReturnValue(true)
+
+      mocks.compare
+        .mockResolvedValue(false)
+
+      const result =
+        await authorizeCredentials(
+          {
+            email:
+              'buyer@example.com',
+            password:
+              'password123',
+          },
+        )
+
+      expect(result).toBeNull()
+
+      expect(
+        mocks.compare,
+      ).toHaveBeenCalledTimes(1)
+
+      expect(
+        mocks.compare,
+      ).not.toHaveBeenCalledWith(
+        'password123',
+        'password-hash',
+      )
+
+      expect(
+        mocks.recordFailedLogin,
+      ).not.toHaveBeenCalled()
+
+      expect(
+        mocks.clearFailedLogins,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('regista falha quando a password está incorreta', async () => {
+      mocks.findUnique.mockResolvedValue(
+        {
+          id: 'user-1',
+          email:
+            'buyer@example.com',
+          name: 'Buyer',
+          role: 'BUYER',
+          isActive: true,
+          passwordHash:
+            'password-hash',
+          failedLoginAttempts: 1,
+          failedLoginWindowStartedAt:
+            new Date(),
+          loginBlockedUntil: null,
         },
       )
 
@@ -242,7 +417,20 @@ describe(
 
       expect(
         mocks.compare,
-      ).toHaveBeenCalledTimes(1)
+      ).toHaveBeenCalledWith(
+        'password-errada',
+        'password-hash',
+      )
+
+      expect(
+        mocks.recordFailedLogin,
+      ).toHaveBeenCalledWith(
+        'user-1',
+      )
+
+      expect(
+        mocks.clearFailedLogins,
+      ).not.toHaveBeenCalled()
     })
   },
 )
