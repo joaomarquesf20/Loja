@@ -1,7 +1,5 @@
-import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
 
-import { authOptions } from '@/server/auth'
 import {
   CheckoutCartChangedError,
   CheckoutEmptyCartError,
@@ -9,20 +7,50 @@ import {
   CheckoutPreviewChangedError,
   CheckoutPricingError,
   CheckoutProductUnavailableError,
+  type CheckoutContactInput,
+  type CheckoutFulfillmentInput,
   type CheckoutShippingInput,
   CheckoutUserUnavailableError,
   CheckoutValidationError,
   createCheckoutOrder,
 } from '@/server/checkout'
+import {
+  InvalidJsonBodyError,
+  readJsonBody,
+  RequestPayloadTooLargeError,
+} from '@/server/http-request'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
+
+const CHECKOUT_JSON_LIMIT_BYTES =
+  32 * 1024
+
+type CheckoutApiErrorCode =
+  | 'UNAUTHENTICATED'
+  | 'INVALID_JSON'
+  | 'PAYLOAD_TOO_LARGE'
+  | 'INVALID_REQUEST'
+  | 'INVALID_FULFILLMENT_METHOD'
+  | 'INVALID_SHIPPING'
+  | 'INVALID_FINGERPRINT'
+  | 'CHECKOUT_PREVIEW_CHANGED'
 
 function errorResponse(
   message: string,
   status: number,
+  code?: CheckoutApiErrorCode,
 ) {
   return NextResponse.json(
-    {
-      error: message,
-    },
+    code
+      ? {
+          error: message,
+          code,
+        }
+      : {
+          error: message,
+        },
     {
       status,
     },
@@ -39,17 +67,29 @@ function isRecord(
   )
 }
 
-async function getAuthenticatedUserId() {
-  const session =
-    await getServerSession(authOptions)
+function parseContactInput(
+  value: unknown,
+): CheckoutContactInput | null {
+  if (!isRecord(value)) {
+    return null
+  }
 
-  const userId =
-    session?.user?.id?.trim()
+  const { name, phone } = value
 
-  return userId || null
+  if (
+    typeof name !== 'string' ||
+    typeof phone !== 'string'
+  ) {
+    return null
+  }
+
+  return {
+    name,
+    phone,
+  }
 }
 
-function parseShippingInput(
+function parseDeliveryShippingInput(
   value: unknown,
 ): CheckoutShippingInput | null {
   if (!isRecord(value)) {
@@ -103,13 +143,47 @@ function parseShippingInput(
 function handleCheckoutError(
   error: unknown,
 ) {
-  if (error instanceof CheckoutPreviewChangedError) {
-    return NextResponse.json(
-      {
-        error: error.message,
-        code: 'CHECKOUT_PREVIEW_CHANGED',
-      },
-      { status: 409 },
+  if (
+    error instanceof
+    UnauthorizedUserError
+  ) {
+    return errorResponse(
+      'Não autenticado',
+      401,
+      'UNAUTHENTICATED',
+    )
+  }
+
+  if (
+    error instanceof
+    RequestPayloadTooLargeError
+  ) {
+    return errorResponse(
+      'Pedido demasiado grande',
+      413,
+      'PAYLOAD_TOO_LARGE',
+    )
+  }
+
+  if (
+    error instanceof
+    InvalidJsonBodyError
+  ) {
+    return errorResponse(
+      'JSON inválido',
+      400,
+      'INVALID_JSON',
+    )
+  }
+
+  if (
+    error instanceof
+    CheckoutPreviewChangedError
+  ) {
+    return errorResponse(
+      error.message,
+      409,
+      'CHECKOUT_PREVIEW_CHANGED',
     )
   }
 
@@ -167,62 +241,105 @@ export async function POST(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        401,
-      )
-    }
-
-    let body: unknown
-
-    try {
-      body = await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        400,
-      )
-    }
+    const body = await readJsonBody(
+      request,
+      CHECKOUT_JSON_LIMIT_BYTES,
+    )
 
     if (!isRecord(body)) {
       return errorResponse(
         'Pedido inválido',
         400,
+        'INVALID_REQUEST',
       )
     }
 
-    const shipping =
-      parseShippingInput(
-        body.shipping,
-      )
-
-    if (!shipping) {
-      return errorResponse(
-        'Dados de entrega inválidos',
-        400,
-      )
-    }
-
-    const expectedFingerprint = body.expectedFingerprint
+    const fulfillmentMethod =
+      body.fulfillmentMethod
 
     if (
-      typeof expectedFingerprint !== 'string' ||
+      fulfillmentMethod !==
+        'DELIVERY' &&
+      fulfillmentMethod !==
+        'PICKUP'
+    ) {
+      return errorResponse(
+        'Método de entrega inválido',
+        400,
+        'INVALID_FULFILLMENT_METHOD',
+      )
+    }
+
+    let fulfillment:
+      CheckoutFulfillmentInput
+
+    if (
+      fulfillmentMethod ===
+      'DELIVERY'
+    ) {
+      const shipping =
+        parseDeliveryShippingInput(
+          body.shipping,
+        )
+
+      if (!shipping) {
+        return errorResponse(
+          'Dados de entrega inválidos',
+          400,
+          'INVALID_SHIPPING',
+        )
+      }
+
+      fulfillment = {
+        fulfillmentMethod:
+          'DELIVERY',
+        shipping,
+      }
+    } else {
+      const shipping =
+        parseContactInput(
+          body.shipping,
+        )
+
+      if (!shipping) {
+        return errorResponse(
+          'Dados para levantamento inválidos',
+          400,
+          'INVALID_SHIPPING',
+        )
+      }
+
+      fulfillment = {
+        fulfillmentMethod:
+          'PICKUP',
+        shipping,
+      }
+    }
+
+    const expectedFingerprint =
+      body.expectedFingerprint
+
+    if (
+      typeof expectedFingerprint !==
+        'string' ||
       expectedFingerprint.length !== 64 ||
-      !/^[0-9a-f]{64}$/.test(expectedFingerprint)
+      !/^[0-9a-f]{64}$/.test(
+        expectedFingerprint,
+      )
     ) {
       return errorResponse(
         'Referência de preview inválida. Calcula novamente o total.',
         400,
+        'INVALID_FINGERPRINT',
       )
     }
 
     const order =
       await createCheckoutOrder(
         userId,
-        shipping,
+        fulfillment,
         expectedFingerprint,
       )
 

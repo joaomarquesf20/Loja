@@ -58,16 +58,34 @@ type CheckoutOrderRecord = {
   paymentStatus: string
 }
 
-export type CheckoutShippingInput = {
+export type CheckoutFulfillmentMethod =
+  | 'DELIVERY'
+  | 'PICKUP'
+
+export type CheckoutContactInput = {
   name: string
   phone: string
-  addressLine1: string
-  addressLine2?: string | null
-  city: string
-  postalCode: string
-  country: string
-  region: CommercialCheckoutRegion
 }
+
+export type CheckoutShippingInput =
+  CheckoutContactInput & {
+    addressLine1: string
+    addressLine2?: string | null
+    city: string
+    postalCode: string
+    country: string
+    region: CommercialCheckoutRegion
+  }
+
+export type CheckoutFulfillmentInput =
+  | {
+      fulfillmentMethod: 'DELIVERY'
+      shipping: CheckoutShippingInput
+    }
+  | {
+      fulfillmentMethod: 'PICKUP'
+      shipping: CheckoutContactInput
+    }
 
 export type CheckoutShipping = {
   name: string
@@ -80,9 +98,25 @@ export type CheckoutShipping = {
   region: 'PORTUGAL_MAINLAND'
 }
 
+type CheckoutContact = {
+  name: string
+  phone: string
+}
+
+type NormalizedCheckoutInput =
+  | {
+      fulfillmentMethod: 'DELIVERY'
+      shipping: CheckoutShipping
+    }
+  | {
+      fulfillmentMethod: 'PICKUP'
+      shipping: CheckoutContact
+    }
+
 export type CheckoutResult = {
   id: string
   orderNumber: string
+  fulfillmentMethod: CheckoutFulfillmentMethod
   subtotal: number
   shippingCost: number
   tax: number
@@ -280,18 +314,28 @@ type CheckoutTransactionClient =
           shippingCost: string
           tax: string
           total: string
+          fulfillmentMethod: CheckoutFulfillmentMethod
           shippingName: string
           shippingEmail: string
           shippingPhone: string
-          shippingAddressLine1: string
+          shippingAddressLine1:
+            | string
+            | null
           shippingAddressLine2:
             | string
             | null
-          shippingCity: string
-          shippingPostalCode: string
-          shippingCountry: string
+          shippingCity:
+            | string
+            | null
+          shippingPostalCode:
+            | string
+            | null
+          shippingCountry:
+            | string
+            | null
           shippingRegion:
-            'PORTUGAL_MAINLAND'
+            | 'PORTUGAL_MAINLAND'
+            | null
           shippingClassApplied:
             | CommercialShippingClass
             | null
@@ -500,9 +544,9 @@ function normalizeMainlandPostalCode(
   return parsed.postalCode
 }
 
-function normalizeShipping(
-  input: CheckoutShippingInput,
-): CheckoutShipping {
+function normalizeContact(
+  input: CheckoutContactInput,
+): CheckoutContact {
   return {
     name: normalizeRequiredText(
       input.name,
@@ -514,6 +558,17 @@ function normalizeShipping(
       'Telefone',
       30,
     ),
+  }
+}
+
+function normalizeShipping(
+  input: CheckoutShippingInput,
+): CheckoutShipping {
+  const contact =
+    normalizeContact(input)
+
+  return {
+    ...contact,
     addressLine1:
       normalizeRequiredText(
         input.addressLine1,
@@ -542,6 +597,67 @@ function normalizeShipping(
       input.region,
     ),
   }
+}
+
+function isCheckoutFulfillmentInput(
+  input:
+    | CheckoutFulfillmentInput
+    | CheckoutShippingInput,
+): input is CheckoutFulfillmentInput {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'fulfillmentMethod' in input
+  )
+}
+
+function normalizeFulfillmentInput(
+  input:
+    | CheckoutFulfillmentInput
+    | CheckoutShippingInput,
+): NormalizedCheckoutInput {
+  if (!isCheckoutFulfillmentInput(input)) {
+    return {
+      fulfillmentMethod: 'DELIVERY',
+      shipping: normalizeShipping(
+        input,
+      ),
+    }
+  }
+
+  if (
+    input.fulfillmentMethod ===
+    'DELIVERY'
+  ) {
+    return {
+      fulfillmentMethod: 'DELIVERY',
+      shipping: normalizeShipping(
+        input.shipping,
+      ),
+    }
+  }
+
+  if (
+    input.fulfillmentMethod ===
+    'PICKUP'
+  ) {
+    return {
+      fulfillmentMethod: 'PICKUP',
+      shipping: normalizeContact(
+        input.shipping,
+      ),
+    }
+  }
+
+  throw new CheckoutValidationError(
+    'Método de entrega inválido',
+  )
+}
+
+function getCheckoutContact(
+  input: NormalizedCheckoutInput,
+) {
+  return input.shipping
 }
 
 function normalizeUserId(
@@ -686,6 +802,78 @@ function centsToNumber(
   return cents / 100
 }
 
+function calculateIncludedTaxCents(
+  totalCents: number,
+  taxRatePercent: CheckoutPrice,
+) {
+  const taxRateBasisPoints =
+    decimalValueToCents(
+      taxRatePercent,
+      () =>
+        new CheckoutPricingError(
+          'Taxa de IVA inválida',
+        ),
+    )
+
+  if (taxRateBasisPoints === 0) {
+    return 0
+  }
+
+  const numerator =
+    totalCents *
+    taxRateBasisPoints
+
+  if (
+    !Number.isSafeInteger(numerator) ||
+    numerator < 0
+  ) {
+    throw new CheckoutPricingError()
+  }
+
+  const denominator =
+    10_000 + taxRateBasisPoints
+  const result = Math.round(
+    numerator / denominator,
+  )
+
+  if (
+    !Number.isSafeInteger(result) ||
+    result < 0
+  ) {
+    throw new CheckoutPricingError()
+  }
+
+  return result
+}
+
+type CheckoutPricing = ReturnType<
+  typeof calculateShippingPricing
+>
+
+function createPickupPricing(
+  pricing: CheckoutPricing,
+): CheckoutPricing {
+  const productsSubtotalCents =
+    pricing.productsSubtotalCents
+
+  return {
+    ...pricing,
+    nonVolumousSubtotalCents:
+      productsSubtotalCents,
+    nonVolumousShippingCents: 0,
+    bulkyShippingCents: 0,
+    shippingTotalCents: 0,
+    includedTaxCents:
+      calculateIncludedTaxCents(
+        productsSubtotalCents,
+        pricing.taxRatePercent,
+      ),
+    totalCents: productsSubtotalCents,
+    freeShippingApplied: false,
+    freeShippingThresholdCents: null,
+  }
+}
+
 function getMainlandShippingCost(
   product: CheckoutProductRecord,
 ) {
@@ -813,7 +1001,7 @@ async function runSerializableTransaction<T>(
 async function prepareCheckout(
   tx: CheckoutTransactionClient,
   normalizedUserId: string,
-  shipping: CheckoutShipping,
+  fulfillment: NormalizedCheckoutInput,
 ) {
   const user =
     await tx.user.findFirst({
@@ -952,7 +1140,7 @@ async function prepareCheckout(
     })
   }
 
-  let pricing
+  let pricing: CheckoutPricing
 
   try {
     const settings =
@@ -960,27 +1148,59 @@ async function prepareCheckout(
         tx,
       )
 
-    pricing =
-      calculateShippingPricing({
-        settings,
-        region:
-          shipping.region,
-        items:
-          preparedItems.map(
-            (item) => ({
-              productId:
-                item.productId,
-              quantity:
-                item.quantity,
-              unitPrice:
-                item.price,
-              shippingClass:
-                item.shippingClass,
-              mainlandShippingCost:
-                item.mainlandShippingCost,
-            }),
-          ),
-      })
+    if (
+      fulfillment.fulfillmentMethod ===
+      'DELIVERY'
+    ) {
+      pricing =
+        calculateShippingPricing({
+          settings,
+          region:
+            fulfillment.shipping.region,
+          items:
+            preparedItems.map(
+              (item) => ({
+                productId:
+                  item.productId,
+                quantity:
+                  item.quantity,
+                unitPrice:
+                  item.price,
+                shippingClass:
+                  item.shippingClass,
+                mainlandShippingCost:
+                  item.mainlandShippingCost,
+              }),
+            ),
+        })
+    } else {
+      const pickupPricing =
+        calculateShippingPricing({
+          settings,
+          region:
+            'PORTUGAL_MAINLAND',
+          items:
+            preparedItems.map(
+              (item) => ({
+                productId:
+                  item.productId,
+                quantity:
+                  item.quantity,
+                unitPrice:
+                  item.price,
+                shippingClass:
+                  'SMALL' as const,
+                mainlandShippingCost:
+                  null,
+              }),
+            ),
+        })
+
+      pricing =
+        createPickupPricing(
+          pickupPricing,
+        )
+    }
   } catch (error) {
     if (
       error instanceof
@@ -1014,78 +1234,141 @@ async function prepareCheckout(
 }
 
 function createCheckoutFingerprint(
-  prepared: Awaited<ReturnType<typeof prepareCheckout>>,
-  shipping: CheckoutShipping,
+  prepared: Awaited<
+    ReturnType<
+      typeof prepareCheckout
+    >
+  >,
+  fulfillment: NormalizedCheckoutInput,
 ) {
-  const { user, shippingEmail, preparedItems, pricing } = prepared
+  const {
+    user,
+    shippingEmail,
+    preparedItems,
+    pricing,
+  } = prepared
 
-  // Only effective order terms belong here: stock and cart-row IDs are not material.
+  const contact =
+    getCheckoutContact(
+      fulfillment,
+    )
+
+  const delivery =
+    fulfillment.fulfillmentMethod ===
+    'DELIVERY'
+      ? fulfillment.shipping
+      : null
+
   const snapshot = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     userId: user.id,
     shippingEmail,
-    shipping: {
-      name: shipping.name,
-      phone: shipping.phone,
-      addressLine1: shipping.addressLine1,
-      addressLine2: shipping.addressLine2,
-      city: shipping.city,
-      postalCode: shipping.postalCode,
-      country: shipping.country,
-      region: shipping.region,
+    fulfillmentMethod:
+      fulfillment.fulfillmentMethod,
+    contact: {
+      name: contact.name,
+      phone: contact.phone,
     },
+    delivery:
+      delivery === null
+        ? null
+        : {
+            addressLine1:
+              delivery.addressLine1,
+            addressLine2:
+              delivery.addressLine2,
+            city: delivery.city,
+            postalCode:
+              delivery.postalCode,
+            country:
+              delivery.country,
+            region: delivery.region,
+          },
     items: [...preparedItems]
       .sort((first, second) => {
-        if (first.productId === second.productId) {
+        if (
+          first.productId ===
+          second.productId
+        ) {
           return 0
         }
-        return first.productId < second.productId ? -1 : 1
+
+        return first.productId <
+          second.productId
+          ? -1
+          : 1
       })
       .map((item) => {
-        const shippingCost = getShippingCostSnapshot(item)
+        const shippingCost =
+          fulfillment.fulfillmentMethod ===
+          'DELIVERY'
+            ? getShippingCostSnapshot(
+                item,
+              )
+            : null
 
         return {
           productId: item.productId,
           name: item.name,
           sku: item.sku,
           quantity: item.quantity,
-          unitPriceCents: item.priceCents,
-          subtotalCents: item.subtotalCents,
-          shippingClass: item.shippingClass,
+          unitPriceCents:
+            item.priceCents,
+          subtotalCents:
+            item.subtotalCents,
+          shippingClass:
+            item.shippingClass,
           bulkyShippingUnitCostCents:
-            shippingCost === null ? null : shippingCostToCents(shippingCost),
+            shippingCost === null
+              ? null
+              : shippingCostToCents(
+                  shippingCost,
+                ),
         }
       }),
     pricing: {
       region: pricing.region,
-      pricesIncludeTax: pricing.pricesIncludeTax,
-      taxRatePercent: centsToString(
-        decimalValueToCents(
-          pricing.taxRatePercent,
-          () => new CheckoutPricingError(),
+      pricesIncludeTax:
+        pricing.pricesIncludeTax,
+      taxRatePercent:
+        centsToString(
+          decimalValueToCents(
+            pricing.taxRatePercent,
+            () =>
+              new CheckoutPricingError(),
+          ),
         ),
-      ),
-      productsSubtotalCents: pricing.productsSubtotalCents,
-      nonVolumousSubtotalCents: pricing.nonVolumousSubtotalCents,
-      nonVolumousShippingCents: pricing.nonVolumousShippingCents,
-      bulkyShippingCents: pricing.bulkyShippingCents,
-      shippingTotalCents: pricing.shippingTotalCents,
-      includedTaxCents: pricing.includedTaxCents,
-      totalCents: pricing.totalCents,
-      freeShippingApplied: pricing.freeShippingApplied,
-      freeShippingThresholdCents: pricing.freeShippingThresholdCents,
+      productsSubtotalCents:
+        pricing.productsSubtotalCents,
+      nonVolumousSubtotalCents:
+        pricing.nonVolumousSubtotalCents,
+      nonVolumousShippingCents:
+        pricing.nonVolumousShippingCents,
+      bulkyShippingCents:
+        pricing.bulkyShippingCents,
+      shippingTotalCents:
+        pricing.shippingTotalCents,
+      includedTaxCents:
+        pricing.includedTaxCents,
+      totalCents:
+        pricing.totalCents,
+      freeShippingApplied:
+        pricing.freeShippingApplied,
+      freeShippingThresholdCents:
+        pricing.freeShippingThresholdCents,
     },
   }
 
   return createHash('sha256')
-    .update(JSON.stringify(snapshot), 'utf8')
+    .update(
+      JSON.stringify(snapshot),
+      'utf8',
+    )
     .digest('hex')
 }
 
 function createCheckoutAmounts(
-  pricing: ReturnType<
-    typeof calculateShippingPricing
-  >,
+  pricing: CheckoutPricing,
 ): CheckoutAmounts {
   return {
     subtotal:
@@ -1108,16 +1391,17 @@ function createCheckoutAmounts(
 
 export async function previewCheckout(
   userId: string,
-  shippingInput:
-    CheckoutShippingInput,
+  input:
+    | CheckoutFulfillmentInput
+    | CheckoutShippingInput,
   client?: CheckoutClient,
 ): Promise<CheckoutPreviewResult> {
   const normalizedUserId =
     normalizeUserId(userId)
 
-  const shipping =
-    normalizeShipping(
-      shippingInput,
+  const fulfillment =
+    normalizeFulfillmentInput(
+      input,
     )
 
   const db = getClient(client)
@@ -1129,12 +1413,18 @@ export async function previewCheckout(
         await prepareCheckout(
           tx,
           normalizedUserId,
-          shipping,
+          fulfillment,
         )
 
       return {
-        ...createCheckoutAmounts(prepared.pricing),
-        fingerprint: createCheckoutFingerprint(prepared, shipping),
+        ...createCheckoutAmounts(
+          prepared.pricing,
+        ),
+        fingerprint:
+          createCheckoutFingerprint(
+            prepared,
+            fulfillment,
+          ),
       }
     },
   )
@@ -1142,38 +1432,51 @@ export async function previewCheckout(
 
 export async function createCheckoutOrder(
   userId: string,
-  shippingInput:
-    CheckoutShippingInput,
+  input:
+    | CheckoutFulfillmentInput
+    | CheckoutShippingInput,
   expectedFingerprint: string,
   client?: CheckoutClient,
 ): Promise<CheckoutResult> {
   const normalizedUserId =
     normalizeUserId(userId)
 
-  const shipping =
-    normalizeShipping(
-      shippingInput,
+  const fulfillment =
+    normalizeFulfillmentInput(
+      input,
     )
 
-  validateExpectedFingerprint(expectedFingerprint)
+  validateExpectedFingerprint(
+    expectedFingerprint,
+  )
 
   const db = getClient(client)
 
   return runSerializableTransaction(
     db,
     async (tx) => {
-      const prepared = await prepareCheckout(
-        tx,
-        normalizedUserId,
-        shipping,
-      )
+      const prepared =
+        await prepareCheckout(
+          tx,
+          normalizedUserId,
+          fulfillment,
+        )
 
-      // Recheck the original precondition on every serializable transaction attempt.
-      if (createCheckoutFingerprint(prepared, shipping) !== expectedFingerprint) {
+      if (
+        createCheckoutFingerprint(
+          prepared,
+          fulfillment,
+        ) !== expectedFingerprint
+      ) {
         throw new CheckoutPreviewChangedError()
       }
 
-      const { user, shippingEmail, preparedItems, pricing } = prepared
+      const {
+        user,
+        shippingEmail,
+        preparedItems,
+        pricing,
+      } = prepared
 
       for (
         const item of preparedItems
@@ -1204,6 +1507,15 @@ export async function createCheckoutOrder(
 
       const orderNumber =
         createOrderNumber()
+      const contact =
+        getCheckoutContact(
+          fulfillment,
+        )
+      const delivery =
+        fulfillment.fulfillmentMethod ===
+        'DELIVERY'
+          ? fulfillment.shipping
+          : null
 
       const order =
         await tx.order.create({
@@ -1229,29 +1541,43 @@ export async function createCheckoutOrder(
               centsToString(
                 pricing.totalCents,
               ),
+            fulfillmentMethod:
+              fulfillment
+                .fulfillmentMethod,
             shippingName:
-              shipping.name,
+              contact.name,
             shippingEmail,
             shippingPhone:
-              shipping.phone,
+              contact.phone,
             shippingAddressLine1:
-              shipping.addressLine1,
+              delivery?.addressLine1 ??
+              null,
             shippingAddressLine2:
-              shipping.addressLine2,
+              delivery?.addressLine2 ??
+              null,
             shippingCity:
-              shipping.city,
+              delivery?.city ?? null,
             shippingPostalCode:
-              shipping.postalCode,
+              delivery?.postalCode ??
+              null,
             shippingCountry:
-              shipping.country,
+              delivery?.country ?? null,
             shippingRegion:
-              pricing.region,
+              delivery?.region ?? null,
             shippingClassApplied:
-              getSingleShippingClass(
-                preparedItems,
-              ),
+              delivery === null
+                ? null
+                : getSingleShippingClass(
+                    preparedItems,
+                  ),
             taxRatePercent:
-              pricing.taxRatePercent,
+              centsToString(
+                decimalValueToCents(
+                  pricing.taxRatePercent,
+                  () =>
+                    new CheckoutPricingError(),
+                ),
+              ),
             pricesIncludeTax:
               pricing.pricesIncludeTax,
             nonVolumousSubtotal:
@@ -1313,9 +1639,13 @@ export async function createCheckoutOrder(
             shippingClassAtPurchase:
               item.shippingClass,
             shippingCostAtPurchase:
-              getShippingCostSnapshot(
-                item,
-              ),
+              fulfillment
+                .fulfillmentMethod ===
+              'DELIVERY'
+                ? getShippingCostSnapshot(
+                    item,
+                  )
+                : null,
           }),
         ),
       })
@@ -1336,6 +1666,9 @@ export async function createCheckoutOrder(
         id: order.id,
         orderNumber:
           order.orderNumber,
+        fulfillmentMethod:
+          fulfillment
+            .fulfillmentMethod,
         ...createCheckoutAmounts(
           pricing,
         ),

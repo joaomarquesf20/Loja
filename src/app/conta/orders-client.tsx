@@ -5,6 +5,10 @@ import {
   useState,
 } from 'react'
 
+type FulfillmentMethod =
+  | 'DELIVERY'
+  | 'PICKUP'
+
 type OrderItem = {
   id: string
   productNameAtPurchase: string
@@ -23,14 +27,21 @@ type Order = {
   total: string
   status: string
   paymentStatus: string
+  fulfillmentMethod:
+    FulfillmentMethod
   shippingName: string
   shippingEmail: string
   shippingPhone: string
-  shippingAddressLine1: string
-  shippingAddressLine2: string | null
-  shippingCity: string
-  shippingPostalCode: string
-  shippingCountry: string
+  shippingAddressLine1:
+    string | null
+  shippingAddressLine2:
+    string | null
+  shippingCity:
+    string | null
+  shippingPostalCode:
+    string | null
+  shippingCountry:
+    string | null
   createdAt: string
   items: OrderItem[]
 }
@@ -104,12 +115,77 @@ function isValidDateString(
   )
 }
 
+function isFulfillmentMethod(
+  value: unknown,
+): value is FulfillmentMethod {
+  return (
+    value === 'DELIVERY' ||
+    value === 'PICKUP'
+  )
+}
+
+function hasValidDeliveryAddress(
+  value: Record<string, unknown>,
+) {
+  return (
+    typeof value.shippingAddressLine1 ===
+      'string' &&
+    (
+      value.shippingAddressLine2 ===
+        null ||
+      typeof value.shippingAddressLine2 ===
+        'string'
+    ) &&
+    typeof value.shippingCity ===
+      'string' &&
+    typeof value.shippingPostalCode ===
+      'string' &&
+    typeof value.shippingCountry ===
+      'string'
+  )
+}
+
+function hasValidPickupAddress(
+  value: Record<string, unknown>,
+) {
+  return (
+    value.shippingAddressLine1 ===
+      null &&
+    value.shippingAddressLine2 ===
+      null &&
+    value.shippingCity ===
+      null &&
+    value.shippingPostalCode ===
+      null &&
+    value.shippingCountry ===
+      null
+  )
+}
+
 function isOrder(
   value: unknown,
 ): value is Order {
   if (!isRecord(value)) {
     return false
   }
+
+  if (
+    !isFulfillmentMethod(
+      value.fulfillmentMethod,
+    )
+  ) {
+    return false
+  }
+
+  const hasValidFulfillmentData =
+    value.fulfillmentMethod ===
+    'DELIVERY'
+      ? hasValidDeliveryAddress(
+          value,
+        )
+      : hasValidPickupAddress(
+          value,
+        )
 
   return (
     typeof value.id === 'string' &&
@@ -131,20 +207,7 @@ function isOrder(
       'string' &&
     typeof value.shippingPhone ===
       'string' &&
-    typeof value.shippingAddressLine1 ===
-      'string' &&
-    (
-      value.shippingAddressLine2 ===
-        null ||
-      typeof value.shippingAddressLine2 ===
-        'string'
-    ) &&
-    typeof value.shippingCity ===
-      'string' &&
-    typeof value.shippingPostalCode ===
-      'string' &&
-    typeof value.shippingCountry ===
-      'string' &&
+    hasValidFulfillmentData &&
     isValidDateString(
       value.createdAt,
     ) &&
@@ -256,6 +319,10 @@ function getOrderStatusLabel(
       return 'Enviada'
     case 'DELIVERED':
       return 'Entregue'
+    case 'READY_FOR_PICKUP':
+      return 'Pronta para levantamento'
+    case 'PICKED_UP':
+      return 'Levantada'
     case 'CANCELLED':
       return 'Cancelada'
     default:
@@ -416,212 +483,245 @@ export function OrdersClient() {
       ) : (
         <div className="mt-6 space-y-5">
           {orders.map(
-            (order) => (
-              <article
-                key={order.id}
-                className="rounded-lg border p-5"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="font-semibold">
-                      Encomenda{' '}
-                      {order.orderNumber}
-                    </h3>
+            (order) => {
+              const isPickup =
+                order.fulfillmentMethod ===
+                'PICKUP'
 
-                    <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                      {formatDate(
-                        order.createdAt,
-                      )}
-                    </p>
+              return (
+                <article
+                  key={order.id}
+                  className="rounded-lg border p-5"
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="font-semibold">
+                        Encomenda{' '}
+                        {
+                          order.orderNumber
+                        }
+                      </h3>
+
+                      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                        {formatDate(
+                          order.createdAt,
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="text-sm sm:text-right">
+                      <p>
+                        Estado:{' '}
+                        <span className="font-semibold">
+                          {getOrderStatusLabel(
+                            order.status,
+                          )}
+                        </span>
+                      </p>
+
+                      <p className="mt-1">
+                        Pagamento:{' '}
+                        <span className="font-semibold">
+                          {getPaymentStatusLabel(
+                            order.paymentStatus,
+                          )}
+                        </span>
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="text-sm sm:text-right">
-                    <p>
-                      Estado:{' '}
-                      <span className="font-semibold">
-                        {getOrderStatusLabel(
-                          order.status,
-                        )}
-                      </span>
-                    </p>
+                  <div className="mt-5 border-t pt-5">
+                    <h4 className="font-semibold">
+                      Artigos
+                    </h4>
 
-                    <p className="mt-1">
-                      Pagamento:{' '}
-                      <span className="font-semibold">
-                        {getPaymentStatusLabel(
-                          order.paymentStatus,
-                        )}
-                      </span>
-                    </p>
-                  </div>
-                </div>
+                    <div className="mt-3 space-y-3">
+                      {order.items.map(
+                        (item) => (
+                          <div
+                            key={item.id}
+                            className="flex flex-col gap-2 rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-900 sm:flex-row sm:items-start sm:justify-between"
+                          >
+                            <div>
+                              <p className="font-medium">
+                                {
+                                  item.productNameAtPurchase
+                                }
+                              </p>
 
-                <div className="mt-5 border-t pt-5">
-                  <h4 className="font-semibold">
-                    Artigos
-                  </h4>
+                              <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                SKU:{' '}
+                                {
+                                  item.productSkuAtPurchase
+                                }
+                              </p>
 
-                  <div className="mt-3 space-y-3">
-                    {order.items.map(
-                      (item) => (
-                        <div
-                          key={item.id}
-                          className="flex flex-col gap-2 rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-900 sm:flex-row sm:items-start sm:justify-between"
-                        >
-                          <div>
-                            <p className="font-medium">
-                              {
-                                item.productNameAtPurchase
-                              }
-                            </p>
+                              <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                Quantidade:{' '}
+                                {
+                                  item.quantity
+                                }
+                              </p>
 
-                            <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                              SKU:{' '}
-                              {
-                                item.productSkuAtPurchase
-                              }
-                            </p>
+                              <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                Preço
+                                unitário:{' '}
+                                {formatMoney(
+                                  item.priceAtPurchase,
+                                )}
+                              </p>
+                            </div>
 
-                            <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                              Quantidade:{' '}
-                              {
-                                item.quantity
-                              }
-                            </p>
-
-                            <p className="mt-1 text-neutral-600 dark:text-neutral-400">
-                              Preço unitário:{' '}
+                            <strong>
                               {formatMoney(
-                                item.priceAtPurchase,
+                                item.subtotalAtPurchase,
                               )}
-                            </p>
+                            </strong>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-5 border-t pt-5 sm:grid-cols-2">
+                    <div>
+                      <h4 className="font-semibold">
+                        {isPickup
+                          ? 'Levantamento em loja'
+                          : 'Entrega'}
+                      </h4>
+
+                      {isPickup ? (
+                        <div className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
+                          <div>
+                            {
+                              order.shippingName
+                            }
                           </div>
 
-                          <strong>
+                          <div>
+                            {
+                              order.shippingEmail
+                            }
+                          </div>
+
+                          <div>
+                            {
+                              order.shippingPhone
+                            }
+                          </div>
+                        </div>
+                      ) : (
+                        <address className="mt-2 not-italic text-sm leading-6 text-neutral-600 dark:text-neutral-400">
+                          <div>
+                            {
+                              order.shippingName
+                            }
+                          </div>
+
+                          <div>
+                            {
+                              order.shippingAddressLine1
+                            }
+                          </div>
+
+                          {order.shippingAddressLine2 ? (
+                            <div>
+                              {
+                                order.shippingAddressLine2
+                              }
+                            </div>
+                          ) : null}
+
+                          <div>
+                            {
+                              order.shippingPostalCode
+                            }{' '}
+                            {
+                              order.shippingCity
+                            }
+                          </div>
+
+                          <div>
+                            {
+                              order.shippingCountry
+                            }
+                          </div>
+
+                          <div>
+                            {
+                              order.shippingEmail
+                            }
+                          </div>
+
+                          <div>
+                            {
+                              order.shippingPhone
+                            }
+                          </div>
+                        </address>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold">
+                        Totais
+                      </h4>
+
+                      <dl className="mt-2 space-y-2 text-sm">
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-neutral-600 dark:text-neutral-400">
+                            Subtotal
+                          </dt>
+
+                          <dd>
                             {formatMoney(
-                              item.subtotalAtPurchase,
+                              order.subtotal,
                             )}
-                          </strong>
+                          </dd>
                         </div>
-                      ),
-                    )}
-                  </div>
-                </div>
 
-                <div className="mt-5 grid gap-5 border-t pt-5 sm:grid-cols-2">
-                  <div>
-                    <h4 className="font-semibold">
-                      Entrega
-                    </h4>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-neutral-600 dark:text-neutral-400">
+                            Portes
+                          </dt>
 
-                    <address className="mt-2 not-italic text-sm leading-6 text-neutral-600 dark:text-neutral-400">
-                      <div>
-                        {
-                          order.shippingName
-                        }
-                      </div>
-
-                      <div>
-                        {
-                          order.shippingAddressLine1
-                        }
-                      </div>
-
-                      {order.shippingAddressLine2 ? (
-                        <div>
-                          {
-                            order.shippingAddressLine2
-                          }
+                          <dd>
+                            {formatMoney(
+                              order.shippingCost,
+                            )}
+                          </dd>
                         </div>
-                      ) : null}
 
-                      <div>
-                        {
-                          order.shippingPostalCode
-                        }{' '}
-                        {
-                          order.shippingCity
-                        }
-                      </div>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-neutral-600 dark:text-neutral-400">
+                            Imposto
+                          </dt>
 
-                      <div>
-                        {
-                          order.shippingCountry
-                        }
-                      </div>
+                          <dd>
+                            {formatMoney(
+                              order.tax,
+                            )}
+                          </dd>
+                        </div>
 
-                      <div>
-                        {
-                          order.shippingEmail
-                        }
-                      </div>
+                        <div className="flex justify-between gap-4 border-t pt-2 font-semibold">
+                          <dt>
+                            Total
+                          </dt>
 
-                      <div>
-                        {
-                          order.shippingPhone
-                        }
-                      </div>
-                    </address>
+                          <dd>
+                            {formatMoney(
+                              order.total,
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
                   </div>
-
-                  <div>
-                    <h4 className="font-semibold">
-                      Totais
-                    </h4>
-
-                    <dl className="mt-2 space-y-2 text-sm">
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-neutral-600 dark:text-neutral-400">
-                          Subtotal
-                        </dt>
-
-                        <dd>
-                          {formatMoney(
-                            order.subtotal,
-                          )}
-                        </dd>
-                      </div>
-
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-neutral-600 dark:text-neutral-400">
-                          Portes
-                        </dt>
-
-                        <dd>
-                          {formatMoney(
-                            order.shippingCost,
-                          )}
-                        </dd>
-                      </div>
-
-                      <div className="flex justify-between gap-4">
-                        <dt className="text-neutral-600 dark:text-neutral-400">
-                          Imposto
-                        </dt>
-
-                        <dd>
-                          {formatMoney(
-                            order.tax,
-                          )}
-                        </dd>
-                      </div>
-
-                      <div className="flex justify-between gap-4 border-t pt-2 font-semibold">
-                        <dt>
-                          Total
-                        </dt>
-
-                        <dd>
-                          {formatMoney(
-                            order.total,
-                          )}
-                        </dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-              </article>
-            ),
+                </article>
+              )
+            },
           )}
         </div>
       )}

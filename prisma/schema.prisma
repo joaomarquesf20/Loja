@@ -18,6 +18,8 @@ enum OrderStatus {
   PROCESSING
   SHIPPED
   DELIVERED
+  READY_FOR_PICKUP
+  PICKED_UP
   CANCELLED
 }
 
@@ -25,6 +27,11 @@ enum PaymentStatus {
   UNPAID
   PAID
   FAILED
+}
+
+enum FulfillmentMethod {
+  DELIVERY
+  PICKUP
 }
 
 enum ShippingClass {
@@ -262,35 +269,36 @@ model ProductShippingRate {
 }
 
 model Order {
-  id                      String          @id @default(cuid())
-  orderNumber             String          @unique
+  id                      String            @id @default(cuid())
+  orderNumber             String            @unique
   userId                  String?
-  subtotal                Decimal         @db.Decimal(10, 2)
-  shippingCost            Decimal         @db.Decimal(10, 2)
-  tax                     Decimal         @default(0) @db.Decimal(10, 2)
-  total                   Decimal         @db.Decimal(10, 2)
-  status                  OrderStatus     @default(PENDING)
-  paymentStatus           PaymentStatus   @default(UNPAID)
+  subtotal                Decimal           @db.Decimal(10, 2)
+  shippingCost            Decimal           @db.Decimal(10, 2)
+  tax                     Decimal           @default(0) @db.Decimal(10, 2)
+  total                   Decimal           @db.Decimal(10, 2)
+  status                  OrderStatus       @default(PENDING)
+  paymentStatus           PaymentStatus     @default(UNPAID)
+  fulfillmentMethod       FulfillmentMethod @default(DELIVERY)
   shippingName            String
   shippingEmail           String
   shippingPhone           String
-  shippingAddressLine1    String
+  shippingAddressLine1    String?
   shippingAddressLine2    String?
-  shippingCity            String
-  shippingPostalCode      String
-  shippingCountry         String
+  shippingCity            String?
+  shippingPostalCode      String?
+  shippingCountry         String?
   shippingRegion          CheckoutRegion?
   shippingClassApplied    ShippingClass?
-  taxRatePercent          Decimal?        @db.Decimal(5, 2)
+  taxRatePercent          Decimal?          @db.Decimal(5, 2)
   pricesIncludeTax        Boolean?
-  nonVolumousSubtotal     Decimal?        @db.Decimal(10, 2)
-  nonVolumousShippingCost Decimal?        @db.Decimal(10, 2)
-  bulkyShippingCost       Decimal?        @db.Decimal(10, 2)
-  freeShippingThreshold   Decimal?        @db.Decimal(10, 2)
+  nonVolumousSubtotal     Decimal?          @db.Decimal(10, 2)
+  nonVolumousShippingCost Decimal?          @db.Decimal(10, 2)
+  bulkyShippingCost       Decimal?          @db.Decimal(10, 2)
+  freeShippingThreshold   Decimal?          @db.Decimal(10, 2)
   freeShippingApplied     Boolean?
-  createdAt               DateTime        @default(now())
-  updatedAt               DateTime        @updatedAt
-  user                    User?           @relation(fields: [userId], references: [id])
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  user                    User?             @relation(fields: [userId], references: [id])
   items                   OrderItem[]
 
   @@index([orderNumber])

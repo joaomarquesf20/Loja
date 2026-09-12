@@ -17,6 +17,10 @@ type Address = {
   country: string
 }
 
+type FulfillmentMethod =
+  | 'DELIVERY'
+  | 'PICKUP'
+
 type CheckoutPreview = {
   subtotal: number
   shippingCost: number
@@ -28,6 +32,7 @@ type CheckoutPreview = {
 type CheckoutOrder = {
   id: string
   orderNumber: string
+  fulfillmentMethod: FulfillmentMethod
   subtotal: number
   shippingCost: number
   tax: number
@@ -46,6 +51,28 @@ type PendingAction =
   | 'preview'
   | 'checkout'
   | null
+
+type CheckoutRequestInput =
+  | {
+      fulfillmentMethod: 'DELIVERY'
+      shipping: {
+        name: string
+        phone: string
+        addressLine1: string
+        addressLine2: string | null
+        city: string
+        postalCode: string
+        country: string
+        region: 'PORTUGAL_MAINLAND'
+      }
+    }
+  | {
+      fulfillmentMethod: 'PICKUP'
+      shipping: {
+        name: string
+        phone: string
+      }
+    }
 
 function isRecord(
   value: unknown,
@@ -110,6 +137,15 @@ function isCheckoutPreview(
   )
 }
 
+function isFulfillmentMethod(
+  value: unknown,
+): value is FulfillmentMethod {
+  return (
+    value === 'DELIVERY' ||
+    value === 'PICKUP'
+  )
+}
+
 function isCheckoutOrder(
   value: unknown,
 ): value is CheckoutOrder {
@@ -121,6 +157,9 @@ function isCheckoutOrder(
     typeof value.id === 'string' &&
     typeof value.orderNumber ===
       'string' &&
+    isFulfillmentMethod(
+      value.fulfillmentMethod,
+    ) &&
     isMoneyValue(value.subtotal) &&
     isMoneyValue(
       value.shippingCost,
@@ -228,7 +267,7 @@ function formatPrice(
   ).format(value)
 }
 
-function createShipping(
+function createDeliveryShipping(
   address: Address,
   phone: string,
 ) {
@@ -244,7 +283,7 @@ function createShipping(
       address.postalCode,
     country: address.country,
     region:
-      'PORTUGAL_MAINLAND',
+      'PORTUGAL_MAINLAND' as const,
   }
 }
 
@@ -259,6 +298,16 @@ export function CheckoutClient() {
     selectedAddressId,
     setSelectedAddressId,
   ] = useState('')
+
+  const [
+    fulfillmentMethod,
+    setFulfillmentMethod,
+  ] = useState<FulfillmentMethod>(
+    'DELIVERY',
+  )
+
+  const [pickupName, setPickupName] =
+    useState('')
 
   const [phone, setPhone] =
     useState('')
@@ -332,6 +381,20 @@ export function CheckoutClient() {
               '',
           )
 
+          setPickupName(
+            loadedAddresses[0]?.name ??
+              '',
+          )
+
+          if (
+            loadedAddresses.length ===
+            0
+          ) {
+            setFulfillmentMethod(
+              'PICKUP',
+            )
+          }
+
           setMode('ready')
         }
       } catch (caughtError) {
@@ -367,7 +430,72 @@ export function CheckoutClient() {
     setError(null)
   }
 
-  function validateShipping() {
+  function changeFulfillmentMethod(
+    nextMethod: FulfillmentMethod,
+  ) {
+    if (
+      nextMethod === 'DELIVERY' &&
+      addresses.length === 0
+    ) {
+      return
+    }
+
+    setFulfillmentMethod(
+      nextMethod,
+    )
+
+    if (
+      nextMethod === 'PICKUP' &&
+      !pickupName.trim() &&
+      selectedAddress
+    ) {
+      setPickupName(
+        selectedAddress.name,
+      )
+    }
+
+    invalidatePreview()
+  }
+
+  function validateCheckoutInput():
+    | CheckoutRequestInput
+    | null {
+    const normalizedPhone =
+      phone.trim()
+
+    if (!normalizedPhone) {
+      setError(
+        'Indica o telefone de contacto.',
+      )
+
+      return null
+    }
+
+    if (
+      fulfillmentMethod ===
+      'PICKUP'
+    ) {
+      const normalizedName =
+        pickupName.trim()
+
+      if (!normalizedName) {
+        setError(
+          'Indica o nome para o levantamento.',
+        )
+
+        return null
+      }
+
+      return {
+        fulfillmentMethod:
+          'PICKUP',
+        shipping: {
+          name: normalizedName,
+          phone: normalizedPhone,
+        },
+      }
+    }
+
     if (!selectedAddress) {
       setError(
         'Seleciona uma morada de entrega.',
@@ -376,18 +504,15 @@ export function CheckoutClient() {
       return null
     }
 
-    if (!phone.trim()) {
-      setError(
-        'Indica o telefone de contacto.',
-      )
-
-      return null
+    return {
+      fulfillmentMethod:
+        'DELIVERY',
+      shipping:
+        createDeliveryShipping(
+          selectedAddress,
+          normalizedPhone,
+        ),
     }
-
-    return createShipping(
-      selectedAddress,
-      phone,
-    )
   }
 
   async function handlePreview(
@@ -399,10 +524,10 @@ export function CheckoutClient() {
       return
     }
 
-    const shipping =
-      validateShipping()
+    const checkoutInput =
+      validateCheckoutInput()
 
-    if (!shipping) {
+    if (!checkoutInput) {
       return
     }
 
@@ -419,9 +544,9 @@ export function CheckoutClient() {
               'Content-Type':
                 'application/json',
             },
-            body: JSON.stringify({
-              shipping,
-            }),
+            body: JSON.stringify(
+              checkoutInput,
+            ),
           },
         )
 
@@ -460,10 +585,10 @@ export function CheckoutClient() {
       return
     }
 
-    const shipping =
-      validateShipping()
+    const checkoutInput =
+      validateCheckoutInput()
 
-    if (!shipping) {
+    if (!checkoutInput) {
       return
     }
 
@@ -481,14 +606,15 @@ export function CheckoutClient() {
                 'application/json',
             },
             body: JSON.stringify({
-              shipping,
-              expectedFingerprint: preview.fingerprint,
+              ...checkoutInput,
+              expectedFingerprint:
+                preview.fingerprint,
             }),
           },
         )
 
       if (!response.ok) {
-        // Checkout 409s signal changed cart, stock, availability, or pricing terms.
+        // 409 significa que os termos aceites já não são atuais.
         if (response.status === 409) {
           setPreview(null)
         }
@@ -519,8 +645,8 @@ export function CheckoutClient() {
     return (
       <div className="rounded-xl border border-gray-200 bg-white p-6">
         <p className="text-sm text-gray-600">
-          A carregar dados de
-          entrega...
+          A carregar dados do
+          checkout...
         </p>
       </div>
     )
@@ -589,6 +715,16 @@ export function CheckoutClient() {
         </p>
 
         <p className="mt-2 text-sm text-green-900">
+          Método:{' '}
+          <strong>
+            {order.fulfillmentMethod ===
+            'PICKUP'
+              ? 'Levantamento em loja'
+              : 'Entrega ao domicílio'}
+          </strong>
+        </p>
+
+        <p className="mt-2 text-sm text-green-900">
           Total:{' '}
           <strong>
             {formatPrice(
@@ -596,6 +732,15 @@ export function CheckoutClient() {
             )}
           </strong>
         </p>
+
+        {order.fulfillmentMethod ===
+        'PICKUP' ? (
+          <p className="mt-2 text-sm text-green-900">
+            O levantamento só ficará
+            disponível depois de o
+            pagamento ser confirmado.
+          </p>
+        ) : null}
 
         <Link
           href="/conta"
@@ -607,127 +752,211 @@ export function CheckoutClient() {
     )
   }
 
-  if (
-    addresses.length === 0
-  ) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-gray-950">
-          Não tens moradas
-          guardadas
-        </h2>
-
-        <p className="mt-2 text-sm text-gray-600">
-          Adiciona primeiro uma
-          morada na tua conta para
-          poderes continuar.
-        </p>
-
-        <Link
-          href="/conta"
-          className="mt-5 inline-flex rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-        >
-          Gerir moradas
-        </Link>
-      </div>
-    )
-  }
-
   return (
     <form
-      onSubmit={
-        handlePreview
-      }
+      onSubmit={handlePreview}
       className="grid gap-6 lg:grid-cols-[1fr_320px]"
     >
       <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-gray-950">
-          Dados de entrega
+        <fieldset>
+          <legend className="text-lg font-semibold text-gray-950">
+            Método de receção
+          </legend>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-4">
+              <input
+                type="radio"
+                name="fulfillment-method"
+                value="DELIVERY"
+                aria-label="Entrega ao domicílio"
+                checked={
+                  fulfillmentMethod ===
+                  'DELIVERY'
+                }
+                disabled={
+                  pendingAction !== null ||
+                  addresses.length === 0
+                }
+                onChange={() =>
+                  changeFulfillmentMethod(
+                    'DELIVERY',
+                  )
+                }
+              />
+
+              <span>
+                <span className="block text-sm font-semibold text-gray-950">
+                  Entrega ao domicílio
+                </span>
+                <span className="mt-1 block text-xs text-gray-600">
+                  Entrega numa morada
+                  guardada.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-4">
+              <input
+                type="radio"
+                name="fulfillment-method"
+                value="PICKUP"
+                aria-label="Levantar em loja"
+                checked={
+                  fulfillmentMethod ===
+                  'PICKUP'
+                }
+                disabled={
+                  pendingAction !== null
+                }
+                onChange={() =>
+                  changeFulfillmentMethod(
+                    'PICKUP',
+                  )
+                }
+              />
+
+              <span>
+                <span className="block text-sm font-semibold text-gray-950">
+                  Levantar em loja
+                </span>
+                <span className="mt-1 block text-xs text-gray-600">
+                  Sem portes de envio.
+                </span>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
+        <h2 className="mt-7 text-lg font-semibold text-gray-950">
+          {fulfillmentMethod ===
+          'DELIVERY'
+            ? 'Dados de entrega'
+            : 'Dados para levantamento'}
         </h2>
 
-        <div className="mt-5">
-          <label
-            htmlFor="checkout-address"
-            className="block text-sm font-medium text-gray-900"
-          >
-            Morada
-          </label>
+        {fulfillmentMethod ===
+        'DELIVERY' ? (
+          <>
+            {addresses.length === 0 ? (
+              <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p>
+                  Não tens moradas
+                  guardadas. Podes
+                  levantar em loja ou
+                  adicionar uma morada
+                  na tua conta.
+                </p>
 
-          <select
-            id="checkout-address"
-            value={
-              selectedAddressId
-            }
-            disabled={
-              pendingAction !== null
-            }
-            onChange={(event) => {
-              setSelectedAddressId(
-                event.target.value,
-              )
-
-              invalidatePreview()
-            }}
-            className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
-          >
-            {addresses.map(
-              (address) => (
-                <option
-                  key={
-                    address.id
-                  }
-                  value={
-                    address.id
-                  }
+                <Link
+                  href="/conta"
+                  className="mt-3 inline-flex font-semibold underline"
                 >
-                  {address.name} —{' '}
-                  {
-                    address.addressLine1
-                  }, {address.city}
-                </option>
-              ),
+                  Gerir moradas
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="mt-5">
+                  <label
+                    htmlFor="checkout-address"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Morada
+                  </label>
+
+                  <select
+                    id="checkout-address"
+                    value={
+                      selectedAddressId
+                    }
+                    disabled={
+                      pendingAction !==
+                      null
+                    }
+                    onChange={(event) => {
+                      setSelectedAddressId(
+                        event.target.value,
+                      )
+
+                      invalidatePreview()
+                    }}
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  >
+                    {addresses.map(
+                      (address) => (
+                        <option
+                          key={address.id}
+                          value={
+                            address.id
+                          }
+                        >
+                          {address.name} —{' '}
+                          {address.addressLine1},{' '}
+                          {address.city}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+
+                {selectedAddress ? (
+                  <div className="mt-4 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
+                    <p className="font-medium text-gray-950">
+                      {selectedAddress.name}
+                    </p>
+
+                    <p className="mt-1">
+                      {selectedAddress.addressLine1}
+                    </p>
+
+                    {selectedAddress.addressLine2 ? (
+                      <p>
+                        {selectedAddress.addressLine2}
+                      </p>
+                    ) : null}
+
+                    <p>
+                      {selectedAddress.postalCode}{' '}
+                      {selectedAddress.city}
+                    </p>
+
+                    <p>
+                      {selectedAddress.country}
+                    </p>
+                  </div>
+                ) : null}
+              </>
             )}
-          </select>
-        </div>
+          </>
+        ) : (
+          <div className="mt-5">
+            <label
+              htmlFor="checkout-pickup-name"
+              className="block text-sm font-medium text-gray-900"
+            >
+              Nome de contacto
+            </label>
 
-        {selectedAddress ? (
-          <div className="mt-4 rounded-lg bg-gray-50 p-4 text-sm text-gray-700">
-            <p className="font-medium text-gray-950">
-              {
-                selectedAddress.name
+            <input
+              id="checkout-pickup-name"
+              type="text"
+              value={pickupName}
+              disabled={
+                pendingAction !== null
               }
-            </p>
+              onChange={(event) => {
+                setPickupName(
+                  event.target.value,
+                )
 
-            <p className="mt-1">
-              {
-                selectedAddress.addressLine1
-              }
-            </p>
-
-            {selectedAddress.addressLine2 ? (
-              <p>
-                {
-                  selectedAddress.addressLine2
-                }
-              </p>
-            ) : null}
-
-            <p>
-              {
-                selectedAddress.postalCode
-              }{' '}
-              {
-                selectedAddress.city
-              }
-            </p>
-
-            <p>
-              {
-                selectedAddress.country
-              }
-            </p>
+                invalidatePreview()
+              }}
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-950"
+              autoComplete="name"
+            />
           </div>
-        ) : null}
+        )}
 
         <div className="mt-5">
           <label
@@ -753,14 +982,29 @@ export function CheckoutClient() {
             }}
             className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-950"
             placeholder="910000000"
+            autoComplete="tel"
           />
         </div>
 
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Nesta fase, o checkout
-          está disponível apenas
-          para entregas em Portugal
-          Continental.
+          {fulfillmentMethod ===
+          'DELIVERY' ? (
+            <>
+              Nesta fase, a entrega
+              está disponível apenas
+              para Portugal
+              Continental.
+            </>
+          ) : (
+            <>
+              O levantamento em loja
+              não tem portes. A
+              encomenda só pode ficar
+              pronta para levantamento
+              depois de o pagamento ser
+              confirmado.
+            </>
+          )}
         </div>
 
         {error ? (
@@ -777,6 +1021,13 @@ export function CheckoutClient() {
         <h2 className="text-lg font-semibold text-gray-950">
           Resumo
         </h2>
+
+        <p className="mt-2 text-xs text-gray-500">
+          {fulfillmentMethod ===
+          'PICKUP'
+            ? 'Levantamento em loja'
+            : 'Entrega ao domicílio'}
+        </p>
 
         {preview ? (
           <div className="mt-5 space-y-3">

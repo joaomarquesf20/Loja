@@ -3,6 +3,10 @@ import { prisma } from './db'
 export type OrderField =
   | 'userId'
 
+export type OrderFulfillmentMethod =
+  | 'DELIVERY'
+  | 'PICKUP'
+
 export class OrderValidationError extends Error {
   constructor(
     public readonly field: OrderField,
@@ -39,14 +43,21 @@ export type UserOrder = {
   total: string
   status: string
   paymentStatus: string
+  fulfillmentMethod:
+    OrderFulfillmentMethod
   shippingName: string
   shippingEmail: string
   shippingPhone: string
-  shippingAddressLine1: string
-  shippingAddressLine2: string | null
-  shippingCity: string
-  shippingPostalCode: string
-  shippingCountry: string
+  shippingAddressLine1:
+    string | null
+  shippingAddressLine2:
+    string | null
+  shippingCity:
+    string | null
+  shippingPostalCode:
+    string | null
+  shippingCountry:
+    string | null
   createdAt: Date
   items: UserOrderItem[]
 }
@@ -69,14 +80,21 @@ type OrderRecord = {
   total: MoneyValue
   status: string
   paymentStatus: string
+  fulfillmentMethod:
+    OrderFulfillmentMethod
   shippingName: string
   shippingEmail: string
   shippingPhone: string
-  shippingAddressLine1: string
-  shippingAddressLine2: string | null
-  shippingCity: string
-  shippingPostalCode: string
-  shippingCountry: string
+  shippingAddressLine1:
+    string | null
+  shippingAddressLine2:
+    string | null
+  shippingCity:
+    string | null
+  shippingPostalCode:
+    string | null
+  shippingCountry:
+    string | null
   createdAt: Date
   items: OrderItemRecord[]
 }
@@ -99,6 +117,7 @@ type OrderSelect = {
   total: true
   status: true
   paymentStatus: true
+  fulfillmentMethod: true
   shippingName: true
   shippingEmail: true
   shippingPhone: true
@@ -148,6 +167,7 @@ const orderSelect: OrderSelect = {
   total: true,
   status: true,
   paymentStatus: true,
+  fulfillmentMethod: true,
   shippingName: true,
   shippingEmail: true,
   shippingPhone: true,
@@ -247,16 +267,20 @@ function mapOrder(
       moneyToString(
         order.shippingCost,
       ),
-    tax: moneyToString(
-      order.tax,
-    ),
+    tax:
+      moneyToString(
+        order.tax,
+      ),
     total:
       moneyToString(
         order.total,
       ),
-    status: order.status,
+    status:
+      order.status,
     paymentStatus:
       order.paymentStatus,
+    fulfillmentMethod:
+      order.fulfillmentMethod,
     shippingName:
       order.shippingName,
     shippingEmail:

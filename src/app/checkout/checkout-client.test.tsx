@@ -3,7 +3,6 @@ import {
   fireEvent,
   render,
   screen,
-  waitFor,
 } from '@testing-library/react'
 import {
   afterEach,
@@ -45,25 +44,47 @@ function createAddress() {
   }
 }
 
-function createPreview() {
+function createPreview(
+  overrides?: Partial<{
+    fingerprint: string
+    subtotal: number
+    shippingCost: number
+    tax: number
+    total: number
+  }>,
+) {
   return {
     fingerprint: 'ab'.repeat(32),
     subtotal: 100,
     shippingCost: 5.9,
     tax: 19.8,
     total: 105.9,
+    ...overrides,
   }
 }
 
-function createOrder() {
+function createOrder(
+  fulfillmentMethod:
+    | 'DELIVERY'
+    | 'PICKUP' = 'DELIVERY',
+) {
   return {
     id: 'order-1',
     orderNumber:
       'PFA-ABC123',
+    fulfillmentMethod,
     subtotal: 100,
-    shippingCost: 5.9,
+    shippingCost:
+      fulfillmentMethod ===
+      'PICKUP'
+        ? 0
+        : 5.9,
     tax: 19.8,
-    total: 105.9,
+    total:
+      fulfillmentMethod ===
+      'PICKUP'
+        ? 100
+        : 105.9,
     status: 'PENDING',
     paymentStatus:
       'UNPAID',
@@ -72,18 +93,36 @@ function createOrder() {
 
 const fetchMock = vi.fn()
 
-async function requestPreview(
+async function requestDeliveryPreview(
   preview: unknown = createPreview(),
   addresses = [createAddress()],
 ) {
   fetchMock
-    .mockResolvedValueOnce(jsonResponse({ addresses }))
-    .mockResolvedValueOnce(jsonResponse({ preview }))
+    .mockResolvedValueOnce(
+      jsonResponse({ addresses }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({ preview }),
+    )
+
   render(<CheckoutClient />)
-  fireEvent.change(await screen.findByLabelText('Telefone'), {
-    target: { value: '910000000' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Calcular total' }))
+
+  fireEvent.change(
+    await screen.findByLabelText(
+      'Telefone',
+    ),
+    {
+      target: {
+        value: '910000000',
+      },
+    },
+  )
+
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: 'Calcular total',
+    }),
+  )
 }
 
 describe(
@@ -104,89 +143,361 @@ describe(
     })
 
     test.each([
-      undefined, null, 123, '', 'a'.repeat(63), 'a'.repeat(65),
-      'A'.repeat(64), 'g'.repeat(64), 'a'.repeat(64) + '\n',
-    ])('rejeita preview com fingerprint inválido %j', async (fingerprint) => {
-      await requestPreview({ ...createPreview(), fingerprint })
-      expect(await screen.findByRole('alert')).toHaveTextContent('Resposta inválida do servidor')
-      expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
-      expect(fetchMock).toHaveBeenCalledTimes(2)
-    })
-
-    test.each(['Morada', 'Telefone'])(
-      'alterar %s exige novo preview antes de submeter', async (field) => {
-        await requestPreview(createPreview(), [
-          createAddress(), { ...createAddress(), id: 'address-2', addressLine1: 'Rua Nova 20' },
-        ])
-        await screen.findByRole('button', { name: 'Criar encomenda' })
-        fireEvent.change(screen.getByLabelText(field), {
-          target: { value: field === 'Morada' ? 'address-2' : '910000001' },
+      undefined,
+      null,
+      123,
+      '',
+      'a'.repeat(63),
+      'a'.repeat(65),
+      'A'.repeat(64),
+      'g'.repeat(64),
+      'a'.repeat(64) + '\n',
+    ])(
+      'rejeita preview com fingerprint inválido %j',
+      async (fingerprint) => {
+        await requestDeliveryPreview({
+          ...createPreview(),
+          fingerprint,
         })
-        expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
-        expect(screen.getByRole('button', { name: 'Calcular total' })).toBeEnabled()
-        expect(fetchMock).toHaveBeenCalledTimes(2)
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Resposta inválida do servidor',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    test.each([
+      'Morada',
+      'Telefone',
+    ])(
+      'alterar %s exige novo preview antes de submeter',
+      async (field) => {
+        await requestDeliveryPreview(
+          createPreview(),
+          [
+            createAddress(),
+            {
+              ...createAddress(),
+              id: 'address-2',
+              addressLine1:
+                'Rua Nova 20',
+            },
+          ],
+        )
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            field,
+          ),
+          {
+            target: {
+              value:
+                field === 'Morada'
+                  ? 'address-2'
+                  : '910000001',
+            },
+          },
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(2)
+      },
+    )
+
+    test(
+      'alterar método de receção invalida o preview',
+      async () => {
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fireEvent.click(
+          screen.getByLabelText(
+            'Levantar em loja',
+          ),
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        ).toBeEnabled()
       },
     )
 
     test.each([
       {
-        error: 'O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.',
-        code: 'CHECKOUT_PREVIEW_CHANGED',
+        error:
+          'O checkout foi alterado. Calcula novamente o total antes de criar a encomenda.',
+        code:
+          'CHECKOUT_PREVIEW_CHANGED',
       },
-      { error: 'Existe stock insuficiente para um produto do carrinho' },
-      { error: 'O carrinho está vazio' },
-      { error: 'Existe um produto indisponível no carrinho' },
-      { error: 'O carrinho ou o stock foi alterado durante o checkout' },
-      { error: 'Configuração de preços do checkout inválida' },
-    ])('invalida preview após conflito e exige ações explícitas (%j)', async (conflict) => {
-      await requestPreview()
-      const checkoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
-      fetchMock.mockResolvedValueOnce(jsonResponse(conflict, 409))
-      fireEvent.click(checkoutButton)
+      {
+        error:
+          'Existe stock insuficiente para um produto do carrinho',
+      },
+      {
+        error:
+          'O carrinho está vazio',
+      },
+      {
+        error:
+          'Existe um produto indisponível no carrinho',
+      },
+      {
+        error:
+          'O carrinho ou o stock foi alterado durante o checkout',
+      },
+      {
+        error:
+          'Configuração de preços do checkout inválida',
+      },
+    ])(
+      'invalida preview após conflito e exige ações explícitas (%j)',
+      async (conflict) => {
+        await requestDeliveryPreview()
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(conflict.error)
-      expect(screen.queryByRole('button', { name: 'Criar encomenda' })).toBeNull()
-      expect(screen.getByRole('button', { name: 'Calcular total' })).toBeEnabled()
-      expect(fetchMock).toHaveBeenCalledTimes(3)
+        const checkoutButton =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          )
 
-      const freshPreview = { ...createPreview(), fingerprint: 'cd'.repeat(32) }
-      fetchMock.mockResolvedValueOnce(jsonResponse({ preview: freshPreview }))
-      fireEvent.click(screen.getByRole('button', { name: 'Calcular total' }))
-      const freshCheckoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
-      expect(screen.queryByText('Encomenda criada')).toBeNull()
-      expect(fetchMock).toHaveBeenCalledTimes(4)
-      expect(fetchMock.mock.calls.filter(([url]) => url === '/api/checkout')).toHaveLength(1)
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            conflict,
+            409,
+          ),
+        )
 
-      fetchMock.mockResolvedValueOnce(jsonResponse({ order: createOrder() }, 201))
-      fireEvent.click(freshCheckoutButton)
-      await screen.findByText('Encomenda criada')
-      expect(JSON.parse(fetchMock.mock.calls[4][1].body)).toMatchObject({
-        expectedFingerprint: freshPreview.fingerprint,
-      })
-      expect(fetchMock).toHaveBeenCalledTimes(5)
-    })
+        fireEvent.click(
+          checkoutButton,
+        )
 
-    test.each([400, 500])('não invalida preview por erro sem conflito (%s)', async (status) => {
-      await requestPreview()
-      const checkoutButton = await screen.findByRole('button', { name: 'Criar encomenda' })
-      fetchMock.mockResolvedValueOnce(jsonResponse({ error: 'Erro no pedido' }, status))
-      fireEvent.click(checkoutButton)
-      expect(await screen.findByRole('alert')).toHaveTextContent('Erro no pedido')
-      expect(screen.getByRole('button', { name: 'Criar encomenda' })).toBeEnabled()
-      expect(fetchMock).toHaveBeenCalledTimes(3)
-    })
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          conflict.error,
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        const freshPreview = {
+          ...createPreview(),
+          fingerprint:
+            'cd'.repeat(32),
+        }
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            preview: freshPreview,
+          }),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        const freshCheckoutButton =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          )
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url === '/api/checkout',
+          ),
+        ).toHaveLength(1)
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            {
+              order:
+                createOrder(),
+            },
+            201,
+          ),
+        )
+
+        fireEvent.click(
+          freshCheckoutButton,
+        )
+
+        await screen.findByText(
+          'Encomenda criada',
+        )
+
+        const finalOptions =
+          fetchMock.mock.calls[4]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              finalOptions?.body,
+            ),
+          ),
+        ).toMatchObject({
+          expectedFingerprint:
+            freshPreview.fingerprint,
+        })
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(5)
+      },
+    )
+
+    test.each([400, 500])(
+      'não invalida preview por erro sem conflito (%s)',
+      async (status) => {
+        await requestDeliveryPreview()
+
+        const checkoutButton =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          )
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            {
+              error:
+                'Erro no pedido',
+            },
+            status,
+          ),
+        )
+
+        fireEvent.click(
+          checkoutButton,
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Erro no pedido',
+        )
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeEnabled()
+      },
+    )
 
     test(
-      'carrega moradas para utilizador autenticado',
+      'carrega moradas e apresenta os dois métodos para utilizador autenticado',
       async () => {
-        fetchMock
-          .mockResolvedValueOnce(
-            jsonResponse({
-              addresses: [
-                createAddress(),
-              ],
-            }),
-          )
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            addresses: [
+              createAddress(),
+            ],
+          }),
+        )
 
         render(
           <CheckoutClient />,
@@ -203,13 +514,13 @@ describe(
 
         expect(
           screen.getByLabelText(
-            'Telefone',
+            'Entrega ao domicílio',
           ),
-        ).toBeTruthy()
+        ).toBeChecked()
 
         expect(
-          screen.getByText(
-            /Portugal Continental/,
+          screen.getByLabelText(
+            'Levantar em loja',
           ),
         ).toBeTruthy()
 
@@ -228,16 +539,15 @@ describe(
     test(
       'pede autenticação quando a API de moradas devolve 401',
       async () => {
-        fetchMock
-          .mockResolvedValueOnce(
-            jsonResponse(
-              {
-                error:
-                  'Não autenticado',
-              },
-              401,
-            ),
-          )
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            {
+              error:
+                'Não autenticado',
+            },
+            401,
+          ),
+        )
 
         render(
           <CheckoutClient />,
@@ -265,109 +575,62 @@ describe(
     )
 
     test(
-      'mostra estado sem moradas',
+      'sem moradas permite levantamento em loja',
       async () => {
-        fetchMock
-          .mockResolvedValueOnce(
-            jsonResponse({
-              addresses: [],
-            }),
-          )
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            addresses: [],
+          }),
+        )
 
         render(
           <CheckoutClient />,
         )
 
+        const pickup =
+          await screen.findByLabelText(
+            'Levantar em loja',
+          )
+
         expect(
-          await screen.findByText(
-            'Não tens moradas guardadas',
+          pickup,
+        ).toBeChecked()
+
+        expect(
+          screen.getByLabelText(
+            'Entrega ao domicílio',
+          ),
+        ).toBeDisabled()
+
+        expect(
+          screen.getByLabelText(
+            'Nome de contacto',
           ),
         ).toBeTruthy()
 
         expect(
-          screen.getByRole(
-            'link',
-            {
-              name:
-                'Gerir moradas',
-            },
+          screen.queryByText(
+            'Não tens moradas guardadas',
           ),
-        ).toHaveAttribute(
-          'href',
-          '/conta',
-        )
+        ).toBeNull()
       },
     )
 
     test(
-      'calcula preview com morada e telefone',
+      'calcula preview de entrega com método e morada',
       async () => {
-        fetchMock
-          .mockResolvedValueOnce(
-            jsonResponse({
-              addresses: [
-                createAddress(),
-              ],
-            }),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse({
-              preview:
-                createPreview(),
-            }),
-          )
+        await requestDeliveryPreview()
 
-        render(
-          <CheckoutClient />,
-        )
-
-        const phone =
-          await screen.findByLabelText(
-            'Telefone',
-          )
-
-        fireEvent.change(
-          phone,
+        await screen.findByRole(
+          'button',
           {
-            target: {
-              value:
-                '910000000',
-            },
+            name:
+              'Criar encomenda',
           },
         )
 
-        fireEvent.click(
-          screen.getByRole(
-            'button',
-            {
-              name:
-                'Calcular total',
-            },
-          ),
-        )
-
-        await waitFor(() => {
-          expect(
-            screen.getByRole(
-              'button',
-              {
-                name:
-                  'Criar encomenda',
-              },
-            ),
-          ).toBeTruthy()
-        })
-
-        expect(
-          fetchMock.mock
-            .calls[1]?.[0],
-        ).toBe(
-          '/api/checkout/preview',
-        )
-
         const options =
-          fetchMock.mock
-            .calls[1]?.[1] as
+          fetchMock.mock.calls[1]?.[1] as
             | RequestInit
             | undefined
 
@@ -378,6 +641,8 @@ describe(
             ),
           ),
         ).toEqual({
+          fulfillmentMethod:
+            'DELIVERY',
           shipping: {
             name: 'Maria Silva',
             phone:
@@ -407,6 +672,94 @@ describe(
             'IVA incluído',
           ),
         ).toBeTruthy()
+      },
+    )
+
+    test(
+      'calcula preview de levantamento sem exigir morada',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview:
+                createPreview({
+                  shippingCost: 0,
+                  total: 100,
+                }),
+            }),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.change(
+          await screen.findByLabelText(
+            'Nome de contacto',
+          ),
+          {
+            target: {
+              value:
+                'Maria Silva',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Telefone',
+          ),
+          {
+            target: {
+              value:
+                '910000000',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        const options =
+          fetchMock.mock.calls[1]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              options?.body,
+            ),
+          ),
+        ).toEqual({
+          fulfillmentMethod:
+            'PICKUP',
+          shipping: {
+            name: 'Maria Silva',
+            phone:
+              '910000000',
+          },
+        })
       },
     )
 
@@ -478,7 +831,7 @@ describe(
     )
 
     test(
-      'cria encomenda depois de preview válido',
+      'cria encomenda de entrega com fingerprint e método aceites',
       async () => {
         fetchMock
           .mockResolvedValueOnce(
@@ -556,15 +909,13 @@ describe(
         ).toBeTruthy()
 
         expect(
-          fetchMock.mock
-            .calls[2]?.[0],
-        ).toBe(
-          '/api/checkout',
-        )
+          screen.getByText(
+            'Entrega ao domicílio',
+          ),
+        ).toBeTruthy()
 
         const options =
-          fetchMock.mock
-            .calls[2]?.[1] as
+          fetchMock.mock.calls[2]?.[1] as
             | RequestInit
             | undefined
 
@@ -575,7 +926,11 @@ describe(
             ),
           ),
         ).toEqual({
-          expectedFingerprint: createPreview().fingerprint,
+          fulfillmentMethod:
+            'DELIVERY',
+          expectedFingerprint:
+            createPreview()
+              .fingerprint,
           shipping: {
             name: 'Maria Silva',
             phone:
@@ -591,6 +946,128 @@ describe(
               'Portugal',
             region:
               'PORTUGAL_MAINLAND',
+          },
+        })
+      },
+    )
+
+    test(
+      'cria encomenda de levantamento sem enviar morada',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview:
+                createPreview({
+                  shippingCost: 0,
+                  total: 100,
+                }),
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                order:
+                  createOrder(
+                    'PICKUP',
+                  ),
+              },
+              201,
+            ),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.change(
+          await screen.findByLabelText(
+            'Nome de contacto',
+          ),
+          {
+            target: {
+              value:
+                'Maria Silva',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Telefone',
+          ),
+          {
+            target: {
+              value:
+                '910000000',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda criada',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByText(
+            'Levantamento em loja',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByText(
+            /pagamento ser confirmado/,
+          ),
+        ).toBeTruthy()
+
+        const options =
+          fetchMock.mock.calls[2]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              options?.body,
+            ),
+          ),
+        ).toEqual({
+          fulfillmentMethod:
+            'PICKUP',
+          expectedFingerprint:
+            createPreview()
+              .fingerprint,
+          shipping: {
+            name: 'Maria Silva',
+            phone:
+              '910000000',
           },
         })
       },

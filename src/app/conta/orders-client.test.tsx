@@ -12,6 +12,7 @@ import {
   test,
   vi,
 } from 'vitest'
+
 import { OrdersClient } from './orders-client'
 
 const fetchMock = vi.fn()
@@ -32,6 +33,8 @@ function createOrder(
     total: '128.50',
     status: 'CONFIRMED',
     paymentStatus: 'PAID',
+    fulfillmentMethod:
+      'DELIVERY',
     shippingName:
       'Maria Silva',
     shippingEmail:
@@ -68,6 +71,31 @@ function createOrder(
   }
 }
 
+function createPickupOrder(
+  overrides: Record<
+    string,
+    unknown
+  > = {},
+) {
+  return createOrder({
+    fulfillmentMethod:
+      'PICKUP',
+    shippingCost:
+      '0.00',
+    shippingAddressLine1:
+      null,
+    shippingAddressLine2:
+      null,
+    shippingCity:
+      null,
+    shippingPostalCode:
+      null,
+    shippingCountry:
+      null,
+    ...overrides,
+  })
+}
+
 function jsonResponse(
   body: unknown,
   status = 200,
@@ -84,352 +112,537 @@ function jsonResponse(
   )
 }
 
-describe('OrdersClient', () => {
-  beforeEach(() => {
-    fetchMock.mockReset()
+describe(
+  'OrdersClient',
+  () => {
+    beforeEach(() => {
+      fetchMock.mockReset()
 
-    vi.stubGlobal(
-      'fetch',
-      fetchMock,
-    )
-  })
+      vi.stubGlobal(
+        'fetch',
+        fetchMock,
+      )
+    })
 
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
 
-  test('carrega o histórico de encomendas', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder(),
-        ],
-      }),
-    )
+    test(
+      'carrega o histórico de encomendas',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
+          }),
+        )
 
-    render(<OrdersClient />)
+        render(
+          <OrdersClient />,
+        )
 
-    expect(
-      screen.getByText(
-        'A carregar encomendas…',
-      ),
-    ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'A carregar encomendas…',
+          ),
+        ).toBeInTheDocument()
 
-    expect(
-      await screen.findByText(
-        'Encomenda PFA-ABC123',
-      ),
-    ).toBeInTheDocument()
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
 
-    expect(
-      fetchMock,
-    ).toHaveBeenCalledWith(
-      '/api/orders',
-      {
-        method: 'GET',
-        cache: 'no-store',
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/orders',
+          {
+            method: 'GET',
+            cache: 'no-store',
+          },
+        )
       },
     )
-  })
 
-  test('mostra estado vazio sem inventar encomendas', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [],
-      }),
-    )
-
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByText(
-        'Ainda não tens encomendas.',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.queryByText(
-        /PFA-/,
-      ),
-    ).not.toBeInTheDocument()
-  })
-
-  test('apresenta snapshots históricos dos artigos e da entrega', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder(),
-        ],
-      }),
-    )
-
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByText(
-        'Filtro de óleo',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        'SKU: FLT-001',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        'Rua Central 10',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        '4000-001 Porto',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        'maria@example.com',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        '910000000',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  test('traduz os estados conhecidos sem alterar os valores históricos', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder(),
-        ],
-      }),
-    )
-
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByText(
-        'Confirmada',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        'Pago',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  test('mostra erro da API e permite tentar novamente', async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonResponse(
-          {
-            error:
-              'Erro interno do servidor',
-          },
-          500,
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          orders: [],
-        }),
-      )
-
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByRole(
-        'alert',
-      ),
-    ).toHaveTextContent(
-      'Erro interno do servidor',
-    )
-
-    fireEvent.click(
-      screen.getByRole(
-        'button',
-        {
-          name:
-            'Tentar novamente',
-        },
-      ),
-    )
-
-    expect(
-      await screen.findByText(
-        'Ainda não tens encomendas.',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      fetchMock,
-    ).toHaveBeenCalledTimes(2)
-  })
-
-  test('rejeita resposta inválida do servidor', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-          },
-        ],
-      }),
-    )
-
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByRole(
-        'alert',
-      ),
-    ).toHaveTextContent(
-      'Resposta inválida do servidor',
-    )
-  })
-
-  test('mostra complemento da morada quando existe', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder({
-            shippingAddressLine2:
-              '2.º esquerdo',
+    test(
+      'mostra estado vazio sem inventar encomendas',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [],
           }),
-        ],
-      }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Ainda não tens encomendas.',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            /PFA-/,
+          ),
+        ).not.toBeInTheDocument()
+      },
     )
 
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByText(
-        '2.º esquerdo',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  test('preserva estados desconhecidos em vez de inventar uma tradução', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder({
-            status:
-              'NOVO_ESTADO',
-            paymentStatus:
-              'NOVO_PAGAMENTO',
+    test(
+      'apresenta snapshots históricos dos artigos e da entrega',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
           }),
-        ],
-      }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Filtro de óleo',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'SKU: FLT-001',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Entrega',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Rua Central 10',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            '4000-001 Porto',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'maria@example.com',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            '910000000',
+          ),
+        ).toBeInTheDocument()
+      },
     )
 
-    render(<OrdersClient />)
-
-    expect(
-      await screen.findByText(
-        'NOVO_ESTADO',
-      ),
-    ).toBeInTheDocument()
-
-    expect(
-      screen.getByText(
-        'NOVO_PAGAMENTO',
-      ),
-    ).toBeInTheDocument()
-  })
-
-  test('mantém a ordem devolvida pela API', async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        orders: [
-          createOrder({
-            id: 'order-2',
-            orderNumber:
-              'PFA-NEW',
+    test(
+      'apresenta levantamento em loja sem inventar uma morada',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createPickupOrder(),
+            ],
           }),
-          createOrder({
-            id: 'order-1',
-            orderNumber:
-              'PFA-OLD',
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Levantamento em loja',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Maria Silva',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'maria@example.com',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            '910000000',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'Rua Central 10',
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            '4000-001 Porto',
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'Portugal',
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'traduz os estados conhecidos sem alterar os valores históricos',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
           }),
-        ],
-      }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Confirmada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pago',
+          ),
+        ).toBeInTheDocument()
+      },
     )
 
-    render(<OrdersClient />)
+    test.each([
+      [
+        'READY_FOR_PICKUP',
+        'Pronta para levantamento',
+      ],
+      [
+        'PICKED_UP',
+        'Levantada',
+      ],
+    ])(
+      'traduz estado de levantamento %s',
+      async (
+        status,
+        expectedLabel,
+      ) => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createPickupOrder({
+                status,
+              }),
+            ],
+          }),
+        )
 
-    await screen.findByText(
-      'Encomenda PFA-NEW',
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            expectedLabel,
+          ),
+        ).toBeInTheDocument()
+      },
     )
 
-    const headings =
-      screen.getAllByRole(
-        'heading',
-        {
-          level: 3,
-        },
-      )
+    test(
+      'mostra erro da API e permite tentar novamente',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                error:
+                  'Erro interno do servidor',
+              },
+              500,
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [],
+            }),
+          )
 
-    expect(
-      headings.map(
-        (heading) =>
-          heading.textContent,
-      ),
-    ).toEqual([
-      'Encomenda PFA-NEW',
-      'Encomenda PFA-OLD',
-    ])
-  })
+        render(
+          <OrdersClient />,
+        )
 
-  test('continua funcional depois de retry', async () => {
-    fetchMock
-      .mockRejectedValueOnce(
-        new Error(
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Erro interno do servidor',
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Tentar novamente',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'Ainda não tens encomendas.',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          2,
+        )
+      },
+    )
+
+    test(
+      'rejeita resposta inválida do servidor',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              {
+                id: 'order-1',
+              },
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Resposta inválida do servidor',
+        )
+      },
+    )
+
+    test(
+      'rejeita levantamento com campos de morada preenchidos',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createPickupOrder({
+                shippingAddressLine1:
+                  'Morada que não devia existir',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Resposta inválida do servidor',
+        )
+      },
+    )
+
+    test(
+      'mostra complemento da morada quando existe',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                shippingAddressLine2:
+                  '2.º esquerdo',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            '2.º esquerdo',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'preserva estados desconhecidos em vez de inventar uma tradução',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status:
+                  'NOVO_ESTADO',
+                paymentStatus:
+                  'NOVO_PAGAMENTO',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'NOVO_ESTADO',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'NOVO_PAGAMENTO',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'mantém a ordem devolvida pela API',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                id: 'order-2',
+                orderNumber:
+                  'PFA-NEW',
+              }),
+              createOrder({
+                id: 'order-1',
+                orderNumber:
+                  'PFA-OLD',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'Encomenda PFA-NEW',
+        )
+
+        const headings =
+          screen.getAllByRole(
+            'heading',
+            {
+              level: 3,
+            },
+          )
+
+        expect(
+          headings.map(
+            (heading) =>
+              heading.textContent,
+          ),
+        ).toEqual([
+          'Encomenda PFA-NEW',
+          'Encomenda PFA-OLD',
+        ])
+      },
+    )
+
+    test(
+      'continua funcional depois de retry',
+      async () => {
+        fetchMock
+          .mockRejectedValueOnce(
+            new Error(
+              'Falha de rede',
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder(),
+              ],
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
           'Falha de rede',
-        ),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          orders: [
-            createOrder(),
-          ],
-        }),
-      )
+        )
 
-    render(<OrdersClient />)
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Tentar novamente',
+            },
+          ),
+        )
 
-    expect(
-      await screen.findByRole(
-        'alert',
-      ),
-    ).toHaveTextContent(
-      'Falha de rede',
+        await waitFor(() => {
+          expect(
+            screen.getByText(
+              'Encomenda PFA-ABC123',
+            ),
+          ).toBeInTheDocument()
+        })
+      },
     )
-
-    fireEvent.click(
-      screen.getByRole(
-        'button',
-        {
-          name:
-            'Tentar novamente',
-        },
-      ),
-    )
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          'Encomenda PFA-ABC123',
-        ),
-      ).toBeInTheDocument()
-    })
-  })
-})
+  },
+)
