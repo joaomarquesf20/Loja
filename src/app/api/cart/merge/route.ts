@@ -1,6 +1,5 @@
-import { getServerSession } from 'next-auth'
 import { NextResponse } from 'next/server'
-import { authOptions } from '@/server/auth'
+
 import {
   CartInsufficientStockError,
   CartProductUnavailableError,
@@ -15,10 +14,23 @@ import {
   GuestCartServerValidationError,
   type GuestCartInputItem,
 } from '@/server/guest-cart'
+import {
+  InvalidJsonBodyError,
+  RequestPayloadTooLargeError,
+  readJsonBody,
+} from '@/server/http-request'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
+
+const CART_MERGE_BODY_LIMIT_BYTES =
+  32 * 1024
 
 type CartMergeErrorCode =
   | 'UNAUTHENTICATED'
   | 'INVALID_JSON'
+  | 'PAYLOAD_TOO_LARGE'
   | 'INVALID_REQUEST'
   | 'INVALID_MERGE_KEY'
   | 'INVALID_ITEM'
@@ -50,7 +62,10 @@ function errorResponse(
 
 function isRecord(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<
+  string,
+  unknown
+> {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -58,19 +73,42 @@ function isRecord(
   )
 }
 
-async function getAuthenticatedUserId() {
-  const session =
-    await getServerSession(authOptions)
-
-  const userId =
-    session?.user?.id?.trim()
-
-  return userId || null
-}
-
 function handleMergeError(
   error: unknown,
 ) {
+  if (
+    error instanceof
+    UnauthorizedUserError
+  ) {
+    return errorResponse(
+      'Não autenticado',
+      'UNAUTHENTICATED',
+      401,
+    )
+  }
+
+  if (
+    error instanceof
+    RequestPayloadTooLargeError
+  ) {
+    return errorResponse(
+      'Pedido demasiado grande',
+      'PAYLOAD_TOO_LARGE',
+      413,
+    )
+  }
+
+  if (
+    error instanceof
+    InvalidJsonBodyError
+  ) {
+    return errorResponse(
+      'JSON inválido',
+      'INVALID_JSON',
+      400,
+    )
+  }
+
   if (
     error instanceof
     GuestCartServerValidationError
@@ -154,27 +192,13 @@ export async function POST(
 ) {
   try {
     const userId =
-      await getAuthenticatedUserId()
+      await requireActiveUserId()
 
-    if (!userId) {
-      return errorResponse(
-        'Não autenticado',
-        'UNAUTHENTICATED',
-        401,
+    const body =
+      await readJsonBody(
+        request,
+        CART_MERGE_BODY_LIMIT_BYTES,
       )
-    }
-
-    let body: unknown
-
-    try {
-      body = await request.json()
-    } catch {
-      return errorResponse(
-        'JSON inválido',
-        'INVALID_JSON',
-        400,
-      )
-    }
 
     if (!isRecord(body)) {
       return errorResponse(
@@ -188,7 +212,8 @@ export async function POST(
       body.mergeKey
 
     if (
-      typeof mergeKey !== 'string'
+      typeof mergeKey !==
+      'string'
     ) {
       return errorResponse(
         'Identificador de merge inválido',
@@ -198,7 +223,9 @@ export async function POST(
     }
 
     if (
-      !Array.isArray(body.items)
+      !Array.isArray(
+        body.items,
+      )
     ) {
       return errorResponse(
         'Pedido inválido',
@@ -211,9 +238,12 @@ export async function POST(
       GuestCartInputItem[] = []
 
     for (
-      const rawItem of body.items
+      const rawItem of
+      body.items
     ) {
-      if (!isRecord(rawItem)) {
+      if (
+        !isRecord(rawItem)
+      ) {
         return errorResponse(
           'Item inválido',
           'INVALID_ITEM',
@@ -266,6 +296,8 @@ export async function POST(
       result,
     )
   } catch (error) {
-    return handleMergeError(error)
+    return handleMergeError(
+      error,
+    )
   }
 }
