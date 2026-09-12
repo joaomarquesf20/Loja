@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server'
+
 import {
   GuestCartServerValidationError,
   resolveGuestCartItems,
   type GuestCartInputItem,
 } from '@/server/guest-cart'
+import {
+  readJsonBody,
+  RequestPayloadTooLargeError,
+} from '@/server/http-request'
+
+const GUEST_CART_BODY_LIMIT_BYTES =
+  32 * 1024
 
 function errorResponse(
   message: string,
@@ -21,9 +29,13 @@ function errorResponse(
 
 function isRecord(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<
+  string,
+  unknown
+> {
   return (
-    typeof value === 'object' &&
+    typeof value ===
+      'object' &&
     value !== null &&
     !Array.isArray(value)
   )
@@ -36,7 +48,8 @@ function parseItems(
     return null
   }
 
-  const items: GuestCartInputItem[] = []
+  const items:
+    GuestCartInputItem[] = []
 
   for (const item of value) {
     if (!isRecord(item)) {
@@ -53,8 +66,10 @@ function parseItems(
     }
 
     items.push({
-      productId: item.productId,
-      quantity: item.quantity,
+      productId:
+        item.productId,
+      quantity:
+        item.quantity,
     })
   }
 
@@ -68,8 +83,22 @@ export async function POST(
     let body: unknown
 
     try {
-      body = await request.json()
-    } catch {
+      body =
+        await readJsonBody(
+          request,
+          GUEST_CART_BODY_LIMIT_BYTES,
+        )
+    } catch (error) {
+      if (
+        error instanceof
+        RequestPayloadTooLargeError
+      ) {
+        return errorResponse(
+          'Pedido demasiado grande',
+          413,
+        )
+      }
+
       return errorResponse(
         'JSON inválido',
         400,
@@ -83,9 +112,10 @@ export async function POST(
       )
     }
 
-    const items = parseItems(
-      body.items,
-    )
+    const items =
+      parseItems(
+        body.items,
+      )
 
     if (!items) {
       return errorResponse(

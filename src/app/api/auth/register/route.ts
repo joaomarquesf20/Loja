@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server'
+
+import {
+  readJsonBody,
+  RequestPayloadTooLargeError,
+} from '@/server/http-request'
 import {
   registerBuyer,
   RegistrationEmailConflictError,
   RegistrationValidationError,
 } from '@/server/register'
+
+const REGISTER_BODY_LIMIT_BYTES =
+  8 * 1024
 
 type RegistrationErrorCode =
   | 'INVALID_JSON'
@@ -12,6 +20,7 @@ type RegistrationErrorCode =
   | 'INVALID_EMAIL'
   | 'INVALID_PASSWORD'
   | 'EMAIL_ALREADY_REGISTERED'
+  | 'PAYLOAD_TOO_LARGE'
   | 'INTERNAL_ERROR'
 
 function errorResponse(
@@ -32,16 +41,21 @@ function errorResponse(
 
 function isObject(
   value: unknown,
-): value is Record<string, unknown> {
+): value is Record<
+  string,
+  unknown
+> {
   return (
-    typeof value === 'object' &&
+    typeof value ===
+      'object' &&
     value !== null &&
     !Array.isArray(value)
   )
 }
 
 function getValidationCode(
-  error: RegistrationValidationError,
+  error:
+    RegistrationValidationError,
 ): RegistrationErrorCode {
   switch (error.field) {
     case 'name':
@@ -59,8 +73,23 @@ export async function POST(
   let body: unknown
 
   try {
-    body = await request.json()
-  } catch {
+    body =
+      await readJsonBody(
+        request,
+        REGISTER_BODY_LIMIT_BYTES,
+      )
+  } catch (error) {
+    if (
+      error instanceof
+      RequestPayloadTooLargeError
+    ) {
+      return errorResponse(
+        'Pedido demasiado grande',
+        'PAYLOAD_TOO_LARGE',
+        413,
+      )
+    }
+
     return errorResponse(
       'JSON inválido',
       'INVALID_JSON',
@@ -77,11 +106,13 @@ export async function POST(
   }
 
   try {
-    const user = await registerBuyer({
-      name: body.name,
-      email: body.email,
-      password: body.password,
-    })
+    const user =
+      await registerBuyer({
+        name: body.name,
+        email: body.email,
+        password:
+          body.password,
+      })
 
     return NextResponse.json(
       {
@@ -102,7 +133,9 @@ export async function POST(
     ) {
       return errorResponse(
         error.message,
-        getValidationCode(error),
+        getValidationCode(
+          error,
+        ),
         400,
       )
     }
