@@ -292,6 +292,55 @@ describe(
     )
 
     test(
+      'rejeita confirmação que não corresponde ao pagamento já iniciado',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'PENDING',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_original',
+          }),
+        )
+
+        await expect(
+          recordVerifiedPayment(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_other',
+            },
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleConflictError',
+          message:
+            'O pagamento confirmado não corresponde ao pagamento iniciado para a encomenda',
+        })
+
+        expect(
+          findFirst,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'rejeita referência de pagamento já usada noutra encomenda',
       async () => {
         const {

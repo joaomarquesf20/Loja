@@ -296,6 +296,24 @@ export async function recordVerifiedPayment(
     )
   }
 
+  const hasInitiatedPayment =
+    order.paymentProvider !== null ||
+    order.paymentReference !== null
+
+  if (
+    hasInitiatedPayment &&
+    (
+      order.paymentProvider !==
+        paymentProvider ||
+      order.paymentReference !==
+        paymentReference
+    )
+  ) {
+    throw new OrderLifecycleConflictError(
+      'O pagamento confirmado não corresponde ao pagamento iniciado para a encomenda',
+    )
+  }
+
   const duplicateReference =
     await db.order.findFirst({
       where: {
