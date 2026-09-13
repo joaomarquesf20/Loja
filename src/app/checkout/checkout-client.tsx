@@ -47,6 +47,16 @@ type CheckoutOrder = {
   paymentStatus: string
 }
 
+type PaymentInitiation = {
+  orderId: string
+  paymentStatus: 'PENDING'
+  paymentMethod: PaymentMethod
+  installmentCount: number | null
+  paymentProvider: 'PFA_SIMULATED'
+  paymentReference: string
+  amount: string
+}
+
 type LoadMode =
   | 'loading'
   | 'ready'
@@ -56,6 +66,7 @@ type LoadMode =
 type PendingAction =
   | 'preview'
   | 'checkout'
+  | 'payment'
   | null
 
 type CheckoutFulfillmentRequestInput =
@@ -221,6 +232,8 @@ function isCheckoutOrder(
 
 async function getResponseError(
   response: Response,
+  fallback =
+    'Não foi possível concluir o checkout',
 ) {
   try {
     const body: unknown =
@@ -236,7 +249,7 @@ async function getResponseError(
     // A resposta pode não ter JSON.
   }
 
-  return 'Não foi possível concluir o checkout'
+  return fallback
 }
 
 async function parseAddresses(
@@ -300,6 +313,67 @@ async function parseOrder(
   }
 
   return body.order
+}
+
+function isPaymentInitiation(
+  value: unknown,
+): value is PaymentInitiation {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  const validInstallments =
+    value.paymentMethod === 'CARD'
+      ? value.installmentCount === null
+      : (
+          value.paymentMethod ===
+            'INSTALLMENTS' &&
+          typeof value.installmentCount ===
+            'number' &&
+          Number.isSafeInteger(
+            value.installmentCount,
+          ) &&
+          value.installmentCount >= 2
+        )
+
+  return (
+    typeof value.orderId === 'string' &&
+    value.orderId.length > 0 &&
+    value.paymentStatus === 'PENDING' &&
+    isPaymentMethod(
+      value.paymentMethod,
+    ) &&
+    validInstallments &&
+    value.paymentProvider ===
+      'PFA_SIMULATED' &&
+    typeof value.paymentReference ===
+      'string' &&
+    value.paymentReference.startsWith(
+      'pfa_sim_',
+    ) &&
+    typeof value.amount === 'string' &&
+    value.amount.length > 0
+  )
+}
+
+async function parsePaymentInitiation(
+  response: Response,
+): Promise<PaymentInitiation> {
+  const body: unknown =
+    await response.json()
+
+  if (
+    !isRecord(body) ||
+    !isPaymentInitiation(
+      body.payment,
+    )
+  ) {
+    throw new Error(
+      'Resposta inválida do servidor',
+    )
+  }
+
+  return body.payment
 }
 
 function formatPrice(
@@ -380,6 +454,18 @@ export function CheckoutClient() {
     useState<CheckoutOrder | null>(
       null,
     )
+
+  const [payment, setPayment] =
+    useState<PaymentInitiation | null>(
+      null,
+    )
+
+  const [
+    paymentError,
+    setPaymentError,
+  ] = useState<string | null>(
+    null,
+  )
 
   const [
     pendingAction,
@@ -684,6 +770,50 @@ export function CheckoutClient() {
     }
   }
 
+  async function requestPaymentInitiation(
+    orderId: string,
+  ) {
+    const response =
+      await fetch(
+        '/api/payments/initiate',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            orderId,
+          }),
+        },
+      )
+
+    if (!response.ok) {
+      throw new Error(
+        await getResponseError(
+          response,
+          'Não foi possível iniciar o pagamento',
+        ),
+      )
+    }
+
+    const initiatedPayment =
+      await parsePaymentInitiation(
+        response,
+      )
+
+    if (
+      initiatedPayment.orderId !==
+      orderId
+    ) {
+      throw new Error(
+        'Resposta inválida do servidor',
+      )
+    }
+
+    return initiatedPayment
+  }
+
   async function handleCheckout() {
     if (
       pendingAction ||
@@ -701,6 +831,7 @@ export function CheckoutClient() {
 
     setPendingAction('checkout')
     setError(null)
+    setPaymentError(null)
 
     try {
       const response =
@@ -737,11 +868,62 @@ export function CheckoutClient() {
         await parseOrder(response)
 
       setOrder(createdOrder)
+      setPayment(null)
+      setPendingAction('payment')
+
+      try {
+        const initiatedPayment =
+          await requestPaymentInitiation(
+            createdOrder.id,
+          )
+
+        setPayment(
+          initiatedPayment,
+        )
+      } catch (caughtPaymentError) {
+        setPaymentError(
+          caughtPaymentError instanceof
+            Error
+            ? caughtPaymentError.message
+            : 'Não foi possível iniciar o pagamento',
+        )
+      }
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
           : 'Não foi possível criar a encomenda',
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleRetryPayment() {
+    if (
+      !order ||
+      pendingAction
+    ) {
+      return
+    }
+
+    setPendingAction('payment')
+    setPaymentError(null)
+
+    try {
+      const initiatedPayment =
+        await requestPaymentInitiation(
+          order.id,
+        )
+
+      setPayment(
+        initiatedPayment,
+      )
+    } catch (caughtError) {
+      setPaymentError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Não foi possível iniciar o pagamento',
       )
     } finally {
       setPendingAction(null)
@@ -860,9 +1042,72 @@ export function CheckoutClient() {
           </strong>
         </p>
 
+        {pendingAction ===
+          'payment' &&
+        !payment ? (
+          <p className="mt-3 text-sm text-green-900">
+            A iniciar pagamento...
+          </p>
+        ) : null}
+
+        {payment ? (
+          <div className="mt-4 rounded-lg border border-green-300 bg-white/70 p-4 text-sm text-green-950">
+            <p className="font-semibold">
+              Pagamento iniciado em modo
+              de demonstração.
+            </p>
+
+            <p className="mt-2">
+              Referência:{' '}
+              <code className="break-all font-mono">
+                {payment.paymentReference}
+              </code>
+            </p>
+
+            <p className="mt-1 text-xs text-green-800">
+              Fornecedor simulado:
+              {' '}
+              {payment.paymentProvider}
+            </p>
+          </div>
+        ) : null}
+
+        {paymentError ? (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+          >
+            <p className="font-semibold">
+              A encomenda foi criada,
+              mas o pagamento ainda não
+              foi iniciado.
+            </p>
+
+            <p className="mt-2">
+              {paymentError}
+            </p>
+
+            <button
+              type="button"
+              disabled={
+                pendingAction !== null
+              }
+              onClick={() =>
+                void handleRetryPayment()
+              }
+              className="mt-3 rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pendingAction ===
+              'payment'
+                ? 'A iniciar pagamento...'
+                : 'Tentar iniciar pagamento novamente'}
+            </button>
+          </div>
+        ) : null}
+
         {order.paymentStatus ===
         'PENDING' ? (
-          <p className="mt-2 text-sm text-green-900">
+          <p className="mt-3 text-sm text-green-900">
             Pagamento pendente de
             confirmação.
           </p>

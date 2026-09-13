@@ -93,6 +93,33 @@ function createOrder(
   }
 }
 
+function createPayment(
+  overrides?: Partial<{
+    paymentMethod:
+      | 'CARD'
+      | 'INSTALLMENTS'
+    installmentCount:
+      number | null
+    amount: string
+  }>,
+) {
+  return {
+    payment: {
+      orderId: 'order-1',
+      paymentStatus:
+        'PENDING',
+      paymentMethod: 'CARD',
+      installmentCount: null,
+      paymentProvider:
+        'PFA_SIMULATED',
+      paymentReference:
+        'pfa_sim_reference',
+      amount: '105.90',
+      ...overrides,
+    },
+  }
+}
+
 const fetchMock = vi.fn()
 
 async function requestDeliveryPreview(
@@ -402,22 +429,28 @@ describe(
           ),
         ).toHaveLength(1)
 
-        fetchMock.mockResolvedValueOnce(
-          jsonResponse(
-            {
-              order:
-                createOrder(),
-            },
-            201,
-          ),
-        )
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                order:
+                  createOrder(),
+              },
+              201,
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              createPayment(),
+            ),
+          )
 
         fireEvent.click(
           freshCheckoutButton,
         )
 
         await screen.findByText(
-          'Encomenda criada',
+          'pfa_sim_reference',
         )
 
         const finalOptions =
@@ -438,7 +471,27 @@ describe(
 
         expect(
           fetchMock,
-        ).toHaveBeenCalledTimes(5)
+        ).toHaveBeenCalledTimes(6)
+
+        expect(
+          fetchMock.mock.calls[5]?.[0],
+        ).toBe(
+          '/api/payments/initiate',
+        )
+
+        expect(
+          JSON.parse(
+            String(
+              (
+                fetchMock.mock.calls[5]?.[1] as
+                  | RequestInit
+                  | undefined
+              )?.body,
+            ),
+          ),
+        ).toEqual({
+          orderId: 'order-1',
+        })
       },
     )
 
@@ -862,6 +915,11 @@ describe(
               201,
             ),
           )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              createPayment(),
+            ),
+          )
 
         render(
           <CheckoutClient />,
@@ -919,6 +977,33 @@ describe(
             'Entrega ao domicílio',
           ),
         ).toBeTruthy()
+
+        expect(
+          await screen.findByText(
+            'pfa_sim_reference',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          fetchMock.mock.calls[3]?.[0],
+        ).toBe(
+          '/api/payments/initiate',
+        )
+
+        const initiationOptions =
+          fetchMock.mock.calls[3]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              initiationOptions?.body,
+            ),
+          ),
+        ).toEqual({
+          orderId: 'order-1',
+        })
 
         const options =
           fetchMock.mock.calls[2]?.[1] as
@@ -988,6 +1073,13 @@ describe(
               201,
             ),
           )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              createPayment({
+                amount: '100.00',
+              }),
+            ),
+          )
 
         render(
           <CheckoutClient />,
@@ -1055,6 +1147,33 @@ describe(
           ),
         ).toBeTruthy()
 
+        expect(
+          await screen.findByText(
+            'pfa_sim_reference',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          fetchMock.mock.calls[3]?.[0],
+        ).toBe(
+          '/api/payments/initiate',
+        )
+
+        const initiationOptions =
+          fetchMock.mock.calls[3]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              initiationOptions?.body,
+            ),
+          ),
+        ).toEqual({
+          orderId: 'order-1',
+        })
+
         const options =
           fetchMock.mock.calls[2]?.[1] as
             | RequestInit
@@ -1079,6 +1198,147 @@ describe(
             phone:
               '910000000',
           },
+        })
+      },
+    )
+
+    test(
+      'repete apenas a iniciação do pagamento quando a encomenda já foi criada',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [
+                createAddress(),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview:
+                createPreview(),
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                order:
+                  createOrder(),
+              },
+              201,
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                error:
+                  'Falha temporária no pagamento',
+              },
+              500,
+            ),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.change(
+          await screen.findByLabelText(
+            'Telefone',
+          ),
+          {
+            target: {
+              value:
+                '910000000',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Falha temporária no pagamento',
+        )
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url === '/api/checkout',
+          ),
+        ).toHaveLength(1)
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            createPayment(),
+          ),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Tentar iniciar pagamento novamente',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'pfa_sim_reference',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url === '/api/checkout',
+          ),
+        ).toHaveLength(1)
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url ===
+              '/api/payments/initiate',
+          ),
+        ).toHaveLength(2)
+
+        const retryOptions =
+          fetchMock.mock.calls[4]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              retryOptions?.body,
+            ),
+          ),
+        ).toEqual({
+          orderId: 'order-1',
         })
       },
     )

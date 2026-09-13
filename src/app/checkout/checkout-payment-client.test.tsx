@@ -54,6 +54,24 @@ function createPreview() {
   }
 }
 
+function createPayment() {
+  return {
+    payment: {
+      orderId: 'order-1',
+      paymentStatus:
+        'PENDING',
+      paymentMethod:
+        'INSTALLMENTS',
+      installmentCount: 3,
+      paymentProvider:
+        'PFA_SIMULATED',
+      paymentReference:
+        'pfa_sim_installments',
+      amount: '105.90',
+    },
+  }
+}
+
 function requestBody(
   callIndex: number,
 ) {
@@ -343,6 +361,11 @@ describe(
               },
             }, 201),
           )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              createPayment(),
+            ),
+          )
 
         render(<CheckoutClient />)
 
@@ -411,6 +434,24 @@ describe(
           installmentCount: 3,
           expectedFingerprint:
             createPreview().fingerprint,
+        })
+
+        expect(
+          await screen.findByText(
+            'pfa_sim_installments',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          fetchMock.mock.calls[3]?.[0],
+        ).toBe(
+          '/api/payments/initiate',
+        )
+
+        expect(
+          requestBody(3),
+        ).toEqual({
+          orderId: 'order-1',
         })
       },
     )
