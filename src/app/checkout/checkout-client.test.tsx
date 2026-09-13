@@ -86,8 +86,10 @@ function createOrder(
         ? 100
         : 105.9,
     status: 'PENDING',
+    paymentMethod: 'CARD',
+    installmentCount: null,
     paymentStatus:
-      'UNPAID',
+      'PENDING',
   }
 }
 
@@ -643,6 +645,8 @@ describe(
         ).toEqual({
           fulfillmentMethod:
             'DELIVERY',
+          paymentMethod: 'CARD',
+          installmentCount: null,
           shipping: {
             name: 'Maria Silva',
             phone:
@@ -754,6 +758,8 @@ describe(
         ).toEqual({
           fulfillmentMethod:
             'PICKUP',
+          paymentMethod: 'CARD',
+          installmentCount: null,
           shipping: {
             name: 'Maria Silva',
             phone:
@@ -928,6 +934,8 @@ describe(
         ).toEqual({
           fulfillmentMethod:
             'DELIVERY',
+          paymentMethod: 'CARD',
+          installmentCount: null,
           expectedFingerprint:
             createPreview()
               .fingerprint,
@@ -1061,6 +1069,8 @@ describe(
         ).toEqual({
           fulfillmentMethod:
             'PICKUP',
+          paymentMethod: 'CARD',
+          installmentCount: null,
           expectedFingerprint:
             createPreview()
               .fingerprint,

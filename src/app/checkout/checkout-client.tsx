@@ -21,6 +21,10 @@ type FulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+type PaymentMethod =
+  | 'CARD'
+  | 'INSTALLMENTS'
+
 type CheckoutPreview = {
   subtotal: number
   shippingCost: number
@@ -33,6 +37,8 @@ type CheckoutOrder = {
   id: string
   orderNumber: string
   fulfillmentMethod: FulfillmentMethod
+  paymentMethod?: PaymentMethod
+  installmentCount?: number | null
   subtotal: number
   shippingCost: number
   tax: number
@@ -52,7 +58,7 @@ type PendingAction =
   | 'checkout'
   | null
 
-type CheckoutRequestInput =
+type CheckoutFulfillmentRequestInput =
   | {
       fulfillmentMethod: 'DELIVERY'
       shipping: {
@@ -73,6 +79,20 @@ type CheckoutRequestInput =
         phone: string
       }
     }
+
+type CheckoutPaymentRequestInput =
+  | {
+      paymentMethod: 'CARD'
+      installmentCount: null
+    }
+  | {
+      paymentMethod: 'INSTALLMENTS'
+      installmentCount: number
+    }
+
+type CheckoutRequestInput =
+  CheckoutFulfillmentRequestInput &
+    CheckoutPaymentRequestInput
 
 function isRecord(
   value: unknown,
@@ -146,6 +166,15 @@ function isFulfillmentMethod(
   )
 }
 
+function isPaymentMethod(
+  value: unknown,
+): value is PaymentMethod {
+  return (
+    value === 'CARD' ||
+    value === 'INSTALLMENTS'
+  )
+}
+
 function isCheckoutOrder(
   value: unknown,
 ): value is CheckoutOrder {
@@ -159,6 +188,24 @@ function isCheckoutOrder(
       'string' &&
     isFulfillmentMethod(
       value.fulfillmentMethod,
+    ) &&
+    (
+      value.paymentMethod === undefined ||
+      isPaymentMethod(
+        value.paymentMethod,
+      )
+    ) &&
+    (
+      value.installmentCount === undefined ||
+      value.installmentCount === null ||
+      (
+        typeof value.installmentCount ===
+          'number' &&
+        Number.isSafeInteger(
+          value.installmentCount,
+        ) &&
+        value.installmentCount >= 2
+      )
     ) &&
     isMoneyValue(value.subtotal) &&
     isMoneyValue(
@@ -305,6 +352,18 @@ export function CheckoutClient() {
   ] = useState<FulfillmentMethod>(
     'DELIVERY',
   )
+
+  const [
+    paymentMethod,
+    setPaymentMethod,
+  ] = useState<PaymentMethod>(
+    'CARD',
+  )
+
+  const [
+    installmentCount,
+    setInstallmentCount,
+  ] = useState('2')
 
   const [pickupName, setPickupName] =
     useState('')
@@ -457,6 +516,13 @@ export function CheckoutClient() {
     invalidatePreview()
   }
 
+  function changePaymentMethod(
+    nextMethod: PaymentMethod,
+  ) {
+    setPaymentMethod(nextMethod)
+    invalidatePreview()
+  }
+
   function validateCheckoutInput():
     | CheckoutRequestInput
     | null {
@@ -469,6 +535,45 @@ export function CheckoutClient() {
       )
 
       return null
+    }
+
+    let paymentInput:
+      CheckoutPaymentRequestInput
+
+    if (paymentMethod === 'CARD') {
+      paymentInput = {
+        paymentMethod: 'CARD',
+        installmentCount: null,
+      }
+    } else {
+      const trimmedInstallmentCount =
+        installmentCount.trim()
+      const numericInstallmentCount =
+        Number(trimmedInstallmentCount)
+
+      if (
+        !/^\d+$/.test(
+          trimmedInstallmentCount,
+        ) ||
+        !Number.isSafeInteger(
+          numericInstallmentCount,
+        ) ||
+        numericInstallmentCount < 2 ||
+        numericInstallmentCount >
+          2_147_483_647
+      ) {
+        setError(
+          'Indica um número de prestações válido (mínimo 2).',
+        )
+
+        return null
+      }
+
+      paymentInput = {
+        paymentMethod: 'INSTALLMENTS',
+        installmentCount:
+          numericInstallmentCount,
+      }
     }
 
     if (
@@ -487,6 +592,7 @@ export function CheckoutClient() {
       }
 
       return {
+        ...paymentInput,
         fulfillmentMethod:
           'PICKUP',
         shipping: {
@@ -505,6 +611,7 @@ export function CheckoutClient() {
     }
 
     return {
+      ...paymentInput,
       fulfillmentMethod:
         'DELIVERY',
       shipping:
@@ -698,6 +805,16 @@ export function CheckoutClient() {
   }
 
   if (order) {
+    const completedPaymentMethod =
+      order.paymentMethod ??
+      paymentMethod
+    const completedInstallmentCount =
+      order.installmentCount ??
+      (completedPaymentMethod ===
+      'INSTALLMENTS'
+        ? Number(installmentCount)
+        : null)
+
     return (
       <div
         role="status"
@@ -725,6 +842,16 @@ export function CheckoutClient() {
         </p>
 
         <p className="mt-2 text-sm text-green-900">
+          Pagamento:{' '}
+          <strong>
+            {completedPaymentMethod ===
+            'CARD'
+              ? 'Cartão'
+              : `Pagamento em ${completedInstallmentCount} prestações`}
+          </strong>
+        </p>
+
+        <p className="mt-2 text-sm text-green-900">
           Total:{' '}
           <strong>
             {formatPrice(
@@ -732,6 +859,14 @@ export function CheckoutClient() {
             )}
           </strong>
         </p>
+
+        {order.paymentStatus ===
+        'PENDING' ? (
+          <p className="mt-2 text-sm text-green-900">
+            Pagamento pendente de
+            confirmação.
+          </p>
+        ) : null}
 
         {order.fulfillmentMethod ===
         'PICKUP' ? (
@@ -986,6 +1121,108 @@ export function CheckoutClient() {
           />
         </div>
 
+        <fieldset className="mt-7">
+          <legend className="text-lg font-semibold text-gray-950">
+            Pagamento
+          </legend>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <label className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-4">
+              <input
+                type="radio"
+                name="payment-method"
+                value="CARD"
+                aria-label="Cartão"
+                checked={
+                  paymentMethod === 'CARD'
+                }
+                disabled={
+                  pendingAction !== null
+                }
+                onChange={() =>
+                  changePaymentMethod(
+                    'CARD',
+                  )
+                }
+              />
+
+              <span>
+                <span className="block text-sm font-semibold text-gray-950">
+                  Cartão
+                </span>
+                <span className="mt-1 block text-xs text-gray-600">
+                  Pagamento integral por cartão.
+                </span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-4">
+              <input
+                type="radio"
+                name="payment-method"
+                value="INSTALLMENTS"
+                aria-label="Pagamento em prestações"
+                checked={
+                  paymentMethod ===
+                  'INSTALLMENTS'
+                }
+                disabled={
+                  pendingAction !== null
+                }
+                onChange={() =>
+                  changePaymentMethod(
+                    'INSTALLMENTS',
+                  )
+                }
+              />
+
+              <span>
+                <span className="block text-sm font-semibold text-gray-950">
+                  Pagamento em prestações
+                </span>
+                <span className="mt-1 block text-xs text-gray-600">
+                  Define o número de prestações antes de calcular o total.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          {paymentMethod ===
+          'INSTALLMENTS' ? (
+            <div className="mt-4">
+              <label
+                htmlFor="checkout-installment-count"
+                className="block text-sm font-medium text-gray-900"
+              >
+                Número de prestações
+              </label>
+
+              <input
+                id="checkout-installment-count"
+                type="number"
+                min={2}
+                step={1}
+                inputMode="numeric"
+                value={installmentCount}
+                disabled={
+                  pendingAction !== null
+                }
+                onChange={(event) => {
+                  setInstallmentCount(
+                    event.target.value,
+                  )
+                  invalidatePreview()
+                }}
+                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-950"
+              />
+
+              <p className="mt-2 text-xs text-gray-600">
+                O número efetivamente disponível será confirmado pelo fornecedor de pagamentos.
+              </p>
+            </div>
+          ) : null}
+        </fieldset>
+
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {fulfillmentMethod ===
           'DELIVERY' ? (
@@ -1027,6 +1264,12 @@ export function CheckoutClient() {
           'PICKUP'
             ? 'Levantamento em loja'
             : 'Entrega ao domicílio'}
+        </p>
+
+        <p className="mt-1 text-xs text-gray-500">
+          {paymentMethod === 'CARD'
+            ? 'Pagamento: Cartão'
+            : `Pagamento: ${installmentCount} prestações`}
         </p>
 
         {preview ? (

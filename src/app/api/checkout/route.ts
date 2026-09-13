@@ -9,6 +9,8 @@ import {
   CheckoutProductUnavailableError,
   type CheckoutContactInput,
   type CheckoutFulfillmentInput,
+  type CheckoutInput,
+  type CheckoutPaymentInput,
   type CheckoutShippingInput,
   CheckoutUserUnavailableError,
   CheckoutValidationError,
@@ -34,6 +36,7 @@ type CheckoutApiErrorCode =
   | 'INVALID_REQUEST'
   | 'INVALID_FULFILLMENT_METHOD'
   | 'INVALID_SHIPPING'
+  | 'INVALID_PAYMENT'
   | 'INVALID_FINGERPRINT'
   | 'CHECKOUT_PREVIEW_CHANGED'
 
@@ -138,6 +141,53 @@ function parseDeliveryShippingInput(
     region:
       region as CheckoutShippingInput['region'],
   }
+}
+
+function parsePaymentInput(
+  body: Record<string, unknown>,
+): CheckoutPaymentInput | null {
+  const paymentMethod =
+    body.paymentMethod
+  const installmentCount =
+    body.installmentCount
+
+  if (paymentMethod === 'CARD') {
+    if (
+      installmentCount !== undefined &&
+      installmentCount !== null
+    ) {
+      return null
+    }
+
+    return {
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    }
+  }
+
+  if (
+    paymentMethod === 'INSTALLMENTS'
+  ) {
+    if (
+      typeof installmentCount !==
+        'number' ||
+      !Number.isSafeInteger(
+        installmentCount,
+      ) ||
+      installmentCount < 2 ||
+      installmentCount >
+        2_147_483_647
+    ) {
+      return null
+    }
+
+    return {
+      paymentMethod: 'INSTALLMENTS',
+      installmentCount,
+    }
+  }
+
+  return null
 }
 
 function handleCheckoutError(
@@ -318,6 +368,22 @@ export async function POST(
       }
     }
 
+    const payment =
+      parsePaymentInput(body)
+
+    if (!payment) {
+      return errorResponse(
+        'Dados de pagamento inválidos',
+        400,
+        'INVALID_PAYMENT',
+      )
+    }
+
+    const checkoutInput = {
+      ...fulfillment,
+      ...payment,
+    } as CheckoutInput
+
     const expectedFingerprint =
       body.expectedFingerprint
 
@@ -339,7 +405,7 @@ export async function POST(
     const order =
       await createCheckoutOrder(
         userId,
-        fulfillment,
+        checkoutInput,
         expectedFingerprint,
       )
 

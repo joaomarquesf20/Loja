@@ -24,9 +24,16 @@ enum OrderStatus {
 }
 
 enum PaymentStatus {
-  UNPAID
+  PENDING
+  AUTHORIZED
   PAID
   FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  INSTALLMENTS
 }
 
 enum FulfillmentMethod {
@@ -277,7 +284,11 @@ model Order {
   tax                     Decimal           @default(0) @db.Decimal(10, 2)
   total                   Decimal           @db.Decimal(10, 2)
   status                  OrderStatus       @default(PENDING)
-  paymentStatus           PaymentStatus     @default(UNPAID)
+  paymentStatus           PaymentStatus     @default(PENDING)
+  paymentMethod           PaymentMethod?
+  installmentCount        Int?
+  paymentProvider         String?
+  paymentReference        String?
   fulfillmentMethod       FulfillmentMethod @default(DELIVERY)
   shippingName            String
   shippingEmail           String
@@ -302,6 +313,7 @@ model Order {
   items                   OrderItem[]
 
   @@index([orderNumber])
+  @@index([paymentProvider, paymentReference])
 }
 
 model OrderItem {

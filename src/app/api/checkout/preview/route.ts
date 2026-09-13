@@ -8,6 +8,8 @@ import {
   CheckoutProductUnavailableError,
   type CheckoutContactInput,
   type CheckoutFulfillmentInput,
+  type CheckoutInput,
+  type CheckoutPaymentInput,
   type CheckoutShippingInput,
   CheckoutUserUnavailableError,
   CheckoutValidationError,
@@ -33,6 +35,7 @@ type CheckoutPreviewApiErrorCode =
   | 'INVALID_REQUEST'
   | 'INVALID_FULFILLMENT_METHOD'
   | 'INVALID_SHIPPING'
+  | 'INVALID_PAYMENT'
 
 function errorResponse(
   message: string,
@@ -135,6 +138,53 @@ function parseDeliveryShippingInput(
     region:
       region as CheckoutShippingInput['region'],
   }
+}
+
+function parsePaymentInput(
+  body: Record<string, unknown>,
+): CheckoutPaymentInput | null {
+  const paymentMethod =
+    body.paymentMethod
+  const installmentCount =
+    body.installmentCount
+
+  if (paymentMethod === 'CARD') {
+    if (
+      installmentCount !== undefined &&
+      installmentCount !== null
+    ) {
+      return null
+    }
+
+    return {
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    }
+  }
+
+  if (
+    paymentMethod === 'INSTALLMENTS'
+  ) {
+    if (
+      typeof installmentCount !==
+        'number' ||
+      !Number.isSafeInteger(
+        installmentCount,
+      ) ||
+      installmentCount < 2 ||
+      installmentCount >
+        2_147_483_647
+    ) {
+      return null
+    }
+
+    return {
+      paymentMethod: 'INSTALLMENTS',
+      installmentCount,
+    }
+  }
+
+  return null
 }
 
 function handleCheckoutPreviewError(
@@ -304,10 +354,26 @@ export async function POST(
       }
     }
 
+    const payment =
+      parsePaymentInput(body)
+
+    if (!payment) {
+      return errorResponse(
+        'Dados de pagamento inválidos',
+        400,
+        'INVALID_PAYMENT',
+      )
+    }
+
+    const checkoutInput = {
+      ...fulfillment,
+      ...payment,
+    } as CheckoutInput
+
     const preview =
       await previewCheckout(
         userId,
-        fulfillment,
+        checkoutInput,
       )
 
     return NextResponse.json({

@@ -146,6 +146,8 @@ function deliveryBody(
   return {
     fulfillmentMethod: 'DELIVERY',
     shipping: createShipping(),
+    paymentMethod: 'CARD',
+    installmentCount: null,
     ...overrides,
   }
 }
@@ -156,6 +158,8 @@ function pickupBody(
   return {
     fulfillmentMethod: 'PICKUP',
     shipping: createPickupContact(),
+    paymentMethod: 'CARD',
+    installmentCount: null,
     ...overrides,
   }
 }
@@ -285,6 +289,106 @@ describe('/api/checkout/preview', () => {
     })
   })
 
+  test.each([
+    undefined,
+    null,
+    '',
+    'CASH',
+  ])('rejeita método de pagamento inválido %j', async (paymentMethod) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ paymentMethod }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    1,
+    2,
+    '2',
+  ])('rejeita prestações em pagamento CARD %j', async (installmentCount) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ installmentCount }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    undefined,
+    null,
+    1,
+    2.5,
+    '3',
+  ])('rejeita número de prestações inválido %j', async (installmentCount) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({
+            paymentMethod: 'INSTALLMENTS',
+            installmentCount,
+          }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test('devolve preview de prestações sem encaminhar campos de estado ou fornecedor', async () => {
+    const preview = createPreview('DELIVERY')
+    mocks.previewCheckout.mockResolvedValue(preview)
+
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({
+            paymentMethod: 'INSTALLMENTS',
+            installmentCount: 4,
+            paymentStatus: 'PAID',
+            paymentProvider: 'attacker-provider',
+            paymentReference: 'attacker-reference',
+          }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    expect(mocks.previewCheckout).toHaveBeenCalledWith(
+      'user-1',
+      {
+        fulfillmentMethod: 'DELIVERY',
+        shipping: createShipping(),
+        paymentMethod: 'INSTALLMENTS',
+        installmentCount: 4,
+      },
+    )
+    await expect(response.json()).resolves.toEqual({ preview })
+  })
+
   test('devolve preview DELIVERY e extrai apenas campos autorizados', async () => {
     const preview = createPreview('DELIVERY')
     mocks.previewCheckout.mockResolvedValue(preview)
@@ -295,6 +399,9 @@ describe('/api/checkout/preview', () => {
           ...deliveryBody(),
           userId: 'attacker-user',
           total: 0,
+          paymentStatus: 'PAID',
+          paymentProvider: 'attacker-provider',
+          paymentReference: 'attacker-reference',
           shipping: {
             ...createShipping(),
             paymentStatus: 'PAID',
@@ -309,6 +416,8 @@ describe('/api/checkout/preview', () => {
       {
         fulfillmentMethod: 'DELIVERY',
         shipping: createShipping(),
+        paymentMethod: 'CARD',
+        installmentCount: null,
       },
     )
     await expect(response.json()).resolves.toEqual({ preview })
@@ -337,6 +446,8 @@ describe('/api/checkout/preview', () => {
       {
         fulfillmentMethod: 'PICKUP',
         shipping: createPickupContact(),
+        paymentMethod: 'CARD',
+        installmentCount: null,
       },
     )
     await expect(response.json()).resolves.toEqual({ preview })

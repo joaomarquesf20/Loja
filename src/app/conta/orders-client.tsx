@@ -334,12 +334,16 @@ function getPaymentStatusLabel(
   status: string,
 ) {
   switch (status) {
-    case 'UNPAID':
-      return 'Por pagar'
+    case 'PENDING':
+      return 'Pendente'
+    case 'AUTHORIZED':
+      return 'Autorizado'
     case 'PAID':
       return 'Pago'
     case 'FAILED':
       return 'Falhou'
+    case 'REFUNDED':
+      return 'Reembolsado'
     default:
       return status
   }

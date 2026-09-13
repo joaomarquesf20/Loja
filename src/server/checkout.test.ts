@@ -384,7 +384,7 @@ function prepareSuccessfulCheckout(
       orderNumber:
         data.orderNumber,
       status: 'PENDING',
-      paymentStatus: 'UNPAID',
+      paymentStatus: 'PENDING',
     }),
   )
 
@@ -878,7 +878,7 @@ describe(
           total: 45.88,
           status: 'PENDING',
           paymentStatus:
-            'UNPAID',
+            'PENDING',
         })
 
         expect(

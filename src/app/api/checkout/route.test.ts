@@ -138,7 +138,9 @@ function createOrder(
     tax: 19.8,
     total: fulfillmentMethod === 'PICKUP' ? 100 : 105.9,
     status: 'PENDING',
-    paymentStatus: 'UNPAID',
+    paymentStatus: 'PENDING',
+    paymentMethod: 'CARD',
+    installmentCount: null,
   }
 }
 
@@ -161,6 +163,8 @@ function deliveryBody(
   return {
     fulfillmentMethod: 'DELIVERY',
     shipping: createShipping(),
+    paymentMethod: 'CARD',
+    installmentCount: null,
     expectedFingerprint: validFingerprint,
     ...overrides,
   }
@@ -172,6 +176,8 @@ function pickupBody(
   return {
     fulfillmentMethod: 'PICKUP',
     shipping: createPickupContact(),
+    paymentMethod: 'CARD',
+    installmentCount: null,
     expectedFingerprint: validFingerprint,
     ...overrides,
   }
@@ -326,6 +332,111 @@ describe('/api/checkout', () => {
     undefined,
     null,
     '',
+    'CASH',
+  ])('rejeita método de pagamento inválido %j', async (paymentMethod) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ paymentMethod }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    1,
+    2,
+    '2',
+  ])('rejeita prestações em pagamento CARD %j', async (installmentCount) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ installmentCount }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    undefined,
+    null,
+    1,
+    2.5,
+    '3',
+  ])('rejeita número de prestações inválido %j', async (installmentCount) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({
+            paymentMethod: 'INSTALLMENTS',
+            installmentCount,
+          }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Dados de pagamento inválidos',
+      code: 'INVALID_PAYMENT',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test('aceita pagamento em prestações e encaminha apenas os termos autorizados', async () => {
+    const order = {
+      ...createOrder('DELIVERY'),
+      paymentMethod: 'INSTALLMENTS',
+      installmentCount: 3,
+    }
+    mocks.createCheckoutOrder.mockResolvedValue(order)
+
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({
+            paymentMethod: 'INSTALLMENTS',
+            installmentCount: 3,
+            paymentStatus: 'PAID',
+            paymentProvider: 'attacker-provider',
+            paymentReference: 'attacker-reference',
+          }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(201)
+    expect(mocks.createCheckoutOrder).toHaveBeenCalledWith(
+      'user-1',
+      {
+        fulfillmentMethod: 'DELIVERY',
+        shipping: createShipping(),
+        paymentMethod: 'INSTALLMENTS',
+        installmentCount: 3,
+      },
+      validFingerprint,
+    )
+    await expect(response.json()).resolves.toEqual({ order })
+  })
+
+  test.each([
+    undefined,
+    null,
+    '',
     'a'.repeat(63),
     'A'.repeat(64),
     'g'.repeat(64),
@@ -357,6 +468,8 @@ describe('/api/checkout', () => {
           userId: 'attacker-user',
           total: 0,
           paymentStatus: 'PAID',
+          paymentProvider: 'attacker-provider',
+          paymentReference: 'attacker-reference',
           shipping: {
             ...createShipping(),
             userId: 'attacker-user',
@@ -372,6 +485,8 @@ describe('/api/checkout', () => {
       {
         fulfillmentMethod: 'DELIVERY',
         shipping: createShipping(),
+        paymentMethod: 'CARD',
+        installmentCount: null,
       },
       validFingerprint,
     )
@@ -388,6 +503,8 @@ describe('/api/checkout', () => {
           ...pickupBody(),
           total: 0,
           paymentStatus: 'PAID',
+          paymentProvider: 'attacker-provider',
+          paymentReference: 'attacker-reference',
           shipping: {
             ...createPickupContact(),
             addressLine1: 'Morada inventada',
@@ -403,6 +520,8 @@ describe('/api/checkout', () => {
       {
         fulfillmentMethod: 'PICKUP',
         shipping: createPickupContact(),
+        paymentMethod: 'CARD',
+        installmentCount: null,
       },
       validFingerprint,
     )

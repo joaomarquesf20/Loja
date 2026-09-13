@@ -62,6 +62,10 @@ export type CheckoutFulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+export type CheckoutPaymentMethod =
+  | 'CARD'
+  | 'INSTALLMENTS'
+
 export type CheckoutContactInput = {
   name: string
   phone: string
@@ -87,6 +91,20 @@ export type CheckoutFulfillmentInput =
       shipping: CheckoutContactInput
     }
 
+export type CheckoutPaymentInput =
+  | {
+      paymentMethod: 'CARD'
+      installmentCount?: null
+    }
+  | {
+      paymentMethod: 'INSTALLMENTS'
+      installmentCount: number
+    }
+
+export type CheckoutInput =
+  CheckoutFulfillmentInput &
+    CheckoutPaymentInput
+
 export type CheckoutShipping = {
   name: string
   phone: string
@@ -103,7 +121,7 @@ type CheckoutContact = {
   phone: string
 }
 
-type NormalizedCheckoutInput =
+type NormalizedFulfillmentInput =
   | {
       fulfillmentMethod: 'DELIVERY'
       shipping: CheckoutShipping
@@ -113,10 +131,26 @@ type NormalizedCheckoutInput =
       shipping: CheckoutContact
     }
 
+type NormalizedPaymentInput =
+  | {
+      paymentMethod: 'CARD'
+      installmentCount: null
+    }
+  | {
+      paymentMethod: 'INSTALLMENTS'
+      installmentCount: number
+    }
+
+type NormalizedCheckoutInput =
+  NormalizedFulfillmentInput &
+    NormalizedPaymentInput
+
 export type CheckoutResult = {
   id: string
   orderNumber: string
   fulfillmentMethod: CheckoutFulfillmentMethod
+  paymentMethod: CheckoutPaymentMethod
+  installmentCount: number | null
   subtotal: number
   shippingCost: number
   tax: number
@@ -314,6 +348,11 @@ type CheckoutTransactionClient =
           shippingCost: string
           tax: string
           total: string
+          paymentStatus: 'PENDING'
+          paymentMethod: CheckoutPaymentMethod
+          installmentCount: number | null
+          paymentProvider: null
+          paymentReference: null
           fulfillmentMethod: CheckoutFulfillmentMethod
           shippingName: string
           shippingEmail: string
@@ -599,11 +638,16 @@ function normalizeShipping(
   }
 }
 
+type CheckoutServiceInput =
+  | CheckoutInput
+  | CheckoutFulfillmentInput
+  | CheckoutShippingInput
+
 function isCheckoutFulfillmentInput(
-  input:
-    | CheckoutFulfillmentInput
-    | CheckoutShippingInput,
-): input is CheckoutFulfillmentInput {
+  input: CheckoutServiceInput,
+): input is
+  | CheckoutInput
+  | CheckoutFulfillmentInput {
   return (
     typeof input === 'object' &&
     input !== null &&
@@ -612,10 +656,8 @@ function isCheckoutFulfillmentInput(
 }
 
 function normalizeFulfillmentInput(
-  input:
-    | CheckoutFulfillmentInput
-    | CheckoutShippingInput,
-): NormalizedCheckoutInput {
+  input: CheckoutServiceInput,
+): NormalizedFulfillmentInput {
   if (!isCheckoutFulfillmentInput(input)) {
     return {
       fulfillmentMethod: 'DELIVERY',
@@ -632,7 +674,7 @@ function normalizeFulfillmentInput(
     return {
       fulfillmentMethod: 'DELIVERY',
       shipping: normalizeShipping(
-        input.shipping,
+        input.shipping as CheckoutShippingInput,
       ),
     }
   }
@@ -644,7 +686,7 @@ function normalizeFulfillmentInput(
     return {
       fulfillmentMethod: 'PICKUP',
       shipping: normalizeContact(
-        input.shipping,
+        input.shipping as CheckoutContactInput,
       ),
     }
   }
@@ -652,6 +694,86 @@ function normalizeFulfillmentInput(
   throw new CheckoutValidationError(
     'Método de entrega inválido',
   )
+}
+
+function normalizePaymentInput(
+  input: CheckoutServiceInput,
+): NormalizedPaymentInput {
+  if (
+    typeof input !== 'object' ||
+    input === null ||
+    !('paymentMethod' in input)
+  ) {
+    return {
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    }
+  }
+
+  const paymentMethod =
+    (input as {
+      paymentMethod?: unknown
+    }).paymentMethod
+
+  const installmentCount =
+    (input as {
+      installmentCount?: unknown
+    }).installmentCount
+
+  if (paymentMethod === 'CARD') {
+    if (
+      installmentCount !== undefined &&
+      installmentCount !== null
+    ) {
+      throw new CheckoutValidationError(
+        'O pagamento por cartão não aceita número de prestações',
+      )
+    }
+
+    return {
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    }
+  }
+
+  if (
+    paymentMethod === 'INSTALLMENTS'
+  ) {
+    if (
+      typeof installmentCount !==
+        'number' ||
+      !Number.isSafeInteger(
+        installmentCount,
+      ) ||
+      installmentCount < 2 ||
+      installmentCount >
+        2_147_483_647
+    ) {
+      throw new CheckoutValidationError(
+        'Número de prestações inválido',
+      )
+    }
+
+    return {
+      paymentMethod: 'INSTALLMENTS',
+      installmentCount,
+    }
+  }
+
+  throw new CheckoutValidationError(
+    'Método de pagamento inválido',
+  )
+}
+
+function normalizeCheckoutInput(
+  input: CheckoutServiceInput,
+): NormalizedCheckoutInput {
+  return {
+    ...normalizeFulfillmentInput(
+      input,
+    ),
+    ...normalizePaymentInput(input),
+  } as NormalizedCheckoutInput
 }
 
 function getCheckoutContact(
@@ -1260,11 +1382,17 @@ function createCheckoutFingerprint(
       : null
 
   const snapshot = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     userId: user.id,
     shippingEmail,
     fulfillmentMethod:
       fulfillment.fulfillmentMethod,
+    payment: {
+      method:
+        fulfillment.paymentMethod,
+      installmentCount:
+        fulfillment.installmentCount,
+    },
     contact: {
       name: contact.name,
       phone: contact.phone,
@@ -1391,18 +1519,14 @@ function createCheckoutAmounts(
 
 export async function previewCheckout(
   userId: string,
-  input:
-    | CheckoutFulfillmentInput
-    | CheckoutShippingInput,
+  input: CheckoutServiceInput,
   client?: CheckoutClient,
 ): Promise<CheckoutPreviewResult> {
   const normalizedUserId =
     normalizeUserId(userId)
 
   const fulfillment =
-    normalizeFulfillmentInput(
-      input,
-    )
+    normalizeCheckoutInput(input)
 
   const db = getClient(client)
 
@@ -1432,9 +1556,7 @@ export async function previewCheckout(
 
 export async function createCheckoutOrder(
   userId: string,
-  input:
-    | CheckoutFulfillmentInput
-    | CheckoutShippingInput,
+  input: CheckoutServiceInput,
   expectedFingerprint: string,
   client?: CheckoutClient,
 ): Promise<CheckoutResult> {
@@ -1442,9 +1564,7 @@ export async function createCheckoutOrder(
     normalizeUserId(userId)
 
   const fulfillment =
-    normalizeFulfillmentInput(
-      input,
-    )
+    normalizeCheckoutInput(input)
 
   validateExpectedFingerprint(
     expectedFingerprint,
@@ -1541,6 +1661,14 @@ export async function createCheckoutOrder(
               centsToString(
                 pricing.totalCents,
               ),
+            paymentStatus:
+              'PENDING',
+            paymentMethod:
+              fulfillment.paymentMethod,
+            installmentCount:
+              fulfillment.installmentCount,
+            paymentProvider: null,
+            paymentReference: null,
             fulfillmentMethod:
               fulfillment
                 .fulfillmentMethod,
@@ -1669,6 +1797,10 @@ export async function createCheckoutOrder(
         fulfillmentMethod:
           fulfillment
             .fulfillmentMethod,
+        paymentMethod:
+          fulfillment.paymentMethod,
+        installmentCount:
+          fulfillment.installmentCount,
         ...createCheckoutAmounts(
           pricing,
         ),
