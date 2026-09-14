@@ -173,7 +173,7 @@ function parsePaymentInput(
       ) ||
       installmentCount < 2 ||
       installmentCount >
-        2_147_483_647
+        12
     ) {
       return null
     }

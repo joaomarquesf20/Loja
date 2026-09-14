@@ -747,7 +747,7 @@ function normalizePaymentInput(
       ) ||
       installmentCount < 2 ||
       installmentCount >
-        2_147_483_647
+        12
     ) {
       throw new CheckoutValidationError(
         'Número de prestações inválido',

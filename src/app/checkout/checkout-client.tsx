@@ -215,7 +215,7 @@ function isCheckoutOrder(
         Number.isSafeInteger(
           value.installmentCount,
         ) &&
-        value.installmentCount >= 2
+        value.installmentCount >= 2 && value.installmentCount <= 12
       )
     ) &&
     isMoneyValue(value.subtotal) &&
@@ -333,7 +333,7 @@ function isPaymentInitiation(
           Number.isSafeInteger(
             value.installmentCount,
           ) &&
-          value.installmentCount >= 2
+          value.installmentCount >= 2 && value.installmentCount <= 12
         )
 
   return (
@@ -646,7 +646,7 @@ export function CheckoutClient() {
         ) ||
         numericInstallmentCount < 2 ||
         numericInstallmentCount >
-          2_147_483_647
+          12
       ) {
         setError(
           'Indica um número de prestações válido (mínimo 2).',
@@ -1446,6 +1446,7 @@ export function CheckoutClient() {
                 id="checkout-installment-count"
                 type="number"
                 min={2}
+                max={12}
                 step={1}
                 inputMode="numeric"
                 value={installmentCount}

@@ -54,24 +54,6 @@ function createPreview() {
   }
 }
 
-function createPayment() {
-  return {
-    payment: {
-      orderId: 'order-1',
-      paymentStatus:
-        'PENDING',
-      paymentMethod:
-        'INSTALLMENTS',
-      installmentCount: 3,
-      paymentProvider:
-        'PFA_SIMULATED',
-      paymentReference:
-        'pfa_sim_installments',
-      amount: '105.90',
-    },
-  }
-}
-
 function requestBody(
   callIndex: number,
 ) {
@@ -361,11 +343,6 @@ describe(
               },
             }, 201),
           )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              createPayment(),
-            ),
-          )
 
         render(<CheckoutClient />)
 
@@ -435,25 +412,79 @@ describe(
           expectedFingerprint:
             createPreview().fingerprint,
         })
+      },
+    )
 
-        expect(
-          await screen.findByText(
-            'pfa_sim_installments',
+    test(
+      'rejeita 200 prestações antes de chamar o preview',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            addresses: [
+              createAddress(),
+            ],
+          }),
+        )
+
+        render(<CheckoutClient />)
+
+        fireEvent.click(
+          await screen.findByLabelText(
+            'Pagamento em prestações',
           ),
-        ).toBeTruthy()
+        )
+
+        const installments =
+          screen.getByLabelText(
+            'Número de prestações',
+          )
 
         expect(
-          fetchMock.mock.calls[3]?.[0],
-        ).toBe(
-          '/api/payments/initiate',
+          installments,
+        ).toHaveAttribute(
+          'max',
+          '12',
+        )
+
+        fireEvent.change(
+          installments,
+          {
+            target: {
+              value: '200',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Telefone',
+          ),
+          {
+            target: {
+              value: '910000000',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
         )
 
         expect(
-          requestBody(3),
-        ).toEqual({
-          orderId: 'order-1',
-        })
+          installments,
+        ).toHaveValue(200)
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(1)
       },
     )
+
   },
 )
