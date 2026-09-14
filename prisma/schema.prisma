@@ -36,6 +36,13 @@ enum PaymentMethod {
   INSTALLMENTS
 }
 
+enum OrderEventType {
+  PAYMENT_CONFIRMED
+  STATUS_CHANGED
+  PAYMENT_REFUNDED
+  CANCELLED
+}
+
 enum FulfillmentMethod {
   DELIVERY
   PICKUP
@@ -311,6 +318,7 @@ model Order {
   updatedAt               DateTime          @updatedAt
   user                    User?             @relation(fields: [userId], references: [id])
   items                   OrderItem[]
+  events                  OrderEvent[]
 
   @@index([orderNumber])
   @@unique([paymentProvider, paymentReference])
@@ -331,4 +339,18 @@ model OrderItem {
   product                 Product        @relation(fields: [productId], references: [id])
 
   @@unique([orderId, productId])
+}
+
+model OrderEvent {
+  id                String          @id @default(cuid())
+  orderId           String
+  type              OrderEventType
+  fromOrderStatus   OrderStatus?
+  toOrderStatus     OrderStatus?
+  fromPaymentStatus PaymentStatus?
+  toPaymentStatus   PaymentStatus?
+  createdAt         DateTime        @default(now())
+  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 }

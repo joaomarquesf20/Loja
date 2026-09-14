@@ -43,6 +43,26 @@ type ShippingClass =
   | 'HEAVY'
   | 'QUOTE_REQUIRED'
 
+type OrderEventType =
+  | 'PAYMENT_CONFIRMED'
+  | 'STATUS_CHANGED'
+  | 'PAYMENT_REFUNDED'
+  | 'CANCELLED'
+
+type OrderDetailEvent = {
+  id: string
+  type: OrderEventType
+  fromOrderStatus:
+    OrderStatus | null
+  toOrderStatus:
+    OrderStatus | null
+  fromPaymentStatus:
+    PaymentStatus | null
+  toPaymentStatus:
+    PaymentStatus | null
+  createdAt: string
+}
+
 type AdminOrderAction =
   | 'CONFIRM'
   | 'START_PROCESSING'
@@ -120,6 +140,7 @@ export type AdminOrderDetailClientData = {
   createdAt: string
   updatedAt: string
   items: OrderDetailItem[]
+  events: OrderDetailEvent[]
 }
 
 type LifecycleState = {
@@ -236,6 +257,113 @@ function formatDate(
   return date.toLocaleString(
     'pt-PT',
   )
+}
+
+function getEventTitle(
+  event: OrderDetailEvent,
+) {
+  switch (event.type) {
+    case 'PAYMENT_CONFIRMED':
+      return 'Pagamento confirmado'
+
+    case 'STATUS_CHANGED':
+      return 'Estado da encomenda atualizado'
+
+    case 'PAYMENT_REFUNDED':
+      return 'Pagamento reembolsado'
+
+    case 'CANCELLED':
+      return 'Encomenda cancelada'
+  }
+}
+
+function getEventDescription(
+  event: OrderDetailEvent,
+) {
+  if (
+    event.fromOrderStatus &&
+    event.toOrderStatus
+  ) {
+    return `${
+      orderStatusLabels[
+        event.fromOrderStatus
+      ]
+    } → ${
+      orderStatusLabels[
+        event.toOrderStatus
+      ]
+    }`
+  }
+
+  if (
+    event.fromPaymentStatus &&
+    event.toPaymentStatus
+  ) {
+    return `${
+      paymentStatusLabels[
+        event.fromPaymentStatus
+      ]
+    } → ${
+      paymentStatusLabels[
+        event.toPaymentStatus
+      ]
+    }`
+  }
+
+  return null
+}
+
+function createLocalEvent(
+  action: AdminOrderAction,
+  current:
+    AdminOrderDetailClientData,
+  state: LifecycleState,
+): OrderDetailEvent | null {
+  const createdAt =
+    new Date().toISOString()
+
+  if (
+    current.paymentStatus !==
+    state.paymentStatus
+  ) {
+    return {
+      id: `local-${createdAt}-${action}`,
+      type:
+        action ===
+        'REFUND_PAYMENT'
+          ? 'PAYMENT_REFUNDED'
+          : 'PAYMENT_CONFIRMED',
+      fromOrderStatus: null,
+      toOrderStatus: null,
+      fromPaymentStatus:
+        current.paymentStatus,
+      toPaymentStatus:
+        state.paymentStatus,
+      createdAt,
+    }
+  }
+
+  if (
+    current.status !==
+    state.status
+  ) {
+    return {
+      id: `local-${createdAt}-${action}`,
+      type:
+        action === 'CANCEL'
+          ? 'CANCELLED'
+          : 'STATUS_CHANGED',
+      fromOrderStatus:
+        current.status,
+      toOrderStatus:
+        state.status,
+      fromPaymentStatus: null,
+      toPaymentStatus: null,
+      createdAt,
+    }
+  }
+
+  return null
 }
 
 function getPaymentMethodLabel(
@@ -613,19 +741,37 @@ export default function OrderDetailClient({
           LifecycleState
 
       setOrder(
-        (current) => ({
-          ...current,
-          status:
-            state.status,
-          paymentStatus:
-            state.paymentStatus,
-          fulfillmentMethod:
-            state.fulfillmentMethod,
-          paymentProvider:
-            state.paymentProvider,
-          paymentReference:
-            state.paymentReference,
-        }),
+        (current) => {
+          const event =
+            createLocalEvent(
+              action,
+              current,
+              state,
+            )
+
+          return {
+            ...current,
+            status:
+              state.status,
+            paymentStatus:
+              state.paymentStatus,
+            fulfillmentMethod:
+              state.fulfillmentMethod,
+            paymentProvider:
+              state.paymentProvider,
+            paymentReference:
+              state.paymentReference,
+            updatedAt:
+              event?.createdAt ??
+              current.updatedAt,
+            events: event
+              ? [
+                  ...current.events,
+                  event,
+                ]
+              : current.events,
+          }
+        },
       )
     } catch (actionError) {
       setError(
@@ -748,6 +894,63 @@ export default function OrderDetailClient({
             )}
           </div>
         )}
+      </section>
+
+      <section className="rounded-lg border p-5">
+        <h3 className="text-lg font-semibold">
+          Histórico da encomenda
+        </h3>
+
+        <p className="mt-1 text-sm text-gray-600">
+          Registo das alterações relevantes guardadas pelo servidor.
+        </p>
+
+        <ol className="mt-4 space-y-4">
+          <li className="border-l-2 border-gray-200 pl-4">
+            <p className="font-medium">
+              Encomenda criada
+            </p>
+            <p className="text-sm text-gray-600">
+              {formatDate(
+                order.createdAt,
+              )}
+            </p>
+          </li>
+
+          {order.events.map(
+            (event) => {
+              const description =
+                getEventDescription(
+                  event,
+                )
+
+              return (
+                <li
+                  key={event.id}
+                  className="border-l-2 border-gray-200 pl-4"
+                >
+                  <p className="font-medium">
+                    {getEventTitle(
+                      event,
+                    )}
+                  </p>
+
+                  {description && (
+                    <p className="text-sm text-gray-700">
+                      {description}
+                    </p>
+                  )}
+
+                  <p className="text-sm text-gray-600">
+                    {formatDate(
+                      event.createdAt,
+                    )}
+                  </p>
+                </li>
+              )
+            },
+          )}
+        </ol>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

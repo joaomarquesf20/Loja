@@ -50,16 +50,43 @@ function createClient() {
   const updateMany =
     vi.fn()
 
+  const createEvent =
+    vi.fn().mockResolvedValue({
+      id: 'event-1',
+    })
+
+  const transaction =
+    vi.fn(
+      async (
+        callback: (
+          transactionClient:
+            unknown,
+        ) => Promise<unknown>,
+      ) =>
+        callback({
+          order: {
+            updateMany,
+          },
+          orderEvent: {
+            create:
+              createEvent,
+          },
+        }),
+    )
+
   return {
     client: {
       order: {
         findUnique,
-        updateMany,
       },
+      $transaction:
+        transaction,
     } as unknown as
       PaymentRefundClient,
     findUnique,
     updateMany,
+    createEvent,
+    transaction,
   }
 }
 
@@ -77,6 +104,7 @@ describe(
           client,
           findUnique,
           updateMany,
+          createEvent,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -122,6 +150,21 @@ describe(
           },
           data: {
             paymentStatus:
+              'REFUNDED',
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId:
+              'order-1',
+            type:
+              'PAYMENT_REFUNDED',
+            fromPaymentStatus:
+              'PAID',
+            toPaymentStatus:
               'REFUNDED',
           },
         })

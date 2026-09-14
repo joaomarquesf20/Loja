@@ -63,6 +63,16 @@ type ProductRestockArgs = {
   }
 }
 
+type CancellationOrderEventCreateArgs = {
+  data: {
+    orderId: string
+    type: 'CANCELLED'
+    fromOrderStatus:
+      LifecycleOrderStatus
+    toOrderStatus: 'CANCELLED'
+  }
+}
+
 export interface OrderCancellationTransactionClient {
   order: {
     findUnique(args: {
@@ -86,6 +96,12 @@ export interface OrderCancellationTransactionClient {
     ): Promise<{
       count: number
     }>
+  }
+  orderEvent: {
+    create(
+      args:
+        CancellationOrderEventCreateArgs,
+    ): Promise<{ id: string }>
   }
 }
 
@@ -385,6 +401,17 @@ export async function cancelOrderAndRestoreStock(
           )
         }
       }
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type: 'CANCELLED',
+          fromOrderStatus:
+            order.status,
+          toOrderStatus:
+            'CANCELLED',
+        },
+      })
 
       return toLifecycleState(
         order,

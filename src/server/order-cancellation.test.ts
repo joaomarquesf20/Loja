@@ -60,6 +60,11 @@ function createClient() {
   const productUpdateMany =
     vi.fn()
 
+  const createEvent =
+    vi.fn().mockResolvedValue({
+      id: 'event-1',
+    })
+
   const transaction =
     vi.fn(
       async (
@@ -78,6 +83,10 @@ function createClient() {
             updateMany:
               productUpdateMany,
           },
+          orderEvent: {
+            create:
+              createEvent,
+          },
         }),
     )
 
@@ -91,6 +100,7 @@ function createClient() {
     findUnique,
     orderUpdateMany,
     productUpdateMany,
+    createEvent,
   }
 }
 
@@ -109,6 +119,7 @@ describe(
           findUnique,
           orderUpdateMany,
           productUpdateMany,
+          createEvent,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -168,6 +179,21 @@ describe(
             stockQuantity: {
               increment: 2,
             },
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId:
+              'order-1',
+            type:
+              'CANCELLED',
+            fromOrderStatus:
+              'PENDING',
+            toOrderStatus:
+              'CANCELLED',
           },
         })
       },

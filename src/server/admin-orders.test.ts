@@ -292,6 +292,25 @@ describe(
                 '5.00',
             },
           ],
+          events: [
+            {
+              id: 'event-1',
+              type:
+                'STATUS_CHANGED',
+              fromOrderStatus:
+                'CONFIRMED',
+              toOrderStatus:
+                'PROCESSING',
+              fromPaymentStatus:
+                null,
+              toPaymentStatus:
+                null,
+              createdAt:
+                new Date(
+                  '2026-09-14T00:30:00.000Z',
+                ),
+            },
+          ],
         })
 
         await expect(
@@ -317,6 +336,25 @@ describe(
             freeShippingApplied:
               false,
             updatedAt,
+            events: [
+              {
+                id: 'event-1',
+                type:
+                  'STATUS_CHANGED',
+                fromOrderStatus:
+                  'CONFIRMED',
+                toOrderStatus:
+                  'PROCESSING',
+                fromPaymentStatus:
+                  null,
+                toPaymentStatus:
+                  null,
+                createdAt:
+                  new Date(
+                    '2026-09-14T00:30:00.000Z',
+                  ),
+              },
+            ],
             items: [
               expect.objectContaining({
                 id: 'item-1',
@@ -355,6 +393,23 @@ describe(
               taxRatePercent:
                 true,
               updatedAt: true,
+              events:
+                expect.objectContaining({
+                  orderBy: {
+                    createdAt:
+                      'asc',
+                  },
+                  select:
+                    expect.objectContaining({
+                      type: true,
+                      fromOrderStatus:
+                        true,
+                      toOrderStatus:
+                        true,
+                      createdAt:
+                        true,
+                    }),
+                }),
               items:
                 expect.objectContaining({
                   select:

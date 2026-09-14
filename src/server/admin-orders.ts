@@ -50,6 +50,26 @@ export type AdminShippingClass =
   | 'HEAVY'
   | 'QUOTE_REQUIRED'
 
+export type AdminOrderEventType =
+  | 'PAYMENT_CONFIRMED'
+  | 'STATUS_CHANGED'
+  | 'PAYMENT_REFUNDED'
+  | 'CANCELLED'
+
+export type AdminOrderEvent = {
+  id: string
+  type: AdminOrderEventType
+  fromOrderStatus:
+    AdminOrderStatus | null
+  toOrderStatus:
+    AdminOrderStatus | null
+  fromPaymentStatus:
+    AdminPaymentStatus | null
+  toPaymentStatus:
+    AdminPaymentStatus | null
+  createdAt: Date
+}
+
 export type AdminOrderItem = {
   id: string
   productNameAtPurchase: string
@@ -116,6 +136,7 @@ export type AdminOrderDetail =
     freeShippingApplied:
       boolean | null
     items: AdminOrderDetailItem[]
+    events: AdminOrderEvent[]
   }
 
 type AdminOrderItemRecord = {
@@ -162,6 +183,20 @@ type AdminOrderDetailItemRecord =
       NullableMoneyValue
   }
 
+type AdminOrderEventRecord = {
+  id: string
+  type: AdminOrderEventType
+  fromOrderStatus:
+    AdminOrderStatus | null
+  toOrderStatus:
+    AdminOrderStatus | null
+  fromPaymentStatus:
+    AdminPaymentStatus | null
+  toPaymentStatus:
+    AdminPaymentStatus | null
+  createdAt: Date
+}
+
 type AdminOrderDetailRecord =
   Omit<AdminOrderRecord, 'items'> & {
     updatedAt: Date
@@ -185,6 +220,8 @@ type AdminOrderDetailRecord =
       boolean | null
     items:
       AdminOrderDetailItemRecord[]
+    events:
+      AdminOrderEventRecord[]
   }
 
 type AdminOrderItemSelect = {
@@ -234,6 +271,16 @@ type AdminOrderDetailItemSelect =
     shippingCostAtPurchase: true
   }
 
+type AdminOrderEventSelect = {
+  id: true
+  type: true
+  fromOrderStatus: true
+  toOrderStatus: true
+  fromPaymentStatus: true
+  toPaymentStatus: true
+  createdAt: true
+}
+
 type AdminOrderDetailSelect = {
   id: true
   orderNumber: true
@@ -272,6 +319,12 @@ type AdminOrderDetailSelect = {
       id: 'asc'
     }
     select: AdminOrderDetailItemSelect
+  }
+  events: {
+    orderBy: {
+      createdAt: 'asc'
+    }
+    select: AdminOrderEventSelect
   }
 }
 
@@ -347,6 +400,17 @@ const adminOrderDetailItemSelect:
     true,
 }
 
+const adminOrderEventSelect:
+  AdminOrderEventSelect = {
+  id: true,
+  type: true,
+  fromOrderStatus: true,
+  toOrderStatus: true,
+  fromPaymentStatus: true,
+  toPaymentStatus: true,
+  createdAt: true,
+}
+
 const adminOrderDetailSelect:
   AdminOrderDetailSelect = {
   id: true,
@@ -387,6 +451,13 @@ const adminOrderDetailSelect:
     },
     select:
       adminOrderDetailItemSelect,
+  },
+  events: {
+    orderBy: {
+      createdAt: 'asc',
+    },
+    select:
+      adminOrderEventSelect,
   },
 }
 
@@ -520,6 +591,25 @@ function mapOrderDetailItem(
   }
 }
 
+function mapOrderEvent(
+  event: AdminOrderEventRecord,
+): AdminOrderEvent {
+  return {
+    id: event.id,
+    type: event.type,
+    fromOrderStatus:
+      event.fromOrderStatus,
+    toOrderStatus:
+      event.toOrderStatus,
+    fromPaymentStatus:
+      event.fromPaymentStatus,
+    toPaymentStatus:
+      event.toPaymentStatus,
+    createdAt:
+      event.createdAt,
+  }
+}
+
 function mapOrderDetail(
   order: AdminOrderDetailRecord,
 ): AdminOrderDetail {
@@ -558,6 +648,10 @@ function mapOrderDetail(
     items:
       order.items.map(
         mapOrderDetailItem,
+      ),
+    events:
+      order.events.map(
+        mapOrderEvent,
       ),
   }
 }

@@ -136,6 +136,39 @@ type AdminStatusUpdateManyArgs = {
   }
 }
 
+type OrderEventCreateArgs = {
+  data: {
+    orderId: string
+    type:
+      | 'PAYMENT_CONFIRMED'
+      | 'STATUS_CHANGED'
+    fromOrderStatus?:
+      LifecycleOrderStatus
+    toOrderStatus?:
+      LifecycleOrderStatus
+    fromPaymentStatus?:
+      LifecyclePaymentStatus
+    toPaymentStatus?:
+      LifecyclePaymentStatus
+  }
+}
+
+type OrderLifecycleTransactionClient = {
+  order: {
+    updateMany(
+      args:
+        | PaymentUpdateManyArgs
+        | ReadyForPickupUpdateManyArgs
+        | AdminStatusUpdateManyArgs,
+    ): Promise<{ count: number }>
+  }
+  orderEvent: {
+    create(
+      args: OrderEventCreateArgs,
+    ): Promise<{ id: string }>
+  }
+}
+
 export interface OrderLifecycleClient {
   order: {
     findUnique(
@@ -144,13 +177,13 @@ export interface OrderLifecycleClient {
     findFirst(
       args: FindFirstArgs,
     ): Promise<{ id: string } | null>
-    updateMany(
-      args:
-        | PaymentUpdateManyArgs
-        | ReadyForPickupUpdateManyArgs
-        | AdminStatusUpdateManyArgs,
-    ): Promise<{ count: number }>
   }
+  $transaction<T>(
+    callback: (
+      transaction:
+        OrderLifecycleTransactionClient,
+    ) => Promise<T>,
+  ): Promise<T>
 }
 
 export type VerifiedPaymentInput = {
@@ -396,28 +429,46 @@ export async function recordVerifiedPayment(
     )
   }
 
-  let updated: {
-    count: number
-  }
-
   try {
-    updated =
-      await db.order.updateMany({
-        where: {
-          id: orderId,
-          paymentStatus:
-            order.paymentStatus,
-          paymentProvider:
-            order.paymentProvider,
-          paymentReference:
-            order.paymentReference,
-        },
-        data: {
-          paymentStatus: 'PAID',
-          paymentProvider,
-          paymentReference,
-        },
-      })
+    await db.$transaction(
+      async (tx) => {
+        const updated =
+          await tx.order.updateMany({
+            where: {
+              id: orderId,
+              paymentStatus:
+                order.paymentStatus,
+              paymentProvider:
+                order.paymentProvider,
+              paymentReference:
+                order.paymentReference,
+            },
+            data: {
+              paymentStatus: 'PAID',
+              paymentProvider,
+              paymentReference,
+            },
+          })
+
+        if (updated.count !== 1) {
+          throw new OrderLifecycleConflictError(
+            'A encomenda foi alterada durante a confirmação do pagamento',
+          )
+        }
+
+        await tx.orderEvent.create({
+          data: {
+            orderId,
+            type:
+              'PAYMENT_CONFIRMED',
+            fromPaymentStatus:
+              order.paymentStatus,
+            toPaymentStatus:
+              'PAID',
+          },
+        })
+      },
+    )
   } catch (error) {
     if (
       isUniqueConstraintViolation(
@@ -430,12 +481,6 @@ export async function recordVerifiedPayment(
     }
 
     throw error
-  }
-
-  if (updated.count !== 1) {
-    throw new OrderLifecycleConflictError(
-      'A encomenda foi alterada durante a confirmação do pagamento',
-    )
   }
 
   return reloadOrder(
@@ -499,26 +544,42 @@ export async function markOrderReadyForPickup(
     )
   }
 
-  const updated =
-    await db.order.updateMany({
-      where: {
-        id: orderId,
-        status: order.status,
-        fulfillmentMethod:
-          'PICKUP',
-        paymentStatus: 'PAID',
-      },
-      data: {
-        status:
-          'READY_FOR_PICKUP',
-      },
-    })
+  await db.$transaction(
+    async (tx) => {
+      const updated =
+        await tx.order.updateMany({
+          where: {
+            id: orderId,
+            status: order.status,
+            fulfillmentMethod:
+              'PICKUP',
+            paymentStatus: 'PAID',
+          },
+          data: {
+            status:
+              'READY_FOR_PICKUP',
+          },
+        })
 
-  if (updated.count !== 1) {
-    throw new OrderLifecycleConflictError(
-      'A encomenda foi alterada durante a atualização do estado',
-    )
-  }
+      if (updated.count !== 1) {
+        throw new OrderLifecycleConflictError(
+          'A encomenda foi alterada durante a atualização do estado',
+        )
+      }
+
+      await tx.orderEvent.create({
+        data: {
+          orderId,
+          type:
+            'STATUS_CHANGED',
+          fromOrderStatus:
+            order.status,
+          toOrderStatus:
+            'READY_FOR_PICKUP',
+        },
+      })
+    },
+  )
 
   return reloadOrder(
     orderId,
@@ -590,20 +651,36 @@ async function transitionPaidOrderStatus(
       transition.fulfillmentMethod
   }
 
-  const updated =
-    await client.order.updateMany({
-      where,
-      data: {
-        status:
-          transition.targetStatus,
-      },
-    })
+  await client.$transaction(
+    async (tx) => {
+      const updated =
+        await tx.order.updateMany({
+          where,
+          data: {
+            status:
+              transition.targetStatus,
+          },
+        })
 
-  if (updated.count !== 1) {
-    throw new OrderLifecycleConflictError(
-      'A encomenda foi alterada durante a atualização do estado',
-    )
-  }
+      if (updated.count !== 1) {
+        throw new OrderLifecycleConflictError(
+          'A encomenda foi alterada durante a atualização do estado',
+        )
+      }
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type:
+            'STATUS_CHANGED',
+          fromOrderStatus:
+            order.status,
+          toOrderStatus:
+            transition.targetStatus,
+        },
+      })
+    },
+  )
 
   return reloadOrder(
     order.id,

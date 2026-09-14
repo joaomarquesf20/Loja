@@ -58,6 +58,14 @@ export default async function AdminOrderDetailPage({
       order.createdAt.toISOString(),
     updatedAt:
       order.updatedAt.toISOString(),
+    events:
+      order.events.map(
+        (event) => ({
+          ...event,
+          createdAt:
+            event.createdAt.toISOString(),
+        }),
+      ),
   }
 
   return (

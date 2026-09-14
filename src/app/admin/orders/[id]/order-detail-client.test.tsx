@@ -98,6 +98,7 @@ function createOrder(
       '2026-09-14T00:00:00.000Z',
     updatedAt:
       '2026-09-14T01:00:00.000Z',
+    events: [],
     items: [
       {
         id: 'item-1',
@@ -212,6 +213,92 @@ describe(
         ).toBeGreaterThanOrEqual(
           1,
         )
+      },
+    )
+
+    test(
+      'mostra criação e histórico persistido da encomenda',
+      () => {
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder({
+                events: [
+                  {
+                    id: 'event-1',
+                    type:
+                      'PAYMENT_CONFIRMED',
+                    fromOrderStatus:
+                      null,
+                    toOrderStatus:
+                      null,
+                    fromPaymentStatus:
+                      'PENDING',
+                    toPaymentStatus:
+                      'PAID',
+                    createdAt:
+                      '2026-09-14T00:30:00.000Z',
+                  },
+                  {
+                    id: 'event-2',
+                    type:
+                      'STATUS_CHANGED',
+                    fromOrderStatus:
+                      'PENDING',
+                    toOrderStatus:
+                      'CONFIRMED',
+                    fromPaymentStatus:
+                      null,
+                    toPaymentStatus:
+                      null,
+                    createdAt:
+                      '2026-09-14T00:45:00.000Z',
+                  },
+                ],
+              })
+            }
+          />,
+        )
+
+        expect(
+          screen.getByRole(
+            'heading',
+            {
+              name:
+                'Histórico da encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Encomenda criada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pagamento confirmado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Pago',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Estado da encomenda atualizado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Confirmada',
+          ),
+        ).toBeInTheDocument()
       },
     )
 

@@ -45,6 +45,31 @@ type RefundUpdateManyArgs = {
   }
 }
 
+type RefundOrderEventCreateArgs = {
+  data: {
+    orderId: string
+    type: 'PAYMENT_REFUNDED'
+    fromPaymentStatus: 'PAID'
+    toPaymentStatus: 'REFUNDED'
+  }
+}
+
+type PaymentRefundTransactionClient = {
+  order: {
+    updateMany(
+      args: RefundUpdateManyArgs,
+    ): Promise<{
+      count: number
+    }>
+  }
+  orderEvent: {
+    create(
+      args:
+        RefundOrderEventCreateArgs,
+    ): Promise<{ id: string }>
+  }
+}
+
 export interface PaymentRefundClient {
   order: {
     findUnique(args: {
@@ -55,12 +80,13 @@ export interface PaymentRefundClient {
     }): Promise<
       RefundOrderRecord | null
     >
-    updateMany(
-      args: RefundUpdateManyArgs,
-    ): Promise<{
-      count: number
-    }>
   }
+  $transaction<T>(
+    callback: (
+      transaction:
+        PaymentRefundTransactionClient,
+    ) => Promise<T>,
+  ): Promise<T>
 }
 
 const refundOrderSelect:
@@ -219,31 +245,47 @@ export async function refundSimulatedPayment(
     )
   }
 
-  const updated =
-    await db.order.updateMany({
-      where: {
-        id: order.id,
-        status:
-          order.status,
-        paymentStatus:
-          'PAID',
-        paymentProvider:
-          SIMULATED_PAYMENT_PROVIDER,
-        paymentReference,
-      },
-      data: {
-        paymentStatus:
-          'REFUNDED',
-      },
-    })
+  await db.$transaction(
+    async (tx) => {
+      const updated =
+        await tx.order.updateMany({
+          where: {
+            id: order.id,
+            status:
+              order.status,
+            paymentStatus:
+              'PAID',
+            paymentProvider:
+              SIMULATED_PAYMENT_PROVIDER,
+            paymentReference,
+          },
+          data: {
+            paymentStatus:
+              'REFUNDED',
+          },
+        })
 
-  if (
-    updated.count !== 1
-  ) {
-    throw new OrderLifecycleConflictError(
-      'A encomenda foi alterada durante o reembolso',
-    )
-  }
+      if (
+        updated.count !== 1
+      ) {
+        throw new OrderLifecycleConflictError(
+          'A encomenda foi alterada durante o reembolso',
+        )
+      }
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: order.id,
+          type:
+            'PAYMENT_REFUNDED',
+          fromPaymentStatus:
+            'PAID',
+          toPaymentStatus:
+            'REFUNDED',
+        },
+      })
+    },
+  )
 
   return {
     ...order,

@@ -42,13 +42,36 @@ function createClient() {
   const findUnique = vi.fn()
   const findFirst = vi.fn()
   const updateMany = vi.fn()
+  const createEvent =
+    vi.fn().mockResolvedValue({
+      id: 'event-1',
+    })
+
+  const transaction = vi.fn(
+    async (
+      callback: (
+        transactionClient:
+          unknown,
+      ) => Promise<unknown>,
+    ) =>
+      callback({
+        order: {
+          updateMany,
+        },
+        orderEvent: {
+          create:
+            createEvent,
+        },
+      }),
+  )
 
   const client = {
     order: {
       findUnique,
       findFirst,
-      updateMany,
     },
+    $transaction:
+      transaction,
   } as unknown as OrderLifecycleClient
 
   return {
@@ -56,6 +79,8 @@ function createClient() {
     findUnique,
     findFirst,
     updateMany,
+    createEvent,
+    transaction,
   }
 }
 
@@ -74,6 +99,7 @@ describe(
           findUnique,
           findFirst,
           updateMany,
+          createEvent,
         } = createClient()
 
         const pendingOrder =
@@ -156,6 +182,21 @@ describe(
               'test-provider',
             paymentReference:
               'pay-123',
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId:
+              'order-1',
+            type:
+              'PAYMENT_CONFIRMED',
+            fromPaymentStatus:
+              'PENDING',
+            toPaymentStatus:
+              'PAID',
           },
         })
       },
