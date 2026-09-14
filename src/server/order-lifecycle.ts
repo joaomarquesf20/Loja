@@ -21,10 +21,19 @@ export type LifecycleFulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+export type AdminOrderLifecycleAction =
+  | 'CONFIRM'
+  | 'START_PROCESSING'
+  | 'SHIP'
+  | 'DELIVER'
+  | 'READY_FOR_PICKUP'
+  | 'PICK_UP'
+
 export type OrderLifecycleField =
   | 'orderId'
   | 'paymentProvider'
   | 'paymentReference'
+  | 'action'
 
 export class OrderLifecycleValidationError extends Error {
   constructor(
@@ -114,6 +123,19 @@ type ReadyForPickupUpdateManyArgs = {
   }
 }
 
+type AdminStatusUpdateManyArgs = {
+  where: {
+    id: string
+    status: LifecycleOrderStatus
+    paymentStatus: 'PAID'
+    fulfillmentMethod?:
+      LifecycleFulfillmentMethod
+  }
+  data: {
+    status: LifecycleOrderStatus
+  }
+}
+
 export interface OrderLifecycleClient {
   order: {
     findUnique(
@@ -125,7 +147,8 @@ export interface OrderLifecycleClient {
     updateMany(
       args:
         | PaymentUpdateManyArgs
-        | ReadyForPickupUpdateManyArgs,
+        | ReadyForPickupUpdateManyArgs
+        | AdminStatusUpdateManyArgs,
     ): Promise<{ count: number }>
   }
 }
@@ -150,6 +173,16 @@ const readyForPickupSourceStatuses =
     'PENDING',
     'CONFIRMED',
     'PROCESSING',
+  ])
+
+const adminOrderLifecycleActions =
+  new Set<AdminOrderLifecycleAction>([
+    'CONFIRM',
+    'START_PROCESSING',
+    'SHIP',
+    'DELIVER',
+    'READY_FOR_PICKUP',
+    'PICK_UP',
   ])
 
 function getClient(
@@ -193,6 +226,24 @@ function normalizeOrderId(
     'orderId',
     'Encomenda inválida',
   )
+}
+
+function normalizeAdminOrderAction(
+  value: unknown,
+): AdminOrderLifecycleAction {
+  if (
+    typeof value !== 'string' ||
+    !adminOrderLifecycleActions.has(
+      value as AdminOrderLifecycleAction,
+    )
+  ) {
+    throw new OrderLifecycleValidationError(
+      'action',
+      'Ação de encomenda inválida',
+    )
+  }
+
+  return value as AdminOrderLifecycleAction
 }
 
 function isUniqueConstraintViolation(
@@ -472,5 +523,218 @@ export async function markOrderReadyForPickup(
   return reloadOrder(
     orderId,
     db,
+  )
+}
+
+type PaidStatusTransition = {
+  sourceStatus: LifecycleOrderStatus
+  targetStatus: LifecycleOrderStatus
+  conflictMessage: string
+  fulfillmentMethod?:
+    LifecycleFulfillmentMethod
+  fulfillmentConflictMessage?: string
+}
+
+async function transitionPaidOrderStatus(
+  order: OrderLifecycleState,
+  transition: PaidStatusTransition,
+  client: OrderLifecycleClient,
+): Promise<OrderLifecycleState> {
+  if (
+    order.paymentStatus !==
+    'PAID'
+  ) {
+    throw new OrderLifecycleConflictError(
+      'O pagamento tem de estar confirmado antes de avançar a encomenda',
+    )
+  }
+
+  if (
+    transition.fulfillmentMethod &&
+    order.fulfillmentMethod !==
+      transition.fulfillmentMethod
+  ) {
+    throw new OrderLifecycleConflictError(
+      transition.fulfillmentConflictMessage ??
+        'O método de entrega não permite esta ação',
+    )
+  }
+
+  if (
+    order.status ===
+    transition.targetStatus
+  ) {
+    return order
+  }
+
+  if (
+    order.status !==
+    transition.sourceStatus
+  ) {
+    throw new OrderLifecycleConflictError(
+      transition.conflictMessage,
+    )
+  }
+
+  const where:
+    AdminStatusUpdateManyArgs['where'] = {
+    id: order.id,
+    status: order.status,
+    paymentStatus: 'PAID',
+  }
+
+  if (
+    transition.fulfillmentMethod
+  ) {
+    where.fulfillmentMethod =
+      transition.fulfillmentMethod
+  }
+
+  const updated =
+    await client.order.updateMany({
+      where,
+      data: {
+        status:
+          transition.targetStatus,
+      },
+    })
+
+  if (updated.count !== 1) {
+    throw new OrderLifecycleConflictError(
+      'A encomenda foi alterada durante a atualização do estado',
+    )
+  }
+
+  return reloadOrder(
+    order.id,
+    client,
+  )
+}
+
+/**
+ * Executa apenas transições administrativas explícitas.
+ * O browser escolhe uma ação limitada; nunca envia um estado arbitrário.
+ */
+export async function applyAdminOrderAction(
+  orderIdInput: unknown,
+  actionInput: unknown,
+  client?: OrderLifecycleClient,
+): Promise<OrderLifecycleState> {
+  const orderId =
+    normalizeOrderId(
+      orderIdInput,
+    )
+
+  const action =
+    normalizeAdminOrderAction(
+      actionInput,
+    )
+
+  const db =
+    getClient(client)
+
+  if (
+    action ===
+    'READY_FOR_PICKUP'
+  ) {
+    return markOrderReadyForPickup(
+      orderId,
+      db,
+    )
+  }
+
+  const order =
+    await loadOrder(
+      orderId,
+      db,
+    )
+
+  switch (action) {
+    case 'CONFIRM':
+      return transitionPaidOrderStatus(
+        order,
+        {
+          sourceStatus:
+            'PENDING',
+          targetStatus:
+            'CONFIRMED',
+          conflictMessage:
+            'O estado atual da encomenda não permite confirmar a encomenda',
+        },
+        db,
+      )
+
+    case 'START_PROCESSING':
+      return transitionPaidOrderStatus(
+        order,
+        {
+          sourceStatus:
+            'CONFIRMED',
+          targetStatus:
+            'PROCESSING',
+          conflictMessage:
+            'O estado atual da encomenda não permite iniciar o processamento',
+        },
+        db,
+      )
+
+    case 'SHIP':
+      return transitionPaidOrderStatus(
+        order,
+        {
+          sourceStatus:
+            'PROCESSING',
+          targetStatus:
+            'SHIPPED',
+          fulfillmentMethod:
+            'DELIVERY',
+          fulfillmentConflictMessage:
+            'Apenas encomendas para entrega podem ser expedidas',
+          conflictMessage:
+            'O estado atual da encomenda não permite expedir a encomenda',
+        },
+        db,
+      )
+
+    case 'DELIVER':
+      return transitionPaidOrderStatus(
+        order,
+        {
+          sourceStatus:
+            'SHIPPED',
+          targetStatus:
+            'DELIVERED',
+          fulfillmentMethod:
+            'DELIVERY',
+          fulfillmentConflictMessage:
+            'Apenas encomendas para entrega podem ser marcadas como entregues',
+          conflictMessage:
+            'O estado atual da encomenda não permite marcar a encomenda como entregue',
+        },
+        db,
+      )
+
+    case 'PICK_UP':
+      return transitionPaidOrderStatus(
+        order,
+        {
+          sourceStatus:
+            'READY_FOR_PICKUP',
+          targetStatus:
+            'PICKED_UP',
+          fulfillmentMethod:
+            'PICKUP',
+          fulfillmentConflictMessage:
+            'Apenas encomendas para levantamento podem ser marcadas como levantadas',
+          conflictMessage:
+            'O estado atual da encomenda não permite marcar a encomenda como levantada',
+        },
+        db,
+      )
+  }
+
+  throw new OrderLifecycleValidationError(
+    'action',
+    'Ação de encomenda inválida',
   )
 }

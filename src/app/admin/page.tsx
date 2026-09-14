@@ -40,6 +40,20 @@ export default async function AdminPage() {
 
         <nav className="grid gap-4 sm:grid-cols-2">
           <Link
+            href="/admin/orders"
+            className="rounded-lg border p-4 transition hover:bg-gray-50"
+          >
+            <h2 className="text-lg font-semibold">
+              Encomendas
+            </h2>
+
+            <p className="mt-1 text-sm text-gray-600">
+              Acompanhar pagamentos e gerir o
+              ciclo de entrega ou levantamento.
+            </p>
+          </Link>
+
+          <Link
             href="/admin/categories"
             className="rounded-lg border p-4 transition hover:bg-gray-50"
           >

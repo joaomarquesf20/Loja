@@ -17,6 +17,7 @@ import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
+  applyAdminOrderAction,
   markOrderReadyForPickup,
   recordVerifiedPayment,
   type OrderLifecycleClient,
@@ -830,6 +831,572 @@ describe(
         expect(
           findUnique,
         ).not.toHaveBeenCalled()
+      },
+    )
+  },
+)
+
+
+describe(
+  'applyAdminOrderAction',
+  () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    test(
+      'confirma uma encomenda paga pendente',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        const pending =
+          createOrder({
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'DELIVERY',
+          })
+
+        const confirmed =
+          createOrder({
+            status:
+              'CONFIRMED',
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'DELIVERY',
+          })
+
+        findUnique
+          .mockResolvedValueOnce(
+            pending,
+          )
+          .mockResolvedValueOnce(
+            confirmed,
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            ' order-1 ',
+            'CONFIRM',
+            client,
+          ),
+        ).resolves.toEqual(
+          confirmed,
+        )
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            status:
+              'PENDING',
+            paymentStatus:
+              'PAID',
+          },
+          data: {
+            status:
+              'CONFIRMED',
+          },
+        })
+      },
+    )
+
+    test(
+      'bloqueia qualquer avanço administrativo enquanto o pagamento não está pago',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            fulfillmentMethod:
+              'DELIVERY',
+            paymentStatus:
+              'PENDING',
+          }),
+        )
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'CONFIRM',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleConflictError',
+          message:
+            'O pagamento tem de estar confirmado antes de avançar a encomenda',
+        })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'avança uma encomenda confirmada para processamento',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'CONFIRMED',
+              paymentStatus:
+                'PAID',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'PROCESSING',
+              paymentStatus:
+                'PAID',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'START_PROCESSING',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'PROCESSING',
+        })
+      },
+    )
+
+    test(
+      'expede apenas uma encomenda DELIVERY em processamento',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'PROCESSING',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'DELIVERY',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'SHIPPED',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'DELIVERY',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'SHIP',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status: 'SHIPPED',
+        })
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            status:
+              'PROCESSING',
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'DELIVERY',
+          },
+          data: {
+            status:
+              'SHIPPED',
+          },
+        })
+      },
+    )
+
+    test(
+      'não permite expedir uma encomenda PICKUP',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            status:
+              'PROCESSING',
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'PICKUP',
+          }),
+        )
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'SHIP',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          message:
+            'Apenas encomendas para entrega podem ser expedidas',
+        })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'marca uma encomenda expedida como entregue',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'SHIPPED',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'DELIVERY',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'DELIVERED',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'DELIVERY',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'DELIVER',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'DELIVERED',
+        })
+      },
+    )
+
+    test(
+      'reutiliza a regra segura para marcar levantamento pronto',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'PROCESSING',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'PICKUP',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'READY_FOR_PICKUP',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'PICKUP',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'READY_FOR_PICKUP',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'READY_FOR_PICKUP',
+        })
+      },
+    )
+
+    test(
+      'marca como levantada apenas uma encomenda PICKUP pronta',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'READY_FOR_PICKUP',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'PICKUP',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              status:
+                'PICKED_UP',
+              paymentStatus:
+                'PAID',
+              fulfillmentMethod:
+                'PICKUP',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'PICK_UP',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'PICKED_UP',
+        })
+      },
+    )
+
+    test(
+      'é idempotente quando a ação já atingiu o estado de destino',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        const delivered =
+          createOrder({
+            status:
+              'DELIVERED',
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'DELIVERY',
+          })
+
+        findUnique.mockResolvedValue(
+          delivered,
+        )
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'DELIVER',
+            client,
+          ),
+        ).resolves.toEqual(
+          delivered,
+        )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'rejeita ação inválida antes de consultar a base de dados',
+      async () => {
+        const {
+          client,
+          findUnique,
+        } = createClient()
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'DELETE',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleValidationError',
+          field: 'action',
+        })
+
+        expect(
+          findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'rejeita orderId inválido antes de consultar a base de dados',
+      async () => {
+        const {
+          client,
+          findUnique,
+        } = createClient()
+
+        await expect(
+          applyAdminOrderAction(
+            '   ',
+            'CONFIRM',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleValidationError',
+          field: 'orderId',
+        })
+
+        expect(
+          findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'rejeita saltos de estado',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            status:
+              'PENDING',
+            paymentStatus:
+              'PAID',
+            fulfillmentMethod:
+              'DELIVERY',
+          }),
+        )
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'SHIP',
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          OrderLifecycleConflictError,
+        )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'deteta alteração concorrente durante uma transição administrativa',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            status:
+              'CONFIRMED',
+            paymentStatus:
+              'PAID',
+          }),
+        )
+
+        updateMany.mockResolvedValue({
+          count: 0,
+        })
+
+        await expect(
+          applyAdminOrderAction(
+            'order-1',
+            'START_PROCESSING',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          message:
+            'A encomenda foi alterada durante a atualização do estado',
+        })
       },
     )
   },
