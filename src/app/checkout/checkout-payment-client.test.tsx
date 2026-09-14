@@ -416,7 +416,7 @@ describe(
     )
 
     test(
-      'rejeita 200 prestações antes de chamar o preview',
+      'mostra apenas opções de 2 a 12 prestações',
       async () => {
         fetchMock.mockResolvedValueOnce(
           jsonResponse({
@@ -437,52 +437,42 @@ describe(
         const installments =
           screen.getByLabelText(
             'Número de prestações',
-          )
+          ) as HTMLSelectElement
 
         expect(
-          installments,
-        ).toHaveAttribute(
-          'max',
+          installments.tagName,
+        ).toBe('SELECT')
+
+        expect(
+          Array.from(
+            installments.options,
+          ).map(
+            (option) =>
+              option.value,
+          ),
+        ).toEqual([
+          '2',
+          '3',
+          '4',
+          '5',
+          '6',
+          '7',
+          '8',
+          '9',
+          '10',
+          '11',
           '12',
-        )
-
-        fireEvent.change(
-          installments,
-          {
-            target: {
-              value: '200',
-            },
-          },
-        )
-
-        fireEvent.change(
-          screen.getByLabelText(
-            'Telefone',
-          ),
-          {
-            target: {
-              value: '910000000',
-            },
-          },
-        )
-
-        fireEvent.click(
-          screen.getByRole(
-            'button',
-            {
-              name:
-                'Calcular total',
-            },
-          ),
-        )
+        ])
 
         expect(
-          installments,
-        ).toHaveValue(200)
-
-        expect(
-          fetchMock,
-        ).toHaveBeenCalledTimes(1)
+          Array.from(
+            installments.options,
+          ).some(
+            (option) =>
+              option.value ===
+              '200',
+          ),
+        ).toBe(false)
       },
     )
 

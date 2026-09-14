@@ -1442,13 +1442,8 @@ export function CheckoutClient() {
                 Número de prestações
               </label>
 
-              <input
+              <select
                 id="checkout-installment-count"
-                type="number"
-                min={2}
-                max={12}
-                step={1}
-                inputMode="numeric"
                 value={installmentCount}
                 disabled={
                   pendingAction !== null
@@ -1459,11 +1454,30 @@ export function CheckoutClient() {
                   )
                   invalidatePreview()
                 }}
-                className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-950"
-              />
+                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+              >
+                {Array.from(
+                  { length: 11 },
+                  (_, index) => {
+                    const count =
+                      index + 2
+
+                    return (
+                      <option
+                        key={count}
+                        value={String(
+                          count,
+                        )}
+                      >
+                        {count} prestações
+                      </option>
+                    )
+                  },
+                )}
+              </select>
 
               <p className="mt-2 text-xs text-gray-600">
-                O número efetivamente disponível será confirmado pelo fornecedor de pagamentos.
+                Escolhe uma opção entre 2 e 12 prestações. Quando a Klarna for integrada, as opções disponíveis serão definidas pelo fornecedor.
               </p>
             </div>
           ) : null}
