@@ -7,6 +7,10 @@ type MoneyValue =
       toString(): string
     }
 
+type NullableMoneyValue =
+  | MoneyValue
+  | null
+
 export type AdminOrderStatus =
   | 'PENDING'
   | 'CONFIRMED'
@@ -31,6 +35,20 @@ export type AdminPaymentMethod =
 export type AdminFulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
+
+export type AdminCheckoutRegion =
+  | 'PORTUGAL_MAINLAND'
+  | 'MADEIRA'
+  | 'AZORES'
+  | 'INTERNATIONAL'
+
+export type AdminShippingClass =
+  | 'UNASSIGNED'
+  | 'SMALL'
+  | 'STANDARD'
+  | 'BULKY'
+  | 'HEAVY'
+  | 'QUOTE_REQUIRED'
 
 export type AdminOrderItem = {
   id: string
@@ -67,6 +85,39 @@ export type AdminOrder = {
   items: AdminOrderItem[]
 }
 
+export type AdminOrderDetailItem =
+  AdminOrderItem & {
+    productId: string
+    shippingClassAtPurchase:
+      AdminShippingClass | null
+    shippingCostAtPurchase:
+      string | null
+  }
+
+export type AdminOrderDetail =
+  Omit<AdminOrder, 'items'> & {
+    updatedAt: Date
+    shippingRegion:
+      AdminCheckoutRegion | null
+    shippingClassApplied:
+      AdminShippingClass | null
+    taxRatePercent:
+      string | null
+    pricesIncludeTax:
+      boolean | null
+    nonVolumousSubtotal:
+      string | null
+    nonVolumousShippingCost:
+      string | null
+    bulkyShippingCost:
+      string | null
+    freeShippingThreshold:
+      string | null
+    freeShippingApplied:
+      boolean | null
+    items: AdminOrderDetailItem[]
+  }
+
 type AdminOrderItemRecord = {
   id: string
   productNameAtPurchase: string
@@ -101,6 +152,40 @@ type AdminOrderRecord = {
   createdAt: Date
   items: AdminOrderItemRecord[]
 }
+
+type AdminOrderDetailItemRecord =
+  AdminOrderItemRecord & {
+    productId: string
+    shippingClassAtPurchase:
+      AdminShippingClass | null
+    shippingCostAtPurchase:
+      NullableMoneyValue
+  }
+
+type AdminOrderDetailRecord =
+  Omit<AdminOrderRecord, 'items'> & {
+    updatedAt: Date
+    shippingRegion:
+      AdminCheckoutRegion | null
+    shippingClassApplied:
+      AdminShippingClass | null
+    taxRatePercent:
+      NullableMoneyValue
+    pricesIncludeTax:
+      boolean | null
+    nonVolumousSubtotal:
+      NullableMoneyValue
+    nonVolumousShippingCost:
+      NullableMoneyValue
+    bulkyShippingCost:
+      NullableMoneyValue
+    freeShippingThreshold:
+      NullableMoneyValue
+    freeShippingApplied:
+      boolean | null
+    items:
+      AdminOrderDetailItemRecord[]
+  }
 
 type AdminOrderItemSelect = {
   id: true
@@ -142,6 +227,54 @@ type AdminOrderSelect = {
   }
 }
 
+type AdminOrderDetailItemSelect =
+  AdminOrderItemSelect & {
+    productId: true
+    shippingClassAtPurchase: true
+    shippingCostAtPurchase: true
+  }
+
+type AdminOrderDetailSelect = {
+  id: true
+  orderNumber: true
+  subtotal: true
+  shippingCost: true
+  tax: true
+  total: true
+  status: true
+  paymentStatus: true
+  paymentMethod: true
+  installmentCount: true
+  paymentProvider: true
+  paymentReference: true
+  fulfillmentMethod: true
+  shippingName: true
+  shippingEmail: true
+  shippingPhone: true
+  shippingAddressLine1: true
+  shippingAddressLine2: true
+  shippingCity: true
+  shippingPostalCode: true
+  shippingCountry: true
+  shippingRegion: true
+  shippingClassApplied: true
+  taxRatePercent: true
+  pricesIncludeTax: true
+  nonVolumousSubtotal: true
+  nonVolumousShippingCost: true
+  bulkyShippingCost: true
+  freeShippingThreshold: true
+  freeShippingApplied: true
+  createdAt: true
+  updatedAt: true
+  items: {
+    orderBy: {
+      id: 'asc'
+    }
+    select: AdminOrderDetailItemSelect
+  }
+}
+
 export interface AdminOrderClient {
   order: {
     findMany(args: {
@@ -150,6 +283,14 @@ export interface AdminOrderClient {
       }
       select: AdminOrderSelect
     }): Promise<AdminOrderRecord[]>
+    findUnique(args: {
+      where: {
+        id: string
+      }
+      select: AdminOrderDetailSelect
+    }): Promise<
+      AdminOrderDetailRecord | null
+    >
   }
 }
 
@@ -196,12 +337,66 @@ const adminOrderSelect:
   },
 }
 
+const adminOrderDetailItemSelect:
+  AdminOrderDetailItemSelect = {
+  ...adminOrderItemSelect,
+  productId: true,
+  shippingClassAtPurchase:
+    true,
+  shippingCostAtPurchase:
+    true,
+}
+
+const adminOrderDetailSelect:
+  AdminOrderDetailSelect = {
+  id: true,
+  orderNumber: true,
+  subtotal: true,
+  shippingCost: true,
+  tax: true,
+  total: true,
+  status: true,
+  paymentStatus: true,
+  paymentMethod: true,
+  installmentCount: true,
+  paymentProvider: true,
+  paymentReference: true,
+  fulfillmentMethod: true,
+  shippingName: true,
+  shippingEmail: true,
+  shippingPhone: true,
+  shippingAddressLine1: true,
+  shippingAddressLine2: true,
+  shippingCity: true,
+  shippingPostalCode: true,
+  shippingCountry: true,
+  shippingRegion: true,
+  shippingClassApplied: true,
+  taxRatePercent: true,
+  pricesIncludeTax: true,
+  nonVolumousSubtotal: true,
+  nonVolumousShippingCost: true,
+  bulkyShippingCost: true,
+  freeShippingThreshold: true,
+  freeShippingApplied: true,
+  createdAt: true,
+  updatedAt: true,
+  items: {
+    orderBy: {
+      id: 'asc',
+    },
+    select:
+      adminOrderDetailItemSelect,
+  },
+}
+
 function getClient(
   client?: AdminOrderClient,
 ): AdminOrderClient {
   return (
     client ??
-    (prisma as unknown as AdminOrderClient)
+    (prisma as unknown as
+      AdminOrderClient)
   )
 }
 
@@ -217,6 +412,14 @@ function moneyToString(
   }
 
   return value.toString()
+}
+
+function nullableMoneyToString(
+  value: NullableMoneyValue,
+) {
+  return value === null
+    ? null
+    : moneyToString(value)
 }
 
 function mapOrderItem(
@@ -301,6 +504,64 @@ function mapOrder(
   }
 }
 
+function mapOrderDetailItem(
+  item: AdminOrderDetailItemRecord,
+): AdminOrderDetailItem {
+  return {
+    ...mapOrderItem(item),
+    productId:
+      item.productId,
+    shippingClassAtPurchase:
+      item.shippingClassAtPurchase,
+    shippingCostAtPurchase:
+      nullableMoneyToString(
+        item.shippingCostAtPurchase,
+      ),
+  }
+}
+
+function mapOrderDetail(
+  order: AdminOrderDetailRecord,
+): AdminOrderDetail {
+  return {
+    ...mapOrder(order),
+    updatedAt:
+      order.updatedAt,
+    shippingRegion:
+      order.shippingRegion,
+    shippingClassApplied:
+      order.shippingClassApplied,
+    taxRatePercent:
+      nullableMoneyToString(
+        order.taxRatePercent,
+      ),
+    pricesIncludeTax:
+      order.pricesIncludeTax,
+    nonVolumousSubtotal:
+      nullableMoneyToString(
+        order.nonVolumousSubtotal,
+      ),
+    nonVolumousShippingCost:
+      nullableMoneyToString(
+        order.nonVolumousShippingCost,
+      ),
+    bulkyShippingCost:
+      nullableMoneyToString(
+        order.bulkyShippingCost,
+      ),
+    freeShippingThreshold:
+      nullableMoneyToString(
+        order.freeShippingThreshold,
+      ),
+    freeShippingApplied:
+      order.freeShippingApplied,
+    items:
+      order.items.map(
+        mapOrderDetailItem,
+      ),
+  }
+}
+
 export async function listAdminOrders(
   client?: AdminOrderClient,
 ): Promise<AdminOrder[]> {
@@ -319,4 +580,34 @@ export async function listAdminOrders(
   return orders.map(
     mapOrder,
   )
+}
+
+export async function getAdminOrderById(
+  orderIdInput: string,
+  client?: AdminOrderClient,
+): Promise<
+  AdminOrderDetail | null
+> {
+  const orderId =
+    orderIdInput.trim()
+
+  if (!orderId) {
+    return null
+  }
+
+  const db =
+    getClient(client)
+
+  const order =
+    await db.order.findUnique({
+      where: {
+        id: orderId,
+      },
+      select:
+        adminOrderDetailSelect,
+    })
+
+  return order
+    ? mapOrderDetail(order)
+    : null
 }

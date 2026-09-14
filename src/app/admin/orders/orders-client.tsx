@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import {
   useEffect,
   useState,
@@ -694,6 +695,13 @@ export default function OrdersClient() {
                           order.createdAt,
                         )}
                       </p>
+
+                      <Link
+                        href={`/admin/orders/${order.id}`}
+                        className="mt-2 inline-block text-sm font-medium text-blue-700 hover:underline"
+                      >
+                        Ver ficha completa
+                      </Link>
                     </div>
 
                     <div className="flex flex-wrap gap-2 text-sm">

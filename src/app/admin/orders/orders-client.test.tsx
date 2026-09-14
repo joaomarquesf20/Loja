@@ -150,6 +150,19 @@ describe(
         ).toBeInTheDocument()
 
         expect(
+          screen.getByRole(
+            'link',
+            {
+              name:
+                'Ver ficha completa',
+            },
+          ),
+        ).toHaveAttribute(
+          'href',
+          '/admin/orders/order-1',
+        )
+
+        expect(
           fetchMock,
         ).toHaveBeenCalledWith(
           '/api/admin/orders',
