@@ -166,6 +166,17 @@ function normalizeRequiredString(
   return normalized
 }
 
+function isUniqueConstraintViolation(
+  error: unknown,
+) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2002'
+  )
+}
+
 function moneyToString(
   value: MoneyValue,
 ) {
@@ -353,21 +364,39 @@ export async function initiateSimulatedPayment(
       referenceFactory(),
     )
 
-  const updated =
-    await db.order.updateMany({
-      where: {
-        id: orderId,
-        userId,
-        paymentStatus: 'PENDING',
-        paymentProvider: null,
-        paymentReference: null,
-      },
-      data: {
-        paymentProvider:
-          SIMULATED_PAYMENT_PROVIDER,
-        paymentReference,
-      },
-    })
+  let updated: {
+    count: number
+  }
+
+  try {
+    updated =
+      await db.order.updateMany({
+        where: {
+          id: orderId,
+          userId,
+          paymentStatus: 'PENDING',
+          paymentProvider: null,
+          paymentReference: null,
+        },
+        data: {
+          paymentProvider:
+            SIMULATED_PAYMENT_PROVIDER,
+          paymentReference,
+        },
+      })
+  } catch (error) {
+    if (
+      isUniqueConstraintViolation(
+        error,
+      )
+    ) {
+      throw new PaymentInitiationConflictError(
+        'A referência de pagamento já está associada a outra encomenda',
+      )
+    }
+
+    throw error
+  }
 
   if (updated.count === 1) {
     return createResult({

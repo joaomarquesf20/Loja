@@ -195,6 +195,17 @@ function normalizeOrderId(
   )
 }
 
+function isUniqueConstraintViolation(
+  error: unknown,
+) {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2002'
+  )
+}
+
 async function loadOrder(
   orderId: string,
   client: OrderLifecycleClient,
@@ -334,23 +345,41 @@ export async function recordVerifiedPayment(
     )
   }
 
-  const updated =
-    await db.order.updateMany({
-      where: {
-        id: orderId,
-        paymentStatus:
-          order.paymentStatus,
-        paymentProvider:
-          order.paymentProvider,
-        paymentReference:
-          order.paymentReference,
-      },
-      data: {
-        paymentStatus: 'PAID',
-        paymentProvider,
-        paymentReference,
-      },
-    })
+  let updated: {
+    count: number
+  }
+
+  try {
+    updated =
+      await db.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus:
+            order.paymentStatus,
+          paymentProvider:
+            order.paymentProvider,
+          paymentReference:
+            order.paymentReference,
+        },
+        data: {
+          paymentStatus: 'PAID',
+          paymentProvider,
+          paymentReference,
+        },
+      })
+  } catch (error) {
+    if (
+      isUniqueConstraintViolation(
+        error,
+      )
+    ) {
+      throw new OrderLifecycleConflictError(
+        'A referência de pagamento já pertence a outra encomenda',
+      )
+    }
+
+    throw error
+  }
 
   if (updated.count !== 1) {
     throw new OrderLifecycleConflictError(

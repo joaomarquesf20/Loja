@@ -382,6 +382,48 @@ describe(
       },
     )
 
+    test(
+      'converte colisão UNIQUE da referência em conflito seguro',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder(),
+        )
+
+        findFirst.mockResolvedValue(
+          null,
+        )
+
+        updateMany.mockRejectedValue({
+          code: 'P2002',
+        })
+
+        await expect(
+          recordVerifiedPayment(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'test-provider',
+              paymentReference:
+                'pay-123',
+            },
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleConflictError',
+          message:
+            'A referência de pagamento já pertence a outra encomenda',
+        })
+      },
+    )
+
     test.each([
       {
         field: 'orderId',

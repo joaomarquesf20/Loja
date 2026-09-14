@@ -274,6 +274,44 @@ describe(
     )
 
     test(
+      'converte colisão UNIQUE da referência em conflito seguro',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder(),
+        )
+
+        updateMany.mockRejectedValue({
+          code: 'P2002',
+        })
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_duplicate',
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'PaymentInitiationConflictError',
+          message:
+            'A referência de pagamento já está associada a outra encomenda',
+        })
+
+        expect(
+          findFirst,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
       'não permite iniciar pagamento numa encomenda de outro utilizador',
       async () => {
         const {

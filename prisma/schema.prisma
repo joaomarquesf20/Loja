@@ -313,7 +313,7 @@ model Order {
   items                   OrderItem[]
 
   @@index([orderNumber])
-  @@index([paymentProvider, paymentReference])
+  @@unique([paymentProvider, paymentReference])
 }
 
 model OrderItem {
