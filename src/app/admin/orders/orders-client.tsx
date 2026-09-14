@@ -37,6 +37,7 @@ type AdminOrderAction =
   | 'DELIVER'
   | 'READY_FOR_PICKUP'
   | 'PICK_UP'
+  | 'CANCEL'
 
 type OrderItem = {
   id: string
@@ -118,6 +119,8 @@ const actionLabels:
     'Marcar pronta para levantamento',
   PICK_UP:
     'Marcar como levantada',
+  CANCEL:
+    'Cancelar encomenda',
 }
 
 function formatMoney(
@@ -179,53 +182,122 @@ function getPaymentMethodLabel(
   return 'Não registado'
 }
 
+function canCancelOrder(
+  order: AdminOrder,
+) {
+  const paymentAllowsCancellation =
+    order.paymentStatus ===
+      'PENDING' ||
+    order.paymentStatus ===
+      'FAILED' ||
+    order.paymentStatus ===
+      'REFUNDED'
+
+  const statusAllowsCancellation =
+    order.status ===
+      'PENDING' ||
+    order.status ===
+      'CONFIRMED' ||
+    order.status ===
+      'PROCESSING' ||
+    order.status ===
+      'READY_FOR_PICKUP'
+
+  return (
+    paymentAllowsCancellation &&
+    statusAllowsCancellation
+  )
+}
+
 function getAvailableActions(
   order: AdminOrder,
 ): AdminOrderAction[] {
+  const actions:
+    AdminOrderAction[] = []
+
   if (
-    order.paymentStatus !==
+    order.paymentStatus ===
     'PAID'
   ) {
-    return []
+    switch (order.status) {
+      case 'PENDING':
+        actions.push(
+          'CONFIRM',
+        )
+        break
+
+      case 'CONFIRMED':
+        actions.push(
+          'START_PROCESSING',
+        )
+        break
+
+      case 'PROCESSING':
+        actions.push(
+          order.fulfillmentMethod ===
+          'DELIVERY'
+            ? 'SHIP'
+            : 'READY_FOR_PICKUP',
+        )
+        break
+
+      case 'SHIPPED':
+        if (
+          order.fulfillmentMethod ===
+          'DELIVERY'
+        ) {
+          actions.push(
+            'DELIVER',
+          )
+        }
+        break
+
+      case 'READY_FOR_PICKUP':
+        if (
+          order.fulfillmentMethod ===
+          'PICKUP'
+        ) {
+          actions.push(
+            'PICK_UP',
+          )
+        }
+        break
+    }
   }
 
-  switch (order.status) {
+  if (
+    canCancelOrder(
+      order,
+    )
+  ) {
+    actions.push(
+      'CANCEL',
+    )
+  }
+
+  return actions
+}
+
+function getPaymentNotice(
+  order: AdminOrder,
+) {
+  switch (
+    order.paymentStatus
+  ) {
     case 'PENDING':
-      return [
-        'CONFIRM',
-      ]
+      return 'A aguardar confirmação do pagamento. Enquanto estiver pendente, a encomenda pode ser cancelada e o stock é reposto.'
 
-    case 'CONFIRMED':
-      return [
-        'START_PROCESSING',
-      ]
+    case 'AUTHORIZED':
+      return 'O pagamento está autorizado. É necessário anulá-lo no fornecedor antes de cancelar a encomenda.'
 
-    case 'PROCESSING':
-      return [
-        order.fulfillmentMethod ===
-        'DELIVERY'
-          ? 'SHIP'
-          : 'READY_FOR_PICKUP',
-      ]
+    case 'FAILED':
+      return 'O pagamento falhou. A encomenda pode ser cancelada e o stock é reposto.'
 
-    case 'SHIPPED':
-      return order.fulfillmentMethod ===
-        'DELIVERY'
-        ? [
-            'DELIVER',
-          ]
-        : []
-
-    case 'READY_FOR_PICKUP':
-      return order.fulfillmentMethod ===
-        'PICKUP'
-        ? [
-            'PICK_UP',
-          ]
-        : []
+    case 'REFUNDED':
+      return 'O pagamento está reembolsado. Se a encomenda ainda não saiu da loja, pode ser cancelada com reposição de stock.'
 
     default:
-      return []
+      return null
   }
 }
 
@@ -408,6 +480,16 @@ export default function OrdersClient() {
     action: AdminOrderAction,
   ) {
     if (submittingOrderId) {
+      return
+    }
+
+    if (
+      action ===
+        'CANCEL' &&
+      !window.confirm(
+        `Cancelar a encomenda "${order.orderNumber}" e repor o stock?`,
+      )
+    ) {
       return
     }
 
@@ -731,14 +813,13 @@ export default function OrdersClient() {
                   </div>
 
                   <div className="mt-4">
-                    {order.paymentStatus !==
-                      'PAID' && (
-                      <p className="text-sm text-amber-800">
-                        A aguardar
-                        confirmação do
-                        pagamento antes de
-                        avançar o estado da
-                        encomenda.
+                    {getPaymentNotice(
+                      order,
+                    ) && (
+                      <p className="mb-3 text-sm text-amber-800">
+                        {getPaymentNotice(
+                          order,
+                        )}
                       </p>
                     )}
 
@@ -760,7 +841,12 @@ export default function OrdersClient() {
                                   action,
                                 )
                               }
-                              className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                              className={
+                                action ===
+                                'CANCEL'
+                                  ? 'rounded border border-red-700 px-3 py-2 text-sm text-red-700 disabled:opacity-50'
+                                  : 'rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50'
+                              }
                             >
                               {isSubmitting
                                 ? 'A atualizar...'

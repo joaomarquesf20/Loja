@@ -339,6 +339,207 @@ describe(
             },
           ),
         ).not.toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'cancela encomenda pendente enviando apenas a ação CANCEL',
+      async () => {
+        const confirmMock =
+          vi.spyOn(
+            window,
+            'confirm',
+          ).mockReturnValue(
+            true,
+          )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            createJsonResponse({
+              orders: [
+                createOrder({
+                  paymentStatus:
+                    'PENDING',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            createJsonResponse({
+              id: 'order-1',
+              status:
+                'CANCELLED',
+              paymentStatus:
+                'PENDING',
+              fulfillmentMethod:
+                'DELIVERY',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_123',
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        const button =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          )
+
+        fireEvent.click(
+          button,
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledTimes(
+            2,
+          )
+        })
+
+        expect(
+          confirmMock,
+        ).toHaveBeenCalled()
+
+        const [
+          url,
+          init,
+        ] =
+          fetchMock.mock.calls[1]
+
+        expect(url).toBe(
+          '/api/admin/orders/order-1/transition',
+        )
+
+        expect(init).toEqual(
+          expect.objectContaining({
+            method: 'POST',
+            body:
+              JSON.stringify({
+                action:
+                  'CANCEL',
+              }),
+          }),
+        )
+
+        expect(
+          await screen.findByText(
+            /Estado: Cancelada/,
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+
+        confirmMock.mockRestore()
+      },
+    )
+
+    test(
+      'não cancela quando o administrador rejeita a confirmação',
+      async () => {
+        const confirmMock =
+          vi.spyOn(
+            window,
+            'confirm',
+          ).mockReturnValue(
+            false,
+          )
+
+        fetchMock.mockResolvedValueOnce(
+          createJsonResponse({
+            orders: [
+              createOrder({
+                paymentStatus:
+                  'FAILED',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        const button =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          )
+
+        fireEvent.click(
+          button,
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+
+        confirmMock.mockRestore()
+      },
+    )
+
+    test(
+      'não oferece cancelamento direto quando o pagamento está pago',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            orders: [
+              createOrder({
+                paymentStatus:
+                  'PAID',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'PFA-ABC123',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
       },
     )
 

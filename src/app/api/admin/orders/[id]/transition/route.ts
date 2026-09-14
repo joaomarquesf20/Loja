@@ -9,6 +9,9 @@ import {
   readJsonBody,
 } from '@/server/http-request'
 import {
+  cancelOrderAndRestoreStock,
+} from '@/server/order-cancellation'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -157,11 +160,18 @@ export async function POST(
     const { id } =
       await params
 
+    const action =
+      getAction(body)
+
     const order =
-      await applyAdminOrderAction(
-        id,
-        getAction(body),
-      )
+      action === 'CANCEL'
+        ? await cancelOrderAndRestoreStock(
+            id,
+          )
+        : await applyAdminOrderAction(
+            id,
+            action,
+          )
 
     return Response.json(
       order,

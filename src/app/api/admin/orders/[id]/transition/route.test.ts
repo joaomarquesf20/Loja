@@ -20,6 +20,15 @@ vi.mock(
   },
 )
 
+
+vi.mock(
+  '@/server/order-cancellation',
+  () => ({
+    cancelOrderAndRestoreStock:
+      vi.fn(),
+  }),
+)
+
 vi.mock(
   '@/server/order-lifecycle',
   () => {
@@ -58,6 +67,9 @@ import {
   requireAdmin,
 } from '@/server/admin-auth'
 import {
+  cancelOrderAndRestoreStock,
+} from '@/server/order-cancellation'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -67,6 +79,11 @@ import { POST } from './route'
 
 const mockRequireAdmin =
   vi.mocked(requireAdmin)
+
+const mockCancelOrderAndRestoreStock =
+  vi.mocked(
+    cancelOrderAndRestoreStock,
+  )
 
 const mockApplyAdminOrderAction =
   vi.mocked(
@@ -107,6 +124,21 @@ const confirmedOrder = {
     'CONFIRMED' as const,
   paymentStatus:
     'PAID' as const,
+  fulfillmentMethod:
+    'DELIVERY' as const,
+  paymentProvider:
+    'PFA_SIMULATED',
+  paymentReference:
+    'pfa_sim_123',
+}
+
+
+const cancelledOrder = {
+  id: 'order-1',
+  status:
+    'CANCELLED' as const,
+  paymentStatus:
+    'PENDING' as const,
   fulfillmentMethod:
     'DELIVERY' as const,
   paymentProvider:
@@ -173,6 +205,48 @@ describe(
     )
 
     test(
+      'cancela pela operação transacional própria sem aceitar estado arbitrário',
+      async () => {
+        mockCancelOrderAndRestoreStock.mockResolvedValue(
+          cancelledOrder,
+        )
+
+        const response =
+          await POST(
+            postRequest({
+              action:
+                'CANCEL',
+              status:
+                'CANCELLED',
+              stockQuantity:
+                999999,
+            }),
+            context(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        expect(
+          await response.json(),
+        ).toEqual(
+          cancelledOrder,
+        )
+
+        expect(
+          mockCancelOrderAndRestoreStock,
+        ).toHaveBeenCalledWith(
+          'order-1',
+        )
+
+        expect(
+          mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'devolve 401 sem autenticação',
       async () => {
         mockRequireAdmin.mockRejectedValue(
@@ -194,6 +268,10 @@ describe(
 
         expect(
           mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockCancelOrderAndRestoreStock,
         ).not.toHaveBeenCalled()
       },
     )
@@ -248,6 +326,10 @@ describe(
 
         expect(
           mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockCancelOrderAndRestoreStock,
         ).not.toHaveBeenCalled()
       },
     )
@@ -306,6 +388,10 @@ describe(
 
         expect(
           mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockCancelOrderAndRestoreStock,
         ).not.toHaveBeenCalled()
       },
     )
@@ -367,6 +453,41 @@ describe(
           error:
             'Transição inválida',
         })
+      },
+    )
+
+    test(
+      'devolve 409 quando o pagamento impede o cancelamento',
+      async () => {
+        mockCancelOrderAndRestoreStock.mockRejectedValue(
+          new OrderLifecycleConflictError(
+            'O pagamento tem de ser reembolsado antes de cancelar a encomenda',
+          ),
+        )
+
+        const response =
+          await POST(
+            postRequest({
+              action:
+                'CANCEL',
+            }),
+            context(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(409)
+
+        expect(
+          await response.json(),
+        ).toEqual({
+          error:
+            'O pagamento tem de ser reembolsado antes de cancelar a encomenda',
+        })
+
+        expect(
+          mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
       },
     )
 
