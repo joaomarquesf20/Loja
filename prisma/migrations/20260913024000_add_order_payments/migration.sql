@@ -20,3 +20,4 @@ ADD COLUMN "paymentReference" TEXT;
 
 CREATE INDEX "Order_paymentProvider_paymentReference_idx"
 ON "Order"("paymentProvider", "paymentReference");
+
