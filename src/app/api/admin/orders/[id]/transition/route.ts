@@ -12,6 +12,9 @@ import {
   cancelOrderAndRestoreStock,
 } from '@/server/order-cancellation'
 import {
+  refundSimulatedPayment,
+} from '@/server/payment-refund'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -168,10 +171,15 @@ export async function POST(
         ? await cancelOrderAndRestoreStock(
             id,
           )
-        : await applyAdminOrderAction(
-            id,
-            action,
-          )
+        : action ===
+            'REFUND_PAYMENT'
+          ? await refundSimulatedPayment(
+              id,
+            )
+          : await applyAdminOrderAction(
+              id,
+              action,
+            )
 
     return Response.json(
       order,

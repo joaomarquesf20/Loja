@@ -37,6 +37,7 @@ type AdminOrderAction =
   | 'DELIVER'
   | 'READY_FOR_PICKUP'
   | 'PICK_UP'
+  | 'REFUND_PAYMENT'
   | 'CANCEL'
 
 type OrderItem = {
@@ -119,6 +120,8 @@ const actionLabels:
     'Marcar pronta para levantamento',
   PICK_UP:
     'Marcar como levantada',
+  REFUND_PAYMENT:
+    'Reembolsar pagamento',
   CANCEL:
     'Cancelar encomenda',
 }
@@ -180,6 +183,31 @@ function getPaymentMethodLabel(
   }
 
   return 'Não registado'
+}
+
+function canRefundSimulatedPayment(
+  order: AdminOrder,
+) {
+  const statusAllowsRefund =
+    order.status ===
+      'PENDING' ||
+    order.status ===
+      'CONFIRMED' ||
+    order.status ===
+      'PROCESSING' ||
+    order.status ===
+      'READY_FOR_PICKUP'
+
+  return (
+    order.paymentStatus ===
+      'PAID' &&
+    order.paymentProvider ===
+      'PFA_SIMULATED' &&
+    Boolean(
+      order.paymentReference,
+    ) &&
+    statusAllowsRefund
+  )
 }
 
 function canCancelOrder(
@@ -266,6 +294,16 @@ function getAvailableActions(
   }
 
   if (
+    canRefundSimulatedPayment(
+      order,
+    )
+  ) {
+    actions.push(
+      'REFUND_PAYMENT',
+    )
+  }
+
+  if (
     canCancelOrder(
       order,
     )
@@ -292,6 +330,17 @@ function getPaymentNotice(
 
     case 'FAILED':
       return 'O pagamento falhou. A encomenda pode ser cancelada e o stock é reposto.'
+
+    case 'PAID':
+      if (
+        canRefundSimulatedPayment(
+          order,
+        )
+      ) {
+        return 'Pagamento simulado confirmado. Para cancelar esta encomenda, reembolsa primeiro o pagamento e depois cancela para repor o stock.'
+      }
+
+      return null
 
     case 'REFUNDED':
       return 'O pagamento está reembolsado. Se a encomenda ainda não saiu da loja, pode ser cancelada com reposição de stock.'
@@ -488,6 +537,16 @@ export default function OrdersClient() {
         'CANCEL' &&
       !window.confirm(
         `Cancelar a encomenda "${order.orderNumber}" e repor o stock?`,
+      )
+    ) {
+      return
+    }
+
+    if (
+      action ===
+        'REFUND_PAYMENT' &&
+      !window.confirm(
+        `Reembolsar o pagamento simulado da encomenda "${order.orderNumber}"? Esta operação não movimenta dinheiro real.`,
       )
     ) {
       return
@@ -845,7 +904,10 @@ export default function OrdersClient() {
                                 action ===
                                 'CANCEL'
                                   ? 'rounded border border-red-700 px-3 py-2 text-sm text-red-700 disabled:opacity-50'
-                                  : 'rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50'
+                                  : action ===
+                                      'REFUND_PAYMENT'
+                                    ? 'rounded border border-amber-700 px-3 py-2 text-sm text-amber-800 disabled:opacity-50'
+                                    : 'rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50'
                               }
                             >
                               {isSubmitting

@@ -540,6 +540,201 @@ describe(
             },
           ),
         ).not.toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Reembolsar pagamento',
+            },
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'reembolsa pagamento simulado enviando apenas REFUND_PAYMENT',
+      async () => {
+        const confirmMock =
+          vi.spyOn(
+            window,
+            'confirm',
+          ).mockReturnValue(
+            true,
+          )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            createJsonResponse({
+              orders: [
+                createOrder(),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            createJsonResponse({
+              id: 'order-1',
+              status:
+                'PENDING',
+              paymentStatus:
+                'REFUNDED',
+              fulfillmentMethod:
+                'DELIVERY',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_123',
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        const button =
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Reembolsar pagamento',
+            },
+          )
+
+        fireEvent.click(
+          button,
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledTimes(
+            2,
+          )
+        })
+
+        expect(
+          confirmMock,
+        ).toHaveBeenCalled()
+
+        const [
+          url,
+          init,
+        ] =
+          fetchMock.mock.calls[1]
+
+        expect(url).toBe(
+          '/api/admin/orders/order-1/transition',
+        )
+
+        expect(init).toEqual(
+          expect.objectContaining({
+            method: 'POST',
+            body:
+              JSON.stringify({
+                action:
+                  'REFUND_PAYMENT',
+              }),
+          }),
+        )
+
+        expect(
+          await screen.findByText(
+            /Pagamento: Reembolsado/,
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Confirmar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+
+        confirmMock.mockRestore()
+      },
+    )
+
+    test(
+      'não oferece reembolso simulado para outro fornecedor',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            orders: [
+              createOrder({
+                paymentProvider:
+                  'REAL_PROVIDER',
+                paymentReference:
+                  'real_123',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'PFA-ABC123',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Reembolsar pagamento',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'não oferece reembolso depois da expedição',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            orders: [
+              createOrder({
+                status:
+                  'SHIPPED',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'PFA-ABC123',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Reembolsar pagamento',
+            },
+          ),
+        ).not.toBeInTheDocument()
       },
     )
 

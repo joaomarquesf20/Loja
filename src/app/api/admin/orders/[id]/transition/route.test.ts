@@ -30,6 +30,14 @@ vi.mock(
 )
 
 vi.mock(
+  '@/server/payment-refund',
+  () => ({
+    refundSimulatedPayment:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {
@@ -70,6 +78,9 @@ import {
   cancelOrderAndRestoreStock,
 } from '@/server/order-cancellation'
 import {
+  refundSimulatedPayment,
+} from '@/server/payment-refund'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -83,6 +94,11 @@ const mockRequireAdmin =
 const mockCancelOrderAndRestoreStock =
   vi.mocked(
     cancelOrderAndRestoreStock,
+  )
+
+const mockRefundSimulatedPayment =
+  vi.mocked(
+    refundSimulatedPayment,
   )
 
 const mockApplyAdminOrderAction =
@@ -139,6 +155,21 @@ const cancelledOrder = {
     'CANCELLED' as const,
   paymentStatus:
     'PENDING' as const,
+  fulfillmentMethod:
+    'DELIVERY' as const,
+  paymentProvider:
+    'PFA_SIMULATED',
+  paymentReference:
+    'pfa_sim_123',
+}
+
+
+const refundedOrder = {
+  id: 'order-1',
+  status:
+    'PENDING' as const,
+  paymentStatus:
+    'REFUNDED' as const,
   fulfillmentMethod:
     'DELIVERY' as const,
   paymentProvider:
@@ -239,6 +270,52 @@ describe(
         ).toHaveBeenCalledWith(
           'order-1',
         )
+
+        expect(
+          mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'reembolsa apenas pelo serviço do fornecedor simulado',
+      async () => {
+        mockRefundSimulatedPayment.mockResolvedValue(
+          refundedOrder,
+        )
+
+        const response =
+          await POST(
+            postRequest({
+              action:
+                'REFUND_PAYMENT',
+              paymentStatus:
+                'REFUNDED',
+              status:
+                'CANCELLED',
+            }),
+            context(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        expect(
+          await response.json(),
+        ).toEqual(
+          refundedOrder,
+        )
+
+        expect(
+          mockRefundSimulatedPayment,
+        ).toHaveBeenCalledWith(
+          'order-1',
+        )
+
+        expect(
+          mockCancelOrderAndRestoreStock,
+        ).not.toHaveBeenCalled()
 
         expect(
           mockApplyAdminOrderAction,
@@ -483,6 +560,41 @@ describe(
         ).toEqual({
           error:
             'O pagamento tem de ser reembolsado antes de cancelar a encomenda',
+        })
+
+        expect(
+          mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'devolve 409 quando o reembolso simulado não é permitido',
+      async () => {
+        mockRefundSimulatedPayment.mockRejectedValue(
+          new OrderLifecycleConflictError(
+            'Este pagamento não pertence ao fornecedor simulado e não pode ser reembolsado por esta operação',
+          ),
+        )
+
+        const response =
+          await POST(
+            postRequest({
+              action:
+                'REFUND_PAYMENT',
+            }),
+            context(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(409)
+
+        expect(
+          await response.json(),
+        ).toEqual({
+          error:
+            'Este pagamento não pertence ao fornecedor simulado e não pode ser reembolsado por esta operação',
         })
 
         expect(
