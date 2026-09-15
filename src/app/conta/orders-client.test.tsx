@@ -67,6 +67,7 @@ function createOrder(
           '100.00',
       },
     ],
+    events: [],
     ...overrides,
   }
 }
@@ -248,6 +249,92 @@ describe(
         expect(
           screen.getByText(
             '910000000',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'mostra criação e histórico persistido da encomenda',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                events: [
+                  {
+                    id: 'event-1',
+                    type:
+                      'PAYMENT_CONFIRMED',
+                    fromOrderStatus:
+                      null,
+                    toOrderStatus:
+                      null,
+                    fromPaymentStatus:
+                      'PENDING',
+                    toPaymentStatus:
+                      'PAID',
+                    createdAt:
+                      '2026-09-01T10:05:00.000Z',
+                  },
+                  {
+                    id: 'event-2',
+                    type:
+                      'STATUS_CHANGED',
+                    fromOrderStatus:
+                      'PENDING',
+                    toOrderStatus:
+                      'CONFIRMED',
+                    fromPaymentStatus:
+                      null,
+                    toPaymentStatus:
+                      null,
+                    createdAt:
+                      '2026-09-01T10:10:00.000Z',
+                  },
+                ],
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Histórico',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Encomenda criada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pagamento confirmado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Estado alterado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Pago',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Confirmada',
           ),
         ).toBeInTheDocument()
       },
@@ -442,6 +529,49 @@ describe(
               {
                 id: 'order-1',
               },
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Resposta inválida do servidor',
+        )
+      },
+    )
+
+    test(
+      'rejeita evento de histórico inválido devolvido pelo servidor',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                events: [
+                  {
+                    id: 'event-1',
+                    type:
+                      'STATUS_CHANGED',
+                    fromOrderStatus:
+                      'PENDING',
+                    toOrderStatus:
+                      'CONFIRMED',
+                    fromPaymentStatus:
+                      null,
+                    toPaymentStatus:
+                      null,
+                    createdAt:
+                      'data-inválida',
+                  },
+                ],
+              }),
             ],
           }),
         )

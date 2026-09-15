@@ -18,6 +18,20 @@ type OrderItem = {
   subtotalAtPurchase: string
 }
 
+type OrderEvent = {
+  id: string
+  type: string
+  fromOrderStatus:
+    string | null
+  toOrderStatus:
+    string | null
+  fromPaymentStatus:
+    string | null
+  toPaymentStatus:
+    string | null
+  createdAt: string
+}
+
 type Order = {
   id: string
   orderNumber: string
@@ -44,6 +58,7 @@ type Order = {
     string | null
   createdAt: string
   items: OrderItem[]
+  events: OrderEvent[]
 }
 
 type OrdersMode =
@@ -111,6 +126,43 @@ function isValidDateString(
     value.trim() !== '' &&
     !Number.isNaN(
       Date.parse(value),
+    )
+  )
+}
+
+function isNullableString(
+  value: unknown,
+): value is string | null {
+  return (
+    value === null ||
+    typeof value === 'string'
+  )
+}
+
+function isOrderEvent(
+  value: unknown,
+): value is OrderEvent {
+  if (!isRecord(value)) {
+    return false
+  }
+
+  return (
+    typeof value.id === 'string' &&
+    typeof value.type === 'string' &&
+    isNullableString(
+      value.fromOrderStatus,
+    ) &&
+    isNullableString(
+      value.toOrderStatus,
+    ) &&
+    isNullableString(
+      value.fromPaymentStatus,
+    ) &&
+    isNullableString(
+      value.toPaymentStatus,
+    ) &&
+    isValidDateString(
+      value.createdAt,
     )
   )
 }
@@ -216,6 +268,12 @@ function isOrder(
     ) &&
     value.items.every(
       isOrderItem,
+    ) &&
+    Array.isArray(
+      value.events,
+    ) &&
+    value.events.every(
+      isOrderEvent,
     )
   )
 }
@@ -305,6 +363,19 @@ function formatDate(
   ).format(new Date(value))
 }
 
+function formatDateTime(
+  value: string,
+) {
+  return new Intl.DateTimeFormat(
+    'pt-PT',
+    {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'Europe/Lisbon',
+    },
+  ).format(new Date(value))
+}
+
 function getOrderStatusLabel(
   status: string,
 ) {
@@ -347,6 +418,74 @@ function getPaymentStatusLabel(
     default:
       return status
   }
+}
+
+function getOrderEventTitle(
+  event: OrderEvent,
+) {
+  switch (event.type) {
+    case 'PAYMENT_CONFIRMED':
+      return 'Pagamento confirmado'
+    case 'STATUS_CHANGED':
+      return 'Estado alterado'
+    case 'PAYMENT_REFUNDED':
+      return 'Pagamento reembolsado'
+    case 'CANCELLED':
+      return 'Encomenda cancelada'
+    default:
+      return event.type
+  }
+}
+
+function getTransitionLabel(
+  fromValue: string | null,
+  toValue: string | null,
+  getLabel: (
+    value: string,
+  ) => string,
+) {
+  if (fromValue && toValue) {
+    return `${getLabel(
+      fromValue,
+    )} → ${getLabel(toValue)}`
+  }
+
+  if (toValue) {
+    return getLabel(toValue)
+  }
+
+  return null
+}
+
+function getOrderEventDetail(
+  event: OrderEvent,
+) {
+  if (
+    event.type ===
+      'PAYMENT_CONFIRMED' ||
+    event.type ===
+      'PAYMENT_REFUNDED'
+  ) {
+    return getTransitionLabel(
+      event.fromPaymentStatus,
+      event.toPaymentStatus,
+      getPaymentStatusLabel,
+    )
+  }
+
+  if (
+    event.type ===
+      'STATUS_CHANGED' ||
+    event.type === 'CANCELLED'
+  ) {
+    return getTransitionLabel(
+      event.fromOrderStatus,
+      event.toOrderStatus,
+      getOrderStatusLabel,
+    )
+  }
+
+  return null
 }
 
 function getErrorMessage(
@@ -532,6 +671,60 @@ export function OrdersClient() {
                         </span>
                       </p>
                     </div>
+                  </div>
+
+                  <div className="mt-5 border-t pt-5">
+                    <h4 className="font-semibold">
+                      Histórico
+                    </h4>
+
+                    <ol className="mt-3 space-y-3">
+                      <li className="rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-900">
+                        <p className="font-medium">
+                          Encomenda criada
+                        </p>
+
+                        <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                          {formatDateTime(
+                            order.createdAt,
+                          )}
+                        </p>
+                      </li>
+
+                      {order.events.map(
+                        (event) => {
+                          const detail =
+                            getOrderEventDetail(
+                              event,
+                            )
+
+                          return (
+                            <li
+                              key={event.id}
+                              className="rounded-lg bg-neutral-50 p-3 text-sm dark:bg-neutral-900"
+                            >
+                              <p className="font-medium">
+                                {getOrderEventTitle(
+                                  event,
+                                )}
+                              </p>
+
+                              {detail ? (
+                                <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                  {detail}
+                                </p>
+                              ) : null}
+
+                              <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                {formatDateTime(
+                                  event.createdAt,
+                                )}
+                              </p>
+                            </li>
+                          )
+                        },
+                      )}
+                    </ol>
                   </div>
 
                   <div className="mt-5 border-t pt-5">

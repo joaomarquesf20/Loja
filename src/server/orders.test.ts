@@ -77,6 +77,7 @@ function createOrderRecord() {
           decimal('100.00'),
       },
     ],
+    events: [],
   }
 }
 
@@ -176,6 +177,30 @@ describe(
                   true,
               },
             },
+            events: {
+              orderBy: [
+                {
+                  createdAt:
+                    'asc',
+                },
+                {
+                  id: 'asc',
+                },
+              ],
+              select: {
+                id: true,
+                type: true,
+                fromOrderStatus:
+                  true,
+                toOrderStatus:
+                  true,
+                fromPaymentStatus:
+                  true,
+                toPaymentStatus:
+                  true,
+                createdAt: true,
+              },
+            },
           },
         })
       },
@@ -250,6 +275,71 @@ describe(
                   '100.00',
               },
             ],
+            events: [],
+          },
+        ])
+      },
+    )
+
+    test(
+      'devolve o histórico persistido da encomenda por ordem cronológica',
+      async () => {
+        const {
+          client,
+          findMany,
+        } = createClient()
+
+        const eventCreatedAt =
+          new Date(
+            '2026-09-01T10:05:00.000Z',
+          )
+
+        findMany.mockResolvedValue([
+          {
+            ...createOrderRecord(),
+            events: [
+              {
+                id: 'event-1',
+                type:
+                  'PAYMENT_CONFIRMED',
+                fromOrderStatus:
+                  null,
+                toOrderStatus:
+                  null,
+                fromPaymentStatus:
+                  'PENDING',
+                toPaymentStatus:
+                  'PAID',
+                createdAt:
+                  eventCreatedAt,
+              },
+            ],
+          },
+        ])
+
+        const result =
+          await listUserOrders(
+            'user-1',
+            client,
+          )
+
+        expect(
+          result[0]?.events,
+        ).toEqual([
+          {
+            id: 'event-1',
+            type:
+              'PAYMENT_CONFIRMED',
+            fromOrderStatus:
+              null,
+            toOrderStatus:
+              null,
+            fromPaymentStatus:
+              'PENDING',
+            toPaymentStatus:
+              'PAID',
+            createdAt:
+              eventCreatedAt,
           },
         ])
       },

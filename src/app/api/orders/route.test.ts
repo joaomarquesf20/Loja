@@ -151,6 +151,75 @@ describe('/api/orders', () => {
   )
 
   test(
+    'inclui o histórico devolvido pelo serviço de encomendas',
+    async () => {
+      const orders = [
+        {
+          id: 'order-1',
+          events: [
+            {
+              id: 'event-1',
+              type:
+                'STATUS_CHANGED',
+              fromOrderStatus:
+                'PENDING',
+              toOrderStatus:
+                'CONFIRMED',
+              fromPaymentStatus:
+                null,
+              toPaymentStatus:
+                null,
+              createdAt:
+                new Date(
+                  '2026-09-01T10:10:00.000Z',
+                ),
+            },
+          ],
+        },
+      ]
+
+      mocks.listUserOrders
+        .mockResolvedValue(
+          orders,
+        )
+
+      const response =
+        await GET()
+
+      expect(
+        response.status,
+      ).toBe(200)
+
+      await expect(
+        response.json(),
+      ).resolves.toEqual({
+        orders: [
+          {
+            id: 'order-1',
+            events: [
+              {
+                id: 'event-1',
+                type:
+                  'STATUS_CHANGED',
+                fromOrderStatus:
+                  'PENDING',
+                toOrderStatus:
+                  'CONFIRMED',
+                fromPaymentStatus:
+                  null,
+                toPaymentStatus:
+                  null,
+                createdAt:
+                  '2026-09-01T10:10:00.000Z',
+              },
+            ],
+          },
+        ],
+      })
+    },
+  )
+
+  test(
     'devolve lista vazia quando o utilizador não tem encomendas',
     async () => {
       mocks.listUserOrders

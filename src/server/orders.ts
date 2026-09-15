@@ -34,6 +34,20 @@ export type UserOrderItem = {
   subtotalAtPurchase: string
 }
 
+export type UserOrderEvent = {
+  id: string
+  type: string
+  fromOrderStatus:
+    string | null
+  toOrderStatus:
+    string | null
+  fromPaymentStatus:
+    string | null
+  toPaymentStatus:
+    string | null
+  createdAt: Date
+}
+
 export type UserOrder = {
   id: string
   orderNumber: string
@@ -60,6 +74,7 @@ export type UserOrder = {
     string | null
   createdAt: Date
   items: UserOrderItem[]
+  events: UserOrderEvent[]
 }
 
 type OrderItemRecord = {
@@ -69,6 +84,20 @@ type OrderItemRecord = {
   priceAtPurchase: MoneyValue
   quantity: number
   subtotalAtPurchase: MoneyValue
+}
+
+type OrderEventRecord = {
+  id: string
+  type: string
+  fromOrderStatus:
+    string | null
+  toOrderStatus:
+    string | null
+  fromPaymentStatus:
+    string | null
+  toPaymentStatus:
+    string | null
+  createdAt: Date
 }
 
 type OrderRecord = {
@@ -97,6 +126,7 @@ type OrderRecord = {
     string | null
   createdAt: Date
   items: OrderItemRecord[]
+  events: OrderEventRecord[]
 }
 
 type OrderItemSelect = {
@@ -106,6 +136,16 @@ type OrderItemSelect = {
   priceAtPurchase: true
   quantity: true
   subtotalAtPurchase: true
+}
+
+type OrderEventSelect = {
+  id: true
+  type: true
+  fromOrderStatus: true
+  toOrderStatus: true
+  fromPaymentStatus: true
+  toPaymentStatus: true
+  createdAt: true
 }
 
 type OrderSelect = {
@@ -133,6 +173,17 @@ type OrderSelect = {
     }
     select: OrderItemSelect
   }
+  events: {
+    orderBy: [
+      {
+        createdAt: 'asc'
+      },
+      {
+        id: 'asc'
+      },
+    ]
+    select: OrderEventSelect
+  }
 }
 
 export interface OrderClient {
@@ -156,6 +207,16 @@ const orderItemSelect: OrderItemSelect = {
   priceAtPurchase: true,
   quantity: true,
   subtotalAtPurchase: true,
+}
+
+const orderEventSelect: OrderEventSelect = {
+  id: true,
+  type: true,
+  fromOrderStatus: true,
+  toOrderStatus: true,
+  fromPaymentStatus: true,
+  toPaymentStatus: true,
+  createdAt: true,
 }
 
 const orderSelect: OrderSelect = {
@@ -182,6 +243,17 @@ const orderSelect: OrderSelect = {
       id: 'asc',
     },
     select: orderItemSelect,
+  },
+  events: {
+    orderBy: [
+      {
+        createdAt: 'asc',
+      },
+      {
+        id: 'asc',
+      },
+    ],
+    select: orderEventSelect,
   },
 }
 
@@ -252,6 +324,25 @@ function mapOrderItem(
   }
 }
 
+function mapOrderEvent(
+  event: OrderEventRecord,
+): UserOrderEvent {
+  return {
+    id: event.id,
+    type: event.type,
+    fromOrderStatus:
+      event.fromOrderStatus,
+    toOrderStatus:
+      event.toOrderStatus,
+    fromPaymentStatus:
+      event.fromPaymentStatus,
+    toPaymentStatus:
+      event.toPaymentStatus,
+    createdAt:
+      event.createdAt,
+  }
+}
+
 function mapOrder(
   order: OrderRecord,
 ): UserOrder {
@@ -302,6 +393,10 @@ function mapOrder(
     items:
       order.items.map(
         mapOrderItem,
+      ),
+    events:
+      order.events.map(
+        mapOrderEvent,
       ),
   }
 }
