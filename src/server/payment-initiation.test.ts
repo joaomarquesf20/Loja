@@ -35,6 +35,7 @@ function createOrder(
 ) {
   return {
     id: 'order-1',
+    status: 'PENDING' as const,
     total: decimal('128.50'),
     paymentStatus:
       'PENDING' as const,
@@ -121,6 +122,7 @@ describe(
           },
           select: {
             id: true,
+            status: true,
             total: true,
             paymentStatus: true,
             paymentMethod: true,
@@ -137,6 +139,7 @@ describe(
           where: {
             id: 'order-1',
             userId: 'user-1',
+            status: 'PENDING',
             paymentStatus:
               'PENDING',
             paymentProvider: null,
@@ -575,6 +578,45 @@ describe(
         ).rejects.toBeInstanceOf(
           PaymentInitiationConflictError,
         )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test.each([
+      'SHIPPED',
+      'DELIVERED',
+      'PICKED_UP',
+      'CANCELLED',
+    ] as const)(
+      'rejeita pagamento no estado final %s',
+      async (status) => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            status,
+          }),
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'PaymentInitiationConflictError',
+          message:
+            'O estado atual da encomenda não permite iniciar pagamento',
+        })
 
         expect(
           updateMany,

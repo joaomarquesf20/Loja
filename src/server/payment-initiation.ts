@@ -59,8 +59,19 @@ export type PaymentInitiationResult = {
   amount: string
 }
 
+type PaymentOrderStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'PROCESSING'
+  | 'SHIPPED'
+  | 'DELIVERED'
+  | 'READY_FOR_PICKUP'
+  | 'PICKED_UP'
+  | 'CANCELLED'
+
 type PaymentOrderRecord = {
   id: string
+  status: PaymentOrderStatus
   total: MoneyValue
   paymentStatus:
     | 'PENDING'
@@ -78,6 +89,7 @@ type PaymentOrderRecord = {
 
 type PaymentOrderSelect = {
   id: true
+  status: true
   total: true
   paymentStatus: true
   paymentMethod: true
@@ -98,6 +110,7 @@ type PaymentOrderUpdateManyArgs = {
   where: {
     id: string
     userId: string
+    status: PaymentOrderStatus
     paymentStatus: 'PENDING'
     paymentProvider: null
     paymentReference: null
@@ -125,6 +138,7 @@ type PaymentReferenceFactory =
 
 const paymentOrderSelect: PaymentOrderSelect = {
   id: true,
+  status: true,
   total: true,
   paymentStatus: true,
   paymentMethod: true,
@@ -189,6 +203,28 @@ function moneyToString(
   }
 
   return value.toString()
+}
+
+const payableOrderStatuses =
+  new Set<PaymentOrderStatus>([
+    'PENDING',
+    'CONFIRMED',
+    'PROCESSING',
+    'READY_FOR_PICKUP',
+  ])
+
+function validateOrderStatus(
+  order: PaymentOrderRecord,
+) {
+  if (
+    !payableOrderStatuses.has(
+      order.status,
+    )
+  ) {
+    throw new PaymentInitiationConflictError(
+      'O estado atual da encomenda não permite iniciar pagamento',
+    )
+  }
 }
 
 function validatePaymentTerms(
@@ -331,6 +367,7 @@ export async function initiateSimulatedPayment(
       db,
     )
 
+  validateOrderStatus(order)
   validatePaymentTerms(order)
 
   if (
@@ -374,6 +411,7 @@ export async function initiateSimulatedPayment(
         where: {
           id: orderId,
           userId,
+          status: order.status,
           paymentStatus: 'PENDING',
           paymentProvider: null,
           paymentReference: null,
@@ -414,6 +452,9 @@ export async function initiateSimulatedPayment(
       db,
     )
 
+  validateOrderStatus(
+    currentOrder,
+  )
   validatePaymentTerms(
     currentOrder,
   )

@@ -466,6 +466,241 @@ describe(
     )
 
     test(
+      'mostra pagamento para encomenda pendente elegível',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'PENDING',
+                paymentStatus:
+                  'PENDING',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test.each([
+      {
+        status: 'PENDING',
+        paymentStatus: 'PAID',
+      },
+      {
+        status: 'SHIPPED',
+        paymentStatus: 'PENDING',
+      },
+    ])(
+      'não mostra pagamento para $status / $paymentStatus',
+      async ({
+        status,
+        paymentStatus,
+      }) => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status,
+                paymentStatus,
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'Encomenda PFA-ABC123',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'paga encomenda e atualiza o histórico',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PENDING',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              payment: {
+                orderId: 'order-1',
+                paymentStatus:
+                  'PAID',
+              },
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PAID',
+                  events: [
+                    {
+                      id: 'event-paid',
+                      type:
+                        'PAYMENT_CONFIRMED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'PENDING',
+                      toPaymentStatus:
+                        'PAID',
+                      createdAt:
+                        '2026-09-01T10:05:00.000Z',
+                    },
+                  ],
+                }),
+              ],
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledWith(
+            '/api/payments/simulate',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body: JSON.stringify({
+                orderId: 'order-1',
+              }),
+            },
+          )
+        })
+
+        expect(
+          await screen.findByText(
+            'Pagamento confirmado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Pago',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'mostra erro quando o pagamento é recusado pelo servidor',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PENDING',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                error:
+                  'O estado atual da encomenda não permite iniciar pagamento',
+              },
+              409,
+            ),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'O estado atual da encomenda não permite iniciar pagamento',
+        )
+      },
+    )
+
+    test(
       'mostra cancelamento apenas para encomenda elegível',
       async () => {
         fetchMock.mockResolvedValueOnce(

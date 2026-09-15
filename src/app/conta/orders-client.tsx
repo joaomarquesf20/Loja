@@ -339,6 +339,32 @@ async function fetchOrders() {
   return parseOrders(response)
 }
 
+async function requestOrderPayment(
+  orderId: string,
+) {
+  const response = await fetch(
+    '/api/payments/simulate',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type':
+          'application/json',
+      },
+      body: JSON.stringify({
+        orderId,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      await getResponseError(
+        response,
+      ),
+    )
+  }
+}
+
 async function requestOrderCancellation(
   orderId: string,
 ) {
@@ -509,6 +535,26 @@ function getOrderEventDetail(
   return null
 }
 
+function canPayOrder(
+  order: Order,
+) {
+  const payableStatuses =
+    new Set([
+      'PENDING',
+      'CONFIRMED',
+      'PROCESSING',
+      'READY_FOR_PICKUP',
+    ])
+
+  return (
+    order.paymentStatus ===
+      'PENDING' &&
+    payableStatuses.has(
+      order.status,
+    )
+  )
+}
+
 function canCancelOrder(
   order: Order,
 ) {
@@ -546,6 +592,14 @@ function getErrorMessage(
     : 'Não foi possível carregar as encomendas'
 }
 
+function getPaymentErrorMessage(
+  error: unknown,
+) {
+  return error instanceof Error
+    ? error.message
+    : 'Não foi possível pagar a encomenda'
+}
+
 function getCancellationErrorMessage(
   error: unknown,
 ) {
@@ -569,6 +623,21 @@ export function OrdersClient() {
     useState<string | null>(
       null,
     )
+
+  const [
+    payingOrderId,
+    setPayingOrderId,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    paymentError,
+    setPaymentError,
+  ] = useState<{
+    orderId: string
+    message: string
+  } | null>(null)
 
   const [
     cancellingOrderId,
@@ -605,6 +674,39 @@ export function OrdersClient() {
     }
   }
 
+  async function handlePayOrder(
+    order: Order,
+  ) {
+    setPaymentError(null)
+    setCancellationError(null)
+    setPayingOrderId(
+      order.id,
+    )
+
+    try {
+      await requestOrderPayment(
+        order.id,
+      )
+
+      const nextOrders =
+        await fetchOrders()
+
+      setOrders(nextOrders)
+    } catch (caughtError) {
+      setPaymentError({
+        orderId: order.id,
+        message:
+          getPaymentErrorMessage(
+            caughtError,
+          ),
+      })
+    } finally {
+      setPayingOrderId(
+        null,
+      )
+    }
+  }
+
   async function handleCancelOrder(
     order: Order,
   ) {
@@ -623,6 +725,7 @@ export function OrdersClient() {
     }
 
     setCancellationError(null)
+    setPaymentError(null)
     setCancellingOrderId(
       order.id,
     )
@@ -750,12 +853,26 @@ export function OrdersClient() {
                 order.fulfillmentMethod ===
                 'PICKUP'
 
+              const canPay =
+                canPayOrder(order)
+
               const canCancel =
                 canCancelOrder(order)
+
+              const isPaying =
+                payingOrderId ===
+                order.id
 
               const isCancelling =
                 cancellingOrderId ===
                 order.id
+
+              const orderPaymentError =
+                paymentError &&
+                paymentError.orderId ===
+                  order.id
+                  ? paymentError.message
+                  : null
 
               const orderCancellationError =
                 cancellationError &&
@@ -807,25 +924,62 @@ export function OrdersClient() {
                     </div>
                   </div>
 
-                  {canCancel ? (
+                  {canPay || canCancel ? (
                     <div className="mt-5 border-t pt-5">
-                      <button
-                        type="button"
-                        disabled={
-                          cancellingOrderId !==
-                          null
-                        }
-                        onClick={() =>
-                          void handleCancelOrder(
-                            order,
-                          )
-                        }
-                        className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
-                      >
-                        {isCancelling
-                          ? 'A cancelar…'
-                          : 'Cancelar encomenda'}
-                      </button>
+                      <div className="flex flex-wrap gap-3">
+                        {canPay ? (
+                          <button
+                            type="button"
+                            disabled={
+                              payingOrderId !==
+                                null ||
+                              cancellingOrderId !==
+                                null
+                            }
+                            onClick={() =>
+                              void handlePayOrder(
+                                order,
+                              )
+                            }
+                            className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
+                          >
+                            {isPaying
+                              ? 'A pagar…'
+                              : 'Pagar encomenda'}
+                          </button>
+                        ) : null}
+
+                        {canCancel ? (
+                          <button
+                            type="button"
+                            disabled={
+                              payingOrderId !==
+                                null ||
+                              cancellingOrderId !==
+                                null
+                            }
+                            onClick={() =>
+                              void handleCancelOrder(
+                                order,
+                              )
+                            }
+                            className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                          >
+                            {isCancelling
+                              ? 'A cancelar…'
+                              : 'Cancelar encomenda'}
+                          </button>
+                        ) : null}
+                      </div>
+
+                      {orderPaymentError ? (
+                        <p
+                          role="alert"
+                          className="mt-3 text-sm text-red-700 dark:text-red-300"
+                        >
+                          {orderPaymentError}
+                        </p>
+                      ) : null}
 
                       {orderCancellationError ? (
                         <p
