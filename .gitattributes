@@ -1,1 +1,11 @@
-prisma/migrations/20260913024000_add_order_payments/migration.sql binary
+.gitattributes text eol=lf
+
+*.ts     text eol=lf
+*.tsx    text eol=lf
+*.js     text eol=lf
+*.mjs    text eol=lf
+*.prisma text eol=lf
+*.sql    text eol=lf
+*.json   text eol=lf
+
+prisma/migrations/20260913024000_add_order_payments/migration.sql binary !eol
