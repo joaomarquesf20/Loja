@@ -499,7 +499,7 @@ describe(
     test.each([
       {
         status: 'CONFIRMED',
-        paymentStatus: 'PAID',
+        paymentStatus: 'AUTHORIZED',
       },
       {
         status: 'SHIPPED',
@@ -529,6 +529,141 @@ describe(
         await screen.findByText(
           'Encomenda PFA-ABC123',
         )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'reembolsa e cancela encomenda paga após confirmação',
+      async () => {
+        const confirmMock =
+          vi.fn(() => true)
+
+        vi.stubGlobal(
+          'confirm',
+          confirmMock,
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'CONFIRMED',
+                  paymentStatus:
+                    'PAID',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              order: {
+                id: 'order-1',
+                status:
+                  'CANCELLED',
+                paymentStatus:
+                  'REFUNDED',
+              },
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status:
+                    'CANCELLED',
+                  paymentStatus:
+                    'REFUNDED',
+                  events: [
+                    {
+                      id: 'event-refund',
+                      type:
+                        'PAYMENT_REFUNDED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'PAID',
+                      toPaymentStatus:
+                        'REFUNDED',
+                      createdAt:
+                        '2026-09-01T10:09:00.000Z',
+                    },
+                    {
+                      id: 'event-cancel',
+                      type:
+                        'CANCELLED',
+                      fromOrderStatus:
+                        'CONFIRMED',
+                      toOrderStatus:
+                        'CANCELLED',
+                      fromPaymentStatus:
+                        null,
+                      toPaymentStatus:
+                        null,
+                      createdAt:
+                        '2026-09-01T10:10:00.000Z',
+                    },
+                  ],
+                }),
+              ],
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          confirmMock,
+        ).toHaveBeenCalledWith(
+          'Cancelar a encomenda PFA-ABC123? O pagamento será reembolsado e o stock dos artigos será reposto.',
+        )
+
+        expect(
+          await screen.findByText(
+            'Pagamento reembolsado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pago → Reembolsado',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Encomenda cancelada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Confirmada → Cancelada',
+          ),
+        ).toBeInTheDocument()
 
         expect(
           screen.queryByRole(

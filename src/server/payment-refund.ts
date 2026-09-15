@@ -14,6 +14,7 @@ const SIMULATED_PAYMENT_PROVIDER =
 
 type RefundOrderRecord = {
   id: string
+  userId: string | null
   status: LifecycleOrderStatus
   paymentStatus: LifecyclePaymentStatus
   fulfillmentMethod:
@@ -24,6 +25,7 @@ type RefundOrderRecord = {
 
 type RefundOrderSelect = {
   id: true
+  userId: true
   status: true
   paymentStatus: true
   fulfillmentMethod: true
@@ -34,6 +36,7 @@ type RefundOrderSelect = {
 type RefundUpdateManyArgs = {
   where: {
     id: string
+    userId?: string
     status: LifecycleOrderStatus
     paymentStatus: 'PAID'
     paymentProvider:
@@ -92,6 +95,7 @@ export interface PaymentRefundClient {
 const refundOrderSelect:
   RefundOrderSelect = {
   id: true,
+  userId: true,
   status: true,
   paymentStatus: true,
   fulfillmentMethod: true,
@@ -142,6 +146,38 @@ function normalizeOrderId(
   return normalized
 }
 
+function normalizeOwnerUserId(
+  value: string,
+) {
+  const normalized =
+    value.trim()
+
+  if (!normalized) {
+    throw new OrderLifecycleNotFoundError()
+  }
+
+  return normalized
+}
+
+function toLifecycleState(
+  order: RefundOrderRecord,
+  paymentStatus =
+    order.paymentStatus,
+  paymentReference =
+    order.paymentReference,
+): OrderLifecycleState {
+  return {
+    id: order.id,
+    status: order.status,
+    paymentStatus,
+    fulfillmentMethod:
+      order.fulfillmentMethod,
+    paymentProvider:
+      order.paymentProvider,
+    paymentReference,
+  }
+}
+
 function validateProvider(
   order: RefundOrderRecord,
 ) {
@@ -179,15 +215,10 @@ function validateOrderStatus(
   }
 }
 
-/**
- * Simula um reembolso apenas para pagamentos PFA_SIMULATED.
- *
- * Não contacta um processador de pagamentos real e não movimenta dinheiro.
- * A função apenas muda o estado persistido de PAID para REFUNDED, de forma
- * idempotente e com proteção contra alterações concorrentes.
- */
-export async function refundSimulatedPayment(
+async function refundSimulatedPaymentForOwner(
   orderIdInput: unknown,
+  ownerUserId: string | null,
+  onlyIfPaid: boolean,
   client?: PaymentRefundClient,
 ): Promise<OrderLifecycleState> {
   const orderId =
@@ -207,8 +238,23 @@ export async function refundSimulatedPayment(
         refundOrderSelect,
     })
 
-  if (!order) {
+  if (
+    !order ||
+    (
+      ownerUserId !== null &&
+      order.userId !== ownerUserId
+    )
+  ) {
     throw new OrderLifecycleNotFoundError()
+  }
+
+  if (
+    onlyIfPaid &&
+    order.paymentStatus !== 'PAID'
+  ) {
+    return toLifecycleState(
+      order,
+    )
   }
 
   validateProvider(
@@ -223,7 +269,9 @@ export async function refundSimulatedPayment(
     order.paymentStatus ===
     'REFUNDED'
   ) {
-    return order
+    return toLifecycleState(
+      order,
+    )
   }
 
   if (
@@ -251,6 +299,12 @@ export async function refundSimulatedPayment(
         await tx.order.updateMany({
           where: {
             id: order.id,
+            ...(ownerUserId === null
+              ? {}
+              : {
+                  userId:
+                    ownerUserId,
+                }),
             status:
               order.status,
             paymentStatus:
@@ -287,10 +341,48 @@ export async function refundSimulatedPayment(
     },
   )
 
-  return {
-    ...order,
-    paymentStatus:
-      'REFUNDED',
+  return toLifecycleState(
+    order,
+    'REFUNDED',
     paymentReference,
-  }
+  )
+}
+
+/**
+ * Simula um reembolso apenas para pagamentos PFA_SIMULATED.
+ *
+ * Não contacta um processador de pagamentos real e não movimenta dinheiro.
+ * A função apenas muda o estado persistido de PAID para REFUNDED, de forma
+ * idempotente e com proteção contra alterações concorrentes.
+ */
+export async function refundSimulatedPayment(
+  orderIdInput: unknown,
+  client?: PaymentRefundClient,
+): Promise<OrderLifecycleState> {
+  return refundSimulatedPaymentForOwner(
+    orderIdInput,
+    null,
+    false,
+    client,
+  )
+}
+
+/**
+ * Prepara o pagamento de uma encomenda do cliente para cancelamento.
+ *
+ * Se o pagamento ainda não estiver PAID, não altera o pagamento: a rotina de
+ * cancelamento continua responsável por decidir se o estado atual é elegível.
+ * Se estiver PAID, o reembolso simulado tem de concluir antes do cancelamento.
+ */
+export async function refundUserSimulatedPaymentForCancellation(
+  orderIdInput: unknown,
+  userId: string,
+  client?: PaymentRefundClient,
+): Promise<OrderLifecycleState> {
+  return refundSimulatedPaymentForOwner(
+    orderIdInput,
+    normalizeOwnerUserId(userId),
+    true,
+    client,
+  )
 }

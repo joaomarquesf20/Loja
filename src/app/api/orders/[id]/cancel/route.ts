@@ -9,6 +9,9 @@ import {
   cancelUserOrderAndRestoreStock,
 } from '@/server/order-cancellation'
 import {
+  refundUserSimulatedPaymentForCancellation,
+} from '@/server/payment-refund'
+import {
   requireActiveUserId,
   UnauthorizedUserError,
 } from '@/server/user-auth'
@@ -43,6 +46,11 @@ export async function POST(
 
     const { id } =
       await context.params
+
+    await refundUserSimulatedPaymentForCancellation(
+      id,
+      userId,
+    )
 
     const order =
       await cancelUserOrderAndRestoreStock(

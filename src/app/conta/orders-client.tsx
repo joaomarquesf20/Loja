@@ -523,6 +523,7 @@ function canCancelOrder(
   const cancellablePaymentStatuses =
     new Set([
       'PENDING',
+      'PAID',
       'FAILED',
       'REFUNDED',
     ])
@@ -607,9 +608,14 @@ export function OrdersClient() {
   async function handleCancelOrder(
     order: Order,
   ) {
+    const confirmationMessage =
+      order.paymentStatus === 'PAID'
+        ? `Cancelar a encomenda ${order.orderNumber}? O pagamento será reembolsado e o stock dos artigos será reposto.`
+        : `Cancelar a encomenda ${order.orderNumber}? O stock dos artigos será reposto.`
+
     const confirmed =
       globalThis.confirm(
-        `Cancelar a encomenda ${order.orderNumber}? O stock dos artigos será reposto.`,
+        confirmationMessage,
       )
 
     if (!confirmed) {

@@ -53,6 +53,8 @@ const mocks = vi.hoisted(
     return {
       cancelUserOrderAndRestoreStock:
         vi.fn(),
+      refundUserSimulatedPaymentForCancellation:
+        vi.fn(),
       requireActiveUserId:
         vi.fn(),
       OrderLifecycleConflictError,
@@ -69,6 +71,16 @@ vi.mock(
     cancelUserOrderAndRestoreStock:
       mocks
         .cancelUserOrderAndRestoreStock,
+  }),
+)
+
+
+vi.mock(
+  '@/server/payment-refund',
+  () => ({
+    refundUserSimulatedPaymentForCancellation:
+      mocks
+        .refundUserSimulatedPaymentForCancellation,
   }),
 )
 
@@ -127,6 +139,18 @@ describe(
         )
 
       mocks
+        .refundUserSimulatedPaymentForCancellation
+        .mockResolvedValue({
+          id: 'order-1',
+          status: 'PENDING',
+          paymentStatus: 'PENDING',
+          fulfillmentMethod:
+            'DELIVERY',
+          paymentProvider: null,
+          paymentReference: null,
+        })
+
+      mocks
         .cancelUserOrderAndRestoreStock
         .mockResolvedValue({
           id: 'order-1',
@@ -154,10 +178,28 @@ describe(
 
         expect(
           mocks
+            .refundUserSimulatedPaymentForCancellation,
+        ).toHaveBeenCalledWith(
+          'order-1',
+          'user-1',
+        )
+
+        expect(
+          mocks
             .cancelUserOrderAndRestoreStock,
         ).toHaveBeenCalledWith(
           'order-1',
           'user-1',
+        )
+
+        expect(
+          mocks
+            .refundUserSimulatedPaymentForCancellation
+            .mock.invocationCallOrder[0],
+        ).toBeLessThan(
+          mocks
+            .cancelUserOrderAndRestoreStock
+            .mock.invocationCallOrder[0],
         )
 
         await expect(
@@ -193,6 +235,11 @@ describe(
 
         expect(
           mocks
+            .refundUserSimulatedPaymentForCancellation,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mocks
             .cancelUserOrderAndRestoreStock,
         ).not.toHaveBeenCalled()
       },
@@ -202,7 +249,7 @@ describe(
       'devolve 404 para encomenda inexistente ou de outro utilizador',
       async () => {
         mocks
-          .cancelUserOrderAndRestoreStock
+          .refundUserSimulatedPaymentForCancellation
           .mockRejectedValue(
             new mocks
               .OrderLifecycleNotFoundError(),
@@ -224,6 +271,11 @@ describe(
           error:
             'Encomenda não encontrada',
         })
+
+        expect(
+          mocks
+            .cancelUserOrderAndRestoreStock,
+        ).not.toHaveBeenCalled()
       },
     )
 
@@ -259,10 +311,46 @@ describe(
     )
 
     test(
+      'não cancela quando o reembolso necessário falha',
+      async () => {
+        mocks
+          .refundUserSimulatedPaymentForCancellation
+          .mockRejectedValue(
+            new mocks
+              .OrderLifecycleConflictError(
+                'Este pagamento não pode ser reembolsado',
+              ),
+          )
+
+        const response =
+          await POST(
+            request(),
+            context(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(409)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Este pagamento não pode ser reembolsado',
+        })
+
+        expect(
+          mocks
+            .cancelUserOrderAndRestoreStock,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'devolve 400 para identificador inválido',
       async () => {
         mocks
-          .cancelUserOrderAndRestoreStock
+          .refundUserSimulatedPaymentForCancellation
           .mockRejectedValue(
             new mocks
               .OrderLifecycleValidationError(
@@ -294,7 +382,7 @@ describe(
           )
 
         mocks
-          .cancelUserOrderAndRestoreStock
+          .refundUserSimulatedPaymentForCancellation
           .mockRejectedValue(
             new Error('erro'),
           )

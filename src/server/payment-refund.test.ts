@@ -20,6 +20,7 @@ import {
 } from './order-lifecycle'
 import {
   refundSimulatedPayment,
+  refundUserSimulatedPaymentForCancellation,
   type PaymentRefundClient,
 } from './payment-refund'
 
@@ -29,6 +30,7 @@ function createOrder(
 ) {
   return {
     id: 'order-1',
+    userId: 'user-1',
     status:
       'PENDING' as const,
     paymentStatus:
@@ -196,6 +198,150 @@ describe(
           paymentStatus:
             'REFUNDED',
         })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'reembolsa pagamento pago da própria encomenda antes do cancelamento',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          createEvent,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder(),
+        )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          refundUserSimulatedPaymentForCancellation(
+            'order-1',
+            ' user-1 ',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          id: 'order-1',
+          paymentStatus:
+            'REFUNDED',
+        })
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            userId: 'user-1',
+            status:
+              'PENDING',
+            paymentStatus:
+              'PAID',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_123',
+          },
+          data: {
+            paymentStatus:
+              'REFUNDED',
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId:
+              'order-1',
+            type:
+              'PAYMENT_REFUNDED',
+            fromPaymentStatus:
+              'PAID',
+            toPaymentStatus:
+              'REFUNDED',
+          },
+        })
+      },
+    )
+
+    test(
+      'não reembolsa encomenda de outro utilizador',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          createEvent,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            userId: 'user-2',
+          }),
+        )
+
+        await expect(
+          refundUserSimulatedPaymentForCancellation(
+            'order-1',
+            'user-1',
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          OrderLifecycleNotFoundError,
+        )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          createEvent,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'não tenta reembolsar pagamento ainda pendente antes do cancelamento',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          transaction,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'PENDING',
+            paymentProvider: null,
+            paymentReference: null,
+          }),
+        )
+
+        await expect(
+          refundUserSimulatedPaymentForCancellation(
+            'order-1',
+            'user-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'PENDING',
+        })
+
+        expect(
+          transaction,
+        ).not.toHaveBeenCalled()
 
         expect(
           updateMany,
