@@ -20,6 +20,7 @@ import {
 } from './order-lifecycle'
 import {
   cancelOrderAndRestoreStock,
+  cancelUserOrderAndRestoreStock,
   type OrderCancellationClient,
 } from './order-cancellation'
 
@@ -29,6 +30,7 @@ function createOrder(
 ) {
   return {
     id: 'order-1',
+    userId: 'user-1',
     status:
       'PENDING' as const,
     paymentStatus:
@@ -341,6 +343,100 @@ describe(
           fulfillmentMethod:
             'PICKUP',
         })
+      },
+    )
+
+    test(
+      'permite ao utilizador cancelar a própria encomenda',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          productUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder(),
+        )
+
+        orderUpdateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        productUpdateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          cancelUserOrderAndRestoreStock(
+            'order-1',
+            ' user-1 ',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          id: 'order-1',
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          orderUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            userId: 'user-1',
+            status:
+              'PENDING',
+            paymentStatus:
+              'PENDING',
+          },
+          data: {
+            status:
+              'CANCELLED',
+          },
+        })
+      },
+    )
+
+    test(
+      'não permite cancelar encomenda de outro utilizador',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          productUpdateMany,
+          createEvent,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            userId: 'user-2',
+          }),
+        )
+
+        await expect(
+          cancelUserOrderAndRestoreStock(
+            'order-1',
+            'user-1',
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          OrderLifecycleNotFoundError,
+        )
+
+        expect(
+          orderUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          productUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          createEvent,
+        ).not.toHaveBeenCalled()
       },
     )
 

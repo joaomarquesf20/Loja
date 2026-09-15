@@ -16,6 +16,7 @@ type CancellationOrderItem = {
 
 type CancellationOrderRecord = {
   id: string
+  userId: string | null
   status: LifecycleOrderStatus
   paymentStatus: LifecyclePaymentStatus
   fulfillmentMethod:
@@ -27,6 +28,7 @@ type CancellationOrderRecord = {
 
 type CancellationOrderSelect = {
   id: true
+  userId: true
   status: true
   paymentStatus: true
   fulfillmentMethod: true
@@ -43,6 +45,7 @@ type CancellationOrderSelect = {
 type CancellationUpdateManyArgs = {
   where: {
     id: string
+    userId?: string
     status: LifecycleOrderStatus
     paymentStatus:
       LifecyclePaymentStatus
@@ -117,6 +120,7 @@ export interface OrderCancellationClient {
 const cancellationOrderSelect:
   CancellationOrderSelect = {
   id: true,
+  userId: true,
   status: true,
   paymentStatus: true,
   fulfillmentMethod: true,
@@ -175,6 +179,19 @@ function normalizeOrderId(
       'orderId',
       'Encomenda inválida',
     )
+  }
+
+  return normalized
+}
+
+function normalizeOwnerUserId(
+  value: string,
+) {
+  const normalized =
+    value.trim()
+
+  if (!normalized) {
+    throw new OrderLifecycleNotFoundError()
   }
 
   return normalized
@@ -306,8 +323,9 @@ function aggregateRestockQuantities(
  * Encomendas PAID/AUTHORIZED não são canceladas aqui: primeiro é
  * necessário tratar o reembolso/anulação do pagamento no fornecedor.
  */
-export async function cancelOrderAndRestoreStock(
+async function cancelOrderAndRestoreStockForOwner(
   orderIdInput: unknown,
+  ownerUserId: string | null,
   client?: OrderCancellationClient,
 ): Promise<OrderLifecycleState> {
   const orderId =
@@ -329,7 +347,13 @@ export async function cancelOrderAndRestoreStock(
             cancellationOrderSelect,
         })
 
-      if (!order) {
+      if (
+        !order ||
+        (
+          ownerUserId !== null &&
+          order.userId !== ownerUserId
+        )
+      ) {
         throw new OrderLifecycleNotFoundError()
       }
 
@@ -355,6 +379,12 @@ export async function cancelOrderAndRestoreStock(
         await tx.order.updateMany({
           where: {
             id: order.id,
+            ...(ownerUserId === null
+              ? {}
+              : {
+                  userId:
+                    ownerUserId,
+                }),
             status:
               order.status,
             paymentStatus:
@@ -418,5 +448,28 @@ export async function cancelOrderAndRestoreStock(
         'CANCELLED',
       )
     },
+  )
+}
+
+export async function cancelOrderAndRestoreStock(
+  orderIdInput: unknown,
+  client?: OrderCancellationClient,
+): Promise<OrderLifecycleState> {
+  return cancelOrderAndRestoreStockForOwner(
+    orderIdInput,
+    null,
+    client,
+  )
+}
+
+export async function cancelUserOrderAndRestoreStock(
+  orderIdInput: unknown,
+  userId: string,
+  client?: OrderCancellationClient,
+): Promise<OrderLifecycleState> {
+  return cancelOrderAndRestoreStockForOwner(
+    orderIdInput,
+    normalizeOwnerUserId(userId),
+    client,
   )
 }

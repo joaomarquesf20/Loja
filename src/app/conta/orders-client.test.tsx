@@ -466,6 +466,284 @@ describe(
     )
 
     test(
+      'mostra cancelamento apenas para encomenda elegível',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'PENDING',
+                paymentStatus:
+                  'PENDING',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test.each([
+      {
+        status: 'CONFIRMED',
+        paymentStatus: 'PAID',
+      },
+      {
+        status: 'SHIPPED',
+        paymentStatus: 'PENDING',
+      },
+    ])(
+      'não mostra cancelamento para $status / $paymentStatus',
+      async ({
+        status,
+        paymentStatus,
+      }) => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status,
+                paymentStatus,
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        await screen.findByText(
+          'Encomenda PFA-ABC123',
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'cancela a encomenda após confirmação e atualiza o histórico',
+      async () => {
+        const confirmMock =
+          vi.fn(() => true)
+
+        vi.stubGlobal(
+          'confirm',
+          confirmMock,
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PENDING',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              order: {
+                id: 'order-1',
+                status:
+                  'CANCELLED',
+              },
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status:
+                    'CANCELLED',
+                  paymentStatus:
+                    'PENDING',
+                  events: [
+                    {
+                      id: 'event-1',
+                      type:
+                        'CANCELLED',
+                      fromOrderStatus:
+                        'PENDING',
+                      toOrderStatus:
+                        'CANCELLED',
+                      fromPaymentStatus:
+                        null,
+                      toPaymentStatus:
+                        null,
+                      createdAt:
+                        '2026-09-01T10:10:00.000Z',
+                    },
+                  ],
+                }),
+              ],
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          confirmMock,
+        ).toHaveBeenCalledWith(
+          'Cancelar a encomenda PFA-ABC123? O stock dos artigos será reposto.',
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledWith(
+            '/api/orders/order-1/cancel',
+            {
+              method: 'POST',
+            },
+          )
+        })
+
+        expect(
+          await screen.findByText(
+            'Encomenda cancelada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Cancelada',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'não cancela quando o utilizador recusa a confirmação',
+      async () => {
+        vi.stubGlobal(
+          'confirm',
+          vi.fn(() => false),
+        )
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'PENDING',
+                paymentStatus:
+                  'PENDING',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'mostra erro quando o cancelamento é recusado pelo servidor',
+      async () => {
+        vi.stubGlobal(
+          'confirm',
+          vi.fn(() => true),
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PENDING',
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                error:
+                  'O estado atual da encomenda já não permite cancelamento',
+              },
+              409,
+            ),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Cancelar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'O estado atual da encomenda já não permite cancelamento',
+        )
+      },
+    )
+
+    test(
       'mostra erro da API e permite tentar novamente',
       async () => {
         fetchMock

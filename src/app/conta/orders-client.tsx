@@ -339,6 +339,27 @@ async function fetchOrders() {
   return parseOrders(response)
 }
 
+async function requestOrderCancellation(
+  orderId: string,
+) {
+  const response = await fetch(
+    `/api/orders/${encodeURIComponent(
+      orderId,
+    )}/cancel`,
+    {
+      method: 'POST',
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(
+      await getResponseError(
+        response,
+      ),
+    )
+  }
+}
+
 function formatMoney(
   value: string,
 ) {
@@ -488,12 +509,48 @@ function getOrderEventDetail(
   return null
 }
 
+function canCancelOrder(
+  order: Order,
+) {
+  const cancellableStatuses =
+    new Set([
+      'PENDING',
+      'CONFIRMED',
+      'PROCESSING',
+      'READY_FOR_PICKUP',
+    ])
+
+  const cancellablePaymentStatuses =
+    new Set([
+      'PENDING',
+      'FAILED',
+      'REFUNDED',
+    ])
+
+  return (
+    cancellableStatuses.has(
+      order.status,
+    ) &&
+    cancellablePaymentStatuses.has(
+      order.paymentStatus,
+    )
+  )
+}
+
 function getErrorMessage(
   error: unknown,
 ) {
   return error instanceof Error
     ? error.message
     : 'Não foi possível carregar as encomendas'
+}
+
+function getCancellationErrorMessage(
+  error: unknown,
+) {
+  return error instanceof Error
+    ? error.message
+    : 'Não foi possível cancelar a encomenda'
 }
 
 export function OrdersClient() {
@@ -512,6 +569,21 @@ export function OrdersClient() {
       null,
     )
 
+  const [
+    cancellingOrderId,
+    setCancellingOrderId,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    cancellationError,
+    setCancellationError,
+  ] = useState<{
+    orderId: string
+    message: string
+  } | null>(null)
+
   async function loadOrders() {
     setError(null)
 
@@ -529,6 +601,47 @@ export function OrdersClient() {
       )
 
       setMode('error')
+    }
+  }
+
+  async function handleCancelOrder(
+    order: Order,
+  ) {
+    const confirmed =
+      globalThis.confirm(
+        `Cancelar a encomenda ${order.orderNumber}? O stock dos artigos será reposto.`,
+      )
+
+    if (!confirmed) {
+      return
+    }
+
+    setCancellationError(null)
+    setCancellingOrderId(
+      order.id,
+    )
+
+    try {
+      await requestOrderCancellation(
+        order.id,
+      )
+
+      const nextOrders =
+        await fetchOrders()
+
+      setOrders(nextOrders)
+    } catch (caughtError) {
+      setCancellationError({
+        orderId: order.id,
+        message:
+          getCancellationErrorMessage(
+            caughtError,
+          ),
+      })
+    } finally {
+      setCancellingOrderId(
+        null,
+      )
     }
   }
 
@@ -631,6 +744,21 @@ export function OrdersClient() {
                 order.fulfillmentMethod ===
                 'PICKUP'
 
+              const canCancel =
+                canCancelOrder(order)
+
+              const isCancelling =
+                cancellingOrderId ===
+                order.id
+
+              const orderCancellationError =
+                cancellationError &&
+                cancellationError.orderId ===
+                  order.id
+                  ? cancellationError
+                      .message
+                  : null
+
               return (
                 <article
                   key={order.id}
@@ -672,6 +800,37 @@ export function OrdersClient() {
                       </p>
                     </div>
                   </div>
+
+                  {canCancel ? (
+                    <div className="mt-5 border-t pt-5">
+                      <button
+                        type="button"
+                        disabled={
+                          cancellingOrderId !==
+                          null
+                        }
+                        onClick={() =>
+                          void handleCancelOrder(
+                            order,
+                          )
+                        }
+                        className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                      >
+                        {isCancelling
+                          ? 'A cancelar…'
+                          : 'Cancelar encomenda'}
+                      </button>
+
+                      {orderCancellationError ? (
+                        <p
+                          role="alert"
+                          className="mt-3 text-sm text-red-700 dark:text-red-300"
+                        >
+                          {orderCancellationError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="mt-5 border-t pt-5">
                     <h4 className="font-semibold">
