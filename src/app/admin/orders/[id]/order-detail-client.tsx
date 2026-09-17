@@ -45,6 +45,8 @@ type ShippingClass =
 
 type OrderEventType =
   | 'PAYMENT_CONFIRMED'
+  | 'PAYMENT_FAILED'
+  | 'PAYMENT_RETRIED'
   | 'STATUS_CHANGED'
   | 'PAYMENT_REFUNDED'
   | 'CANCELLED'
@@ -265,6 +267,12 @@ function getEventTitle(
   switch (event.type) {
     case 'PAYMENT_CONFIRMED':
       return 'Pagamento confirmado'
+
+    case 'PAYMENT_FAILED':
+      return 'Pagamento falhou'
+
+    case 'PAYMENT_RETRIED':
+      return 'Nova tentativa de pagamento'
 
     case 'STATUS_CHANGED':
       return 'Estado da encomenda atualizado'
@@ -537,7 +545,7 @@ function getPaymentNotice(
       return 'O pagamento autorizado tem de ser anulado pelo fornecedor antes do cancelamento.'
 
     case 'FAILED':
-      return 'O pagamento falhou. A encomenda pode ser cancelada para repor o stock.'
+      return 'O pagamento falhou. O cliente pode tentar novamente na conta ou cancelar a encomenda para repor o stock.'
 
     case 'PAID':
       if (

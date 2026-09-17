@@ -106,7 +106,7 @@ type PaymentOrderFindFirstArgs = {
   select: PaymentOrderSelect
 }
 
-type PaymentOrderUpdateManyArgs = {
+type InitialPaymentUpdateManyArgs = {
   where: {
     id: string
     userId: string
@@ -122,6 +122,50 @@ type PaymentOrderUpdateManyArgs = {
   }
 }
 
+type RetryPaymentUpdateManyArgs = {
+  where: {
+    id: string
+    userId: string
+    status: PaymentOrderStatus
+    paymentStatus: 'FAILED'
+    paymentProvider:
+      typeof SIMULATED_PAYMENT_PROVIDER
+    paymentReference: string
+  }
+  data: {
+    paymentStatus: 'PENDING'
+    paymentProvider:
+      typeof SIMULATED_PAYMENT_PROVIDER
+    paymentReference: string
+  }
+}
+
+type PaymentOrderUpdateManyArgs =
+  | InitialPaymentUpdateManyArgs
+  | RetryPaymentUpdateManyArgs
+
+type PaymentRetryEventCreateArgs = {
+  data: {
+    orderId: string
+    type: 'PAYMENT_RETRIED'
+    fromPaymentStatus: 'FAILED'
+    toPaymentStatus: 'PENDING'
+  }
+}
+
+type PaymentInitiationTransactionClient = {
+  order: {
+    updateMany(
+      args: PaymentOrderUpdateManyArgs,
+    ): Promise<{ count: number }>
+  }
+  orderEvent: {
+    create(
+      args: PaymentRetryEventCreateArgs,
+    ): Promise<{ id: string }>
+  }
+}
+
 export interface PaymentInitiationClient {
   order: {
     findFirst(
@@ -131,6 +175,12 @@ export interface PaymentInitiationClient {
       args: PaymentOrderUpdateManyArgs,
     ): Promise<{ count: number }>
   }
+  $transaction?<T>(
+    callback: (
+      transaction:
+        PaymentInitiationTransactionClient,
+    ) => Promise<T>,
+  ): Promise<T>
 }
 
 type PaymentReferenceFactory =
@@ -337,6 +387,150 @@ function normalizeGeneratedReference(
   return normalized
 }
 
+async function retryFailedSimulatedPayment(
+  order: PaymentOrderRecord,
+  userId: string,
+  client: PaymentInitiationClient,
+  referenceFactory: PaymentReferenceFactory,
+) {
+  if (
+    order.paymentProvider !==
+      SIMULATED_PAYMENT_PROVIDER ||
+    typeof order.paymentReference !==
+      'string' ||
+    !order.paymentReference.trim()
+  ) {
+    throw new PaymentInitiationConflictError(
+      'O pagamento falhado não pertence a uma tentativa simulada válida',
+    )
+  }
+
+  const previousReference =
+    order.paymentReference
+
+  const paymentReference =
+    normalizeGeneratedReference(
+      referenceFactory(),
+    )
+
+  if (
+    paymentReference ===
+    previousReference
+  ) {
+    throw new PaymentInitiationConflictError(
+      'Não foi possível gerar uma nova referência de pagamento',
+    )
+  }
+
+  if (!client.$transaction) {
+    throw new PaymentInitiationConflictError(
+      'Não foi possível iniciar uma nova tentativa de pagamento',
+    )
+  }
+
+  let retried: boolean
+
+  try {
+    retried =
+      await client.$transaction(
+        async (tx) => {
+          const updated =
+            await tx.order.updateMany({
+              where: {
+                id: order.id,
+                userId,
+                status: order.status,
+                paymentStatus:
+                  'FAILED',
+                paymentProvider:
+                  SIMULATED_PAYMENT_PROVIDER,
+                paymentReference:
+                  previousReference,
+              },
+              data: {
+                paymentStatus:
+                  'PENDING',
+                paymentProvider:
+                  SIMULATED_PAYMENT_PROVIDER,
+                paymentReference,
+              },
+            })
+
+          if (updated.count !== 1) {
+            return false
+          }
+
+          await tx.orderEvent.create({
+            data: {
+              orderId: order.id,
+              type:
+                'PAYMENT_RETRIED',
+              fromPaymentStatus:
+                'FAILED',
+              toPaymentStatus:
+                'PENDING',
+            },
+          })
+
+          return true
+        },
+      )
+  } catch (error) {
+    if (
+      isUniqueConstraintViolation(
+        error,
+      )
+    ) {
+      throw new PaymentInitiationConflictError(
+        'A referência de pagamento já está associada a outra encomenda',
+      )
+    }
+
+    throw error
+  }
+
+  if (retried) {
+    return createResult({
+      ...order,
+      paymentStatus: 'PENDING',
+      paymentProvider:
+        SIMULATED_PAYMENT_PROVIDER,
+      paymentReference,
+    })
+  }
+
+  const currentOrder =
+    await loadOwnedOrder(
+      userId,
+      order.id,
+      client,
+    )
+
+  validateOrderStatus(
+    currentOrder,
+  )
+  validatePaymentTerms(
+    currentOrder,
+  )
+
+  if (
+    currentOrder.paymentStatus ===
+      'PENDING' &&
+    currentOrder.paymentProvider ===
+      SIMULATED_PAYMENT_PROVIDER &&
+    currentOrder.paymentReference !==
+      null
+  ) {
+    return createResult(
+      currentOrder,
+    )
+  }
+
+  throw new PaymentInitiationConflictError(
+    'A encomenda foi alterada durante a nova tentativa de pagamento',
+  )
+}
+
 export async function initiateSimulatedPayment(
   userIdInput: string,
   orderIdInput: unknown,
@@ -369,6 +563,18 @@ export async function initiateSimulatedPayment(
 
   validateOrderStatus(order)
   validatePaymentTerms(order)
+
+  if (
+    order.paymentStatus ===
+    'FAILED'
+  ) {
+    return retryFailedSimulatedPayment(
+      order,
+      userId,
+      db,
+      referenceFactory,
+    )
+  }
 
   if (
     order.paymentStatus !==

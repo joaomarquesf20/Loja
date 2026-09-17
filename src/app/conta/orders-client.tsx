@@ -473,6 +473,10 @@ function getOrderEventTitle(
   switch (event.type) {
     case 'PAYMENT_CONFIRMED':
       return 'Pagamento confirmado'
+    case 'PAYMENT_FAILED':
+      return 'Pagamento falhou'
+    case 'PAYMENT_RETRIED':
+      return 'Nova tentativa de pagamento'
     case 'STATUS_CHANGED':
       return 'Estado alterado'
     case 'PAYMENT_REFUNDED':
@@ -511,6 +515,10 @@ function getOrderEventDetail(
     event.type ===
       'PAYMENT_CONFIRMED' ||
     event.type ===
+      'PAYMENT_FAILED' ||
+    event.type ===
+      'PAYMENT_RETRIED' ||
+    event.type ===
       'PAYMENT_REFUNDED'
   ) {
     return getTransitionLabel(
@@ -547,8 +555,12 @@ function canPayOrder(
     ])
 
   return (
-    order.paymentStatus ===
-      'PENDING' &&
+    (
+      order.paymentStatus ===
+        'PENDING' ||
+      order.paymentStatus ===
+        'FAILED'
+    ) &&
     payableStatuses.has(
       order.status,
     )
@@ -944,8 +956,14 @@ export function OrdersClient() {
                             className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
                           >
                             {isPaying
-                              ? 'A pagar…'
-                              : 'Pagar encomenda'}
+                              ? order.paymentStatus ===
+                                'FAILED'
+                                ? 'A tentar novamente…'
+                                : 'A pagar…'
+                              : order.paymentStatus ===
+                                  'FAILED'
+                                ? 'Tentar pagamento novamente'
+                                : 'Pagar encomenda'}
                           </button>
                         ) : null}
 

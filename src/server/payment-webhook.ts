@@ -19,12 +19,19 @@ const PAYMENT_WEBHOOK_SECRET_MIN_LENGTH =
 const signaturePattern =
   /^sha256=([a-f0-9]{64})$/i
 
-export type PaymentPaidWebhookEvent = {
-  type: 'PAYMENT_PAID'
+export type PaymentWebhookEvent = {
+  type:
+    | 'PAYMENT_PAID'
+    | 'PAYMENT_FAILED'
   orderId: string
   paymentProvider: string
   paymentReference: string
 }
+
+export type PaymentPaidWebhookEvent =
+  PaymentWebhookEvent & {
+    type: 'PAYMENT_PAID'
+  }
 
 export class PaymentWebhookAuthenticationError extends Error {
   constructor(
@@ -364,14 +371,16 @@ function normalizeRequiredString(
 
 function parseEvent(
   value: unknown,
-): PaymentPaidWebhookEvent {
+): PaymentWebhookEvent {
   if (!isRecord(value)) {
     throw new PaymentWebhookValidationError()
   }
 
   if (
     value.type !==
-    'PAYMENT_PAID'
+      'PAYMENT_PAID' &&
+    value.type !==
+      'PAYMENT_FAILED'
   ) {
     throw new PaymentWebhookValidationError(
       'Tipo de evento de pagamento não suportado',
@@ -379,7 +388,7 @@ function parseEvent(
   }
 
   return {
-    type: 'PAYMENT_PAID',
+    type: value.type,
     orderId:
       normalizeRequiredString(
         value.orderId,
@@ -401,7 +410,7 @@ function parseEvent(
 export async function verifyPaymentWebhookRequest(
   request: Request,
   options: VerifyPaymentWebhookOptions = {},
-): Promise<PaymentPaidWebhookEvent> {
+): Promise<PaymentWebhookEvent> {
   const secret =
     resolveSecret(
       options.secret,

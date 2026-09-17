@@ -496,6 +496,47 @@ describe(
       },
     )
 
+    test(
+      'mostra nova tentativa para pagamento falhado elegível',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'PENDING',
+                paymentStatus:
+                  'FAILED',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Tentar pagamento novamente',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Pagar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
     test.each([
       {
         status: 'PENDING',
@@ -645,6 +686,181 @@ describe(
             {
               name:
                 'Pagar encomenda',
+            },
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'repete pagamento falhado com nova tentativa e atualiza o histórico',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'FAILED',
+                  events: [
+                    {
+                      id: 'event-failed',
+                      type:
+                        'PAYMENT_FAILED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'PENDING',
+                      toPaymentStatus:
+                        'FAILED',
+                      createdAt:
+                        '2026-09-01T10:03:00.000Z',
+                    },
+                  ],
+                }),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              payment: {
+                orderId: 'order-1',
+                paymentStatus:
+                  'PAID',
+              },
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              orders: [
+                createOrder({
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PAID',
+                  events: [
+                    {
+                      id: 'event-failed',
+                      type:
+                        'PAYMENT_FAILED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'PENDING',
+                      toPaymentStatus:
+                        'FAILED',
+                      createdAt:
+                        '2026-09-01T10:03:00.000Z',
+                    },
+                    {
+                      id: 'event-retry',
+                      type:
+                        'PAYMENT_RETRIED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'FAILED',
+                      toPaymentStatus:
+                        'PENDING',
+                      createdAt:
+                        '2026-09-01T10:04:00.000Z',
+                    },
+                    {
+                      id: 'event-paid',
+                      type:
+                        'PAYMENT_CONFIRMED',
+                      fromOrderStatus:
+                        null,
+                      toOrderStatus:
+                        null,
+                      fromPaymentStatus:
+                        'PENDING',
+                      toPaymentStatus:
+                        'PAID',
+                      createdAt:
+                        '2026-09-01T10:05:00.000Z',
+                    },
+                  ],
+                }),
+              ],
+            }),
+          )
+
+        render(
+          <OrdersClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Tentar pagamento novamente',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledWith(
+            '/api/payments/simulate',
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type':
+                  'application/json',
+              },
+              body: JSON.stringify({
+                orderId: 'order-1',
+              }),
+            },
+          )
+        })
+
+        expect(
+          await screen.findByText(
+            'Pagamento falhou',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Pendente → Falhou',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Nova tentativa de pagamento',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Falhou → Pendente',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Pagamento confirmado',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Pendente → Pago',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Tentar pagamento novamente',
             },
           ),
         ).not.toBeInTheDocument()

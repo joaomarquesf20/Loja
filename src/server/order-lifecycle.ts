@@ -105,7 +105,9 @@ type PaymentUpdateManyArgs = {
     paymentReference: string | null
   }
   data: {
-    paymentStatus: 'PAID'
+    paymentStatus:
+      | 'PAID'
+      | 'FAILED'
     paymentProvider: string
     paymentReference: string
   }
@@ -141,6 +143,7 @@ type OrderEventCreateArgs = {
     orderId: string
     type:
       | 'PAYMENT_CONFIRMED'
+      | 'PAYMENT_FAILED'
       | 'STATUS_CHANGED'
     fromOrderStatus?:
       LifecycleOrderStatus
@@ -391,6 +394,15 @@ export async function recordVerifiedPayment(
     )
   }
 
+  if (
+    order.paymentStatus ===
+    'FAILED'
+  ) {
+    throw new OrderLifecycleConflictError(
+      'Um pagamento falhado tem de ser tentado novamente antes de poder ser confirmado',
+    )
+  }
+
   const hasInitiatedPayment =
     order.paymentProvider !== null ||
     order.paymentReference !== null
@@ -465,6 +477,175 @@ export async function recordVerifiedPayment(
               order.paymentStatus,
             toPaymentStatus:
               'PAID',
+          },
+        })
+      },
+    )
+  } catch (error) {
+    if (
+      isUniqueConstraintViolation(
+        error,
+      )
+    ) {
+      throw new OrderLifecycleConflictError(
+        'A referência de pagamento já pertence a outra encomenda',
+      )
+    }
+
+    throw error
+  }
+
+  return reloadOrder(
+    orderId,
+    db,
+  )
+}
+
+/**
+ * Regista uma falha de pagamento já autenticada pelo adaptador do
+ * fornecedor. Repetições do mesmo evento são idempotentes.
+ */
+export async function recordVerifiedPaymentFailure(
+  input: VerifiedPaymentInput,
+  client?: OrderLifecycleClient,
+): Promise<OrderLifecycleState> {
+  const orderId =
+    normalizeOrderId(input.orderId)
+
+  const paymentProvider =
+    normalizeRequiredString(
+      input.paymentProvider,
+      'paymentProvider',
+      'Fornecedor de pagamento inválido',
+    )
+
+  const paymentReference =
+    normalizeRequiredString(
+      input.paymentReference,
+      'paymentReference',
+      'Referência de pagamento inválida',
+    )
+
+  const db =
+    getClient(client)
+
+  const order =
+    await loadOrder(
+      orderId,
+      db,
+    )
+
+  if (
+    order.paymentStatus ===
+    'FAILED'
+  ) {
+    if (
+      order.paymentProvider ===
+        paymentProvider &&
+      order.paymentReference ===
+        paymentReference
+    ) {
+      return order
+    }
+
+    throw new OrderLifecycleConflictError(
+      'A encomenda já tem outra tentativa de pagamento falhada',
+    )
+  }
+
+  if (
+    order.paymentStatus ===
+    'PAID'
+  ) {
+    throw new OrderLifecycleConflictError(
+      'Um pagamento confirmado não pode ser marcado como falhado',
+    )
+  }
+
+  if (
+    order.paymentStatus ===
+    'REFUNDED'
+  ) {
+    throw new OrderLifecycleConflictError(
+      'Um pagamento reembolsado não pode ser marcado como falhado',
+    )
+  }
+
+  const hasInitiatedPayment =
+    order.paymentProvider !== null ||
+    order.paymentReference !== null
+
+  if (
+    hasInitiatedPayment &&
+    (
+      order.paymentProvider !==
+        paymentProvider ||
+      order.paymentReference !==
+        paymentReference
+    )
+  ) {
+    throw new OrderLifecycleConflictError(
+      'A falha recebida não corresponde ao pagamento iniciado para a encomenda',
+    )
+  }
+
+  const duplicateReference =
+    await db.order.findFirst({
+      where: {
+        paymentProvider,
+        paymentReference,
+        NOT: {
+          id: orderId,
+        },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+  if (duplicateReference) {
+    throw new OrderLifecycleConflictError(
+      'A referência de pagamento já pertence a outra encomenda',
+    )
+  }
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const updated =
+          await tx.order.updateMany({
+            where: {
+              id: orderId,
+              paymentStatus:
+                order.paymentStatus,
+              paymentProvider:
+                order.paymentProvider,
+              paymentReference:
+                order.paymentReference,
+            },
+            data: {
+              paymentStatus:
+                'FAILED',
+              paymentProvider,
+              paymentReference,
+            },
+          })
+
+        if (updated.count !== 1) {
+          throw new OrderLifecycleConflictError(
+            'A encomenda foi alterada durante o registo da falha do pagamento',
+          )
+        }
+
+        await tx.orderEvent.create({
+          data: {
+            orderId,
+            type:
+              'PAYMENT_FAILED',
+            fromPaymentStatus:
+              order.paymentStatus,
+            toPaymentStatus:
+              'FAILED',
           },
         })
       },

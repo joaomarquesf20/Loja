@@ -265,12 +265,47 @@ describe(
     )
 
     test(
-      'rejeita tipo de evento não suportado',
+      'valida e normaliza evento PAYMENT_FAILED',
       async () => {
         const rawBody =
           JSON.stringify({
             type:
               'PAYMENT_FAILED',
+            orderId:
+              ' order-1 ',
+            paymentProvider:
+              ' provider-test ',
+            paymentReference:
+              ' pay-123 ',
+          })
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(rawBody),
+            {
+              secret,
+              nowMs,
+            },
+          ),
+        ).resolves.toEqual({
+          type:
+            'PAYMENT_FAILED',
+          orderId: 'order-1',
+          paymentProvider:
+            'provider-test',
+          paymentReference:
+            'pay-123',
+        })
+      },
+    )
+
+    test(
+      'rejeita tipo de evento não suportado',
+      async () => {
+        const rawBody =
+          JSON.stringify({
+            type:
+              'PAYMENT_REFUNDED',
             orderId:
               'order-1',
             paymentProvider:

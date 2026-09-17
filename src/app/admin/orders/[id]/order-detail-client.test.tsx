@@ -225,7 +225,37 @@ describe(
               createOrder({
                 events: [
                   {
-                    id: 'event-1',
+                    id: 'event-failed',
+                    type:
+                      'PAYMENT_FAILED',
+                    fromOrderStatus:
+                      null,
+                    toOrderStatus:
+                      null,
+                    fromPaymentStatus:
+                      'PENDING',
+                    toPaymentStatus:
+                      'FAILED',
+                    createdAt:
+                      '2026-09-14T00:20:00.000Z',
+                  },
+                  {
+                    id: 'event-retried',
+                    type:
+                      'PAYMENT_RETRIED',
+                    fromOrderStatus:
+                      null,
+                    toOrderStatus:
+                      null,
+                    fromPaymentStatus:
+                      'FAILED',
+                    toPaymentStatus:
+                      'PENDING',
+                    createdAt:
+                      '2026-09-14T00:25:00.000Z',
+                  },
+                  {
+                    id: 'event-paid',
                     type:
                       'PAYMENT_CONFIRMED',
                     fromOrderStatus:
@@ -240,7 +270,7 @@ describe(
                       '2026-09-14T00:30:00.000Z',
                   },
                   {
-                    id: 'event-2',
+                    id: 'event-status',
                     type:
                       'STATUS_CHANGED',
                     fromOrderStatus:
@@ -273,6 +303,30 @@ describe(
         expect(
           screen.getByText(
             'Encomenda criada',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pagamento falhou',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Pendente → Falhou',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Nova tentativa de pagamento',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Falhou → Pendente',
           ),
         ).toBeInTheDocument()
 

@@ -6,6 +6,7 @@ import {
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
   recordVerifiedPayment,
+  recordVerifiedPaymentFailure,
 } from '@/server/order-lifecycle'
 import {
   PaymentWebhookAuthenticationError,
@@ -127,15 +128,24 @@ export async function POST(
         request,
       )
 
+    const paymentInput = {
+      orderId:
+        event.orderId,
+      paymentProvider:
+        event.paymentProvider,
+      paymentReference:
+        event.paymentReference,
+    }
+
     const order =
-      await recordVerifiedPayment({
-        orderId:
-          event.orderId,
-        paymentProvider:
-          event.paymentProvider,
-        paymentReference:
-          event.paymentReference,
-      })
+      event.type ===
+      'PAYMENT_FAILED'
+        ? await recordVerifiedPaymentFailure(
+            paymentInput,
+          )
+        : await recordVerifiedPayment(
+            paymentInput,
+          )
 
     return Response.json(
       {

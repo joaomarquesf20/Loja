@@ -51,6 +51,8 @@ vi.mock(
       OrderLifecycleConflictError,
       recordVerifiedPayment:
         vi.fn(),
+      recordVerifiedPaymentFailure:
+        vi.fn(),
     }
   },
 )
@@ -62,6 +64,7 @@ import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   recordVerifiedPayment,
+  recordVerifiedPaymentFailure,
 } from '@/server/order-lifecycle'
 import {
   PaymentWebhookAuthenticationError,
@@ -79,6 +82,11 @@ const mockVerifyPaymentWebhookRequest =
 const mockRecordVerifiedPayment =
   vi.mocked(
     recordVerifiedPayment,
+  )
+
+const mockRecordVerifiedPaymentFailure =
+  vi.mocked(
+    recordVerifiedPaymentFailure,
   )
 
 function request() {
@@ -120,6 +128,18 @@ const paidOrder = {
     'provider-test',
   paymentReference:
     'pay-123',
+}
+
+const failedEvent = {
+  ...event,
+  type:
+    'PAYMENT_FAILED' as const,
+}
+
+const failedOrder = {
+  ...paidOrder,
+  paymentStatus:
+    'FAILED' as const,
 }
 
 describe(
@@ -173,6 +193,53 @@ describe(
     )
 
     test(
+      'regista falha apenas depois de o webhook ser verificado',
+      async () => {
+        mockVerifyPaymentWebhookRequest.mockResolvedValue(
+          failedEvent,
+        )
+
+        mockRecordVerifiedPaymentFailure.mockResolvedValue(
+          failedOrder,
+        )
+
+        const response =
+          await POST(
+            request(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        expect(
+          await response.json(),
+        ).toEqual({
+          received: true,
+          orderId:
+            'order-1',
+          paymentStatus:
+            'FAILED',
+        })
+
+        expect(
+          mockRecordVerifiedPaymentFailure,
+        ).toHaveBeenCalledWith({
+          orderId:
+            'order-1',
+          paymentProvider:
+            'provider-test',
+          paymentReference:
+            'pay-123',
+        })
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'não aceita o browser a declarar pagamento sem assinatura válida',
       async () => {
         mockVerifyPaymentWebhookRequest.mockRejectedValue(
@@ -197,6 +264,9 @@ describe(
 
         expect(
           mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+        expect(
+          mockRecordVerifiedPaymentFailure,
         ).not.toHaveBeenCalled()
       },
     )

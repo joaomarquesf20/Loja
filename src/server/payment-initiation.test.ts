@@ -51,18 +51,44 @@ function createOrder(
 function createClient() {
   const findFirst = vi.fn()
   const updateMany = vi.fn()
+  const createEvent =
+    vi.fn().mockResolvedValue({
+      id: 'event-1',
+    })
+
+  const transaction = vi.fn(
+    async (
+      callback: (
+        transactionClient:
+          unknown,
+      ) => Promise<unknown>,
+    ) =>
+      callback({
+        order: {
+          updateMany,
+        },
+        orderEvent: {
+          create:
+            createEvent,
+        },
+      }),
+  )
 
   const client = {
     order: {
       findFirst,
       updateMany,
     },
+    $transaction:
+      transaction,
   } as unknown as PaymentInitiationClient
 
   return {
     client,
     findFirst,
     updateMany,
+    createEvent,
+    transaction,
   }
 }
 
@@ -346,7 +372,6 @@ describe(
     test.each([
       'AUTHORIZED',
       'PAID',
-      'FAILED',
       'REFUNDED',
     ] as const)(
       'rejeita iniciação quando paymentStatus é %s',
@@ -372,6 +397,227 @@ describe(
         ).rejects.toBeInstanceOf(
           PaymentInitiationConflictError,
         )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'reinicia pagamento falhado com nova referência e regista histórico',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+          createEvent,
+          transaction,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_retry',
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'PENDING',
+          paymentProvider:
+            'PFA_SIMULATED',
+          paymentReference:
+            'pfa_sim_retry',
+        })
+
+        expect(
+          transaction,
+        ).toHaveBeenCalledTimes(1)
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            userId: 'user-1',
+            status: 'PENDING',
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          },
+          data: {
+            paymentStatus:
+              'PENDING',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_retry',
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId: 'order-1',
+            type:
+              'PAYMENT_RETRIED',
+            fromPaymentStatus:
+              'FAILED',
+            toPaymentStatus:
+              'PENDING',
+          },
+        })
+      },
+    )
+
+    test(
+      'recupera de duas novas tentativas concorrentes usando a referência vencedora',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+          createEvent,
+        } = createClient()
+
+        findFirst
+          .mockResolvedValueOnce(
+            createOrder({
+              paymentStatus:
+                'FAILED',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_failed',
+            }),
+          )
+          .mockResolvedValueOnce(
+            createOrder({
+              paymentStatus:
+                'PENDING',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_winner',
+            }),
+          )
+
+        updateMany.mockResolvedValue({
+          count: 0,
+        })
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_loser',
+          ),
+        ).resolves.toMatchObject({
+          paymentReference:
+            'pfa_sim_winner',
+        })
+
+        expect(
+          findFirst,
+        ).toHaveBeenCalledTimes(2)
+        expect(
+          createEvent,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'não repete pagamento falhado de outro fornecedor',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'REAL_PROVIDER',
+            paymentReference:
+              'real_failed',
+          }),
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+          ),
+        ).rejects.toMatchObject({
+          message:
+            'O pagamento falhado não pertence a uma tentativa simulada válida',
+        })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'obriga a gerar nova referência ao repetir pagamento falhado',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_failed',
+          ),
+        ).rejects.toMatchObject({
+          message:
+            'Não foi possível gerar uma nova referência de pagamento',
+        })
 
         expect(
           updateMany,

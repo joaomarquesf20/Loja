@@ -20,6 +20,7 @@ import {
   applyAdminOrderAction,
   markOrderReadyForPickup,
   recordVerifiedPayment,
+  recordVerifiedPaymentFailure,
   type OrderLifecycleClient,
   type OrderLifecycleState,
 } from './order-lifecycle'
@@ -334,6 +335,50 @@ describe(
     )
 
     test(
+      'rejeita confirmação direta depois de uma tentativa falhar',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        await expect(
+          recordVerifiedPayment(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_failed',
+            },
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleConflictError',
+          message:
+            'Um pagamento falhado tem de ser tentado novamente antes de poder ser confirmado',
+        })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
       'rejeita confirmação que não corresponde ao pagamento já iniciado',
       async () => {
         const {
@@ -594,6 +639,293 @@ describe(
             'OrderLifecycleConflictError',
           message:
             'A encomenda foi alterada durante a confirmação do pagamento',
+        })
+      },
+    )
+  },
+)
+
+describe(
+  'recordVerifiedPaymentFailure',
+  () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    test(
+      'marca a tentativa iniciada como falhada e regista histórico',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+          createEvent,
+        } = createClient()
+
+        const pendingOrder =
+          createOrder({
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          })
+
+        const failedOrder =
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          })
+
+        findUnique
+          .mockResolvedValueOnce(
+            pendingOrder,
+          )
+          .mockResolvedValueOnce(
+            failedOrder,
+          )
+
+        findFirst.mockResolvedValue(
+          null,
+        )
+
+        updateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          recordVerifiedPaymentFailure(
+            {
+              orderId: ' order-1 ',
+              paymentProvider:
+                ' PFA_SIMULATED ',
+              paymentReference:
+                ' pfa_sim_attempt-1 ',
+            },
+            client,
+          ),
+        ).resolves.toEqual(
+          failedOrder,
+        )
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            paymentStatus:
+              'PENDING',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          },
+          data: {
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          },
+        })
+
+        expect(
+          createEvent,
+        ).toHaveBeenCalledWith({
+          data: {
+            orderId: 'order-1',
+            type:
+              'PAYMENT_FAILED',
+            fromPaymentStatus:
+              'PENDING',
+            toPaymentStatus:
+              'FAILED',
+          },
+        })
+      },
+    )
+
+    test(
+      'é idempotente quando a mesma tentativa já está falhada',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        const failedOrder =
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          })
+
+        findUnique.mockResolvedValue(
+          failedOrder,
+        )
+
+        await expect(
+          recordVerifiedPaymentFailure(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_attempt-1',
+            },
+            client,
+          ),
+        ).resolves.toEqual(
+          failedOrder,
+        )
+
+        expect(
+          findFirst,
+        ).not.toHaveBeenCalled()
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'rejeita falha que não corresponde à tentativa iniciada',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          }),
+        )
+
+        await expect(
+          recordVerifiedPaymentFailure(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_other',
+            },
+            client,
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'OrderLifecycleConflictError',
+          message:
+            'A falha recebida não corresponde ao pagamento iniciado para a encomenda',
+        })
+
+        expect(
+          findFirst,
+        ).not.toHaveBeenCalled()
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test.each([
+      'PAID',
+      'REFUNDED',
+    ] as const)(
+      'não transforma pagamento %s em falhado',
+      async (paymentStatus) => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus,
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          }),
+        )
+
+        await expect(
+          recordVerifiedPaymentFailure(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_attempt-1',
+            },
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          OrderLifecycleConflictError,
+        )
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'deteta alteração concorrente durante o registo da falha',
+      async () => {
+        const {
+          client,
+          findUnique,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_attempt-1',
+          }),
+        )
+        findFirst.mockResolvedValue(
+          null,
+        )
+        updateMany.mockResolvedValue({
+          count: 0,
+        })
+
+        await expect(
+          recordVerifiedPaymentFailure(
+            {
+              orderId: 'order-1',
+              paymentProvider:
+                'PFA_SIMULATED',
+              paymentReference:
+                'pfa_sim_attempt-1',
+            },
+            client,
+          ),
+        ).rejects.toMatchObject({
+          message:
+            'A encomenda foi alterada durante o registo da falha do pagamento',
         })
       },
     )
