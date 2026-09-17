@@ -476,6 +476,12 @@ export function CartClient() {
       0,
     )
 
+  const hasUnavailableItems =
+    items.some(
+      (item) =>
+        !item.isAvailable,
+    )
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700">
@@ -701,10 +707,7 @@ export function CartClient() {
               </strong>
             </div>
 
-            {items.some(
-              (item) =>
-                !item.isAvailable,
-            ) ? (
+            {hasUnavailableItems ? (
               <p className="mt-4 text-sm text-amber-700">
                 Existem produtos ou
                 quantidades
@@ -712,6 +715,41 @@ export function CartClient() {
                 carrinho.
               </p>
             ) : null}
+
+            {mode ===
+            'authenticated' ? (
+              hasUnavailableItems ? (
+                <button
+                  type="button"
+                  disabled
+                  className="mt-5 w-full cursor-not-allowed rounded-lg bg-gray-300 px-4 py-3 text-sm font-semibold text-gray-600"
+                >
+                  Finalizar compra
+                </button>
+              ) : (
+                <Link
+                  href="/checkout"
+                  className="mt-5 flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  Finalizar compra
+                </Link>
+              )
+            ) : (
+              <>
+                <p className="mt-5 text-sm text-gray-600">
+                  Inicia sessão para
+                  finalizares a compra.
+                </p>
+
+                <Link
+                  href="/login"
+                  className="mt-3 flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+                >
+                  Iniciar sessão para
+                  finalizar compra
+                </Link>
+              </>
+            )}
           </aside>
         </div>
       )}

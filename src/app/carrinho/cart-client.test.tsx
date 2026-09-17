@@ -154,6 +154,127 @@ describe('CartClient', () => {
     )
   })
 
+  test('mostra acesso ao checkout para carrinho autenticado disponível', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        items: [
+          createItem(),
+        ],
+      }),
+    )
+
+    render(<CartClient />)
+
+    const checkoutLink =
+      await screen.findByRole(
+        'link',
+        {
+          name: 'Finalizar compra',
+        },
+      )
+
+    expect(
+      checkoutLink.getAttribute(
+        'href',
+      ),
+    ).toBe('/checkout')
+  })
+
+  test('bloqueia acesso ao checkout quando existem itens indisponíveis', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        items: [
+          createItem(
+            3,
+            {
+              inStock: true,
+              isAvailable: false,
+              canIncrease: false,
+            },
+          ),
+        ],
+      }),
+    )
+
+    render(<CartClient />)
+
+    const checkoutButton =
+      await screen.findByRole(
+        'button',
+        {
+          name: 'Finalizar compra',
+        },
+      )
+
+    expect(
+      checkoutButton,
+    ).toBeDisabled()
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
+          name: 'Finalizar compra',
+        },
+      ),
+    ).toBeNull()
+  })
+
+  test('encaminha carrinho convidado para login antes do checkout', async () => {
+    window.localStorage.setItem(
+      GUEST_CART_STORAGE_KEY,
+      JSON.stringify([
+        {
+          productId:
+            'product-1',
+          quantity: 1,
+        },
+      ]),
+    )
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error:
+              'Não autenticado',
+          },
+          401,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(),
+          ],
+        }),
+      )
+
+    render(<CartClient />)
+
+    const loginLink =
+      await screen.findByRole(
+        'link',
+        {
+          name:
+            'Iniciar sessão para finalizar compra',
+        },
+      )
+
+    expect(
+      loginLink.getAttribute('href'),
+    ).toBe('/login')
+
+    expect(
+      screen.queryByRole(
+        'link',
+        {
+          name: 'Finalizar compra',
+        },
+      ),
+    ).toBeNull()
+  })
+
   test('usa carrinho convidado quando API autenticada devolve 401', async () => {
     window.localStorage.setItem(
       GUEST_CART_STORAGE_KEY,
