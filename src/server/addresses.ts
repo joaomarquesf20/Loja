@@ -27,9 +27,21 @@ export type UserAddress = {
   city: string
   postalCode: string
   country: string
+  isDefault: boolean
 }
 
-type AddressRecord = UserAddress
+type AddressRecord = Omit<
+  UserAddress,
+  'isDefault'
+>
+
+type UserDefaultAddressRecord = {
+  defaultAddressId: string | null
+}
+
+type UserDefaultAddressSelect = {
+  defaultAddressId: true
+}
 
 type AddressSelect = {
   id: true
@@ -79,8 +91,11 @@ export interface AddressClient {
 
     findFirst(args: {
       where: {
-        id: string
         userId: string
+        id?: string
+      }
+      orderBy?: {
+        id: 'asc'
       }
       select: AddressSelect
     }): Promise<AddressRecord | null>
@@ -124,6 +139,36 @@ export interface AddressClient {
       count: number
     }>
   }
+
+  user: {
+    findUnique(args: {
+      where: {
+        id: string
+      }
+      select: UserDefaultAddressSelect
+    }): Promise<
+      UserDefaultAddressRecord | null
+    >
+
+    updateMany(args: {
+      where: {
+        id: string
+        defaultAddressId?: string | null
+      }
+      data: {
+        defaultAddressId:
+          string | null
+      }
+    }): Promise<{
+      count: number
+    }>
+  }
+
+  $transaction?<T>(
+    callback: (
+      transaction: AddressClient,
+    ) => Promise<T>,
+  ): Promise<T>
 }
 
 const addressSelect:
@@ -143,6 +188,74 @@ function getClient(
   return (
     client ??
     (prisma as unknown as AddressClient)
+  )
+}
+
+
+function toUserAddress(
+  record: AddressRecord,
+  defaultAddressId:
+    string | null,
+): UserAddress {
+  return {
+    ...record,
+    isDefault:
+      record.id ===
+      defaultAddressId,
+  }
+}
+
+function sortUserAddresses(
+  addresses: UserAddress[],
+) {
+  return [...addresses].sort(
+    (first, second) => {
+      if (
+        first.isDefault !==
+        second.isDefault
+      ) {
+        return first.isDefault
+          ? -1
+          : 1
+      }
+
+      return first.id.localeCompare(
+        second.id,
+      )
+    },
+  )
+}
+
+async function runInTransaction<T>(
+  db: AddressClient,
+  action: (
+    transaction: AddressClient,
+  ) => Promise<T>,
+) {
+  if (db.$transaction) {
+    return db.$transaction(action)
+  }
+
+  return action(db)
+}
+
+async function getDefaultAddressId(
+  userId: string,
+  db: AddressClient,
+) {
+  const user =
+    await db.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        defaultAddressId: true,
+      },
+    })
+
+  return (
+    user?.defaultAddressId ??
+    null
   )
 }
 
@@ -306,15 +419,31 @@ export async function listUserAddresses(
 
   const db = getClient(client)
 
-  return db.address.findMany({
-    where: {
-      userId: normalizedUserId,
-    },
-    orderBy: {
-      id: 'asc',
-    },
-    select: addressSelect,
-  })
+  const defaultAddressId =
+    await getDefaultAddressId(
+      normalizedUserId,
+      db,
+    )
+
+  const addresses =
+    await db.address.findMany({
+      where: {
+        userId: normalizedUserId,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      select: addressSelect,
+    })
+
+  return sortUserAddresses(
+    addresses.map((address) =>
+      toUserAddress(
+        address,
+        defaultAddressId,
+      ),
+    ),
+  )
 }
 
 export async function createUserAddress(
@@ -334,13 +463,38 @@ export async function createUserAddress(
 
   const db = getClient(client)
 
-  return db.address.create({
-    data: {
-      userId: normalizedUserId,
-      ...address,
+  return runInTransaction(
+    db,
+    async (transaction) => {
+      const createdAddress =
+        await transaction.address.create({
+          data: {
+            userId: normalizedUserId,
+            ...address,
+          },
+          select: addressSelect,
+        })
+
+      const defaultUpdate =
+        await transaction.user.updateMany({
+          where: {
+            id: normalizedUserId,
+            defaultAddressId: null,
+          },
+          data: {
+            defaultAddressId:
+              createdAddress.id,
+          },
+        })
+
+      return toUserAddress(
+        createdAddress,
+        defaultUpdate.count === 1
+          ? createdAddress.id
+          : null,
+      )
     },
-    select: addressSelect,
-  })
+  )
 }
 
 export async function updateUserAddress(
@@ -394,7 +548,76 @@ export async function updateUserAddress(
     throw new AddressNotFoundError()
   }
 
-  return updatedAddress
+  const defaultAddressId =
+    await getDefaultAddressId(
+      normalizedUserId,
+      db,
+    )
+
+  return toUserAddress(
+    updatedAddress,
+    defaultAddressId,
+  )
+}
+
+export async function setDefaultUserAddress(
+  userId: string,
+  addressId: string,
+  client?: AddressClient,
+): Promise<UserAddress> {
+  const normalizedUserId =
+    normalizeId(
+      userId,
+      'userId',
+      'Utilizador',
+    )
+
+  const normalizedAddressId =
+    normalizeId(
+      addressId,
+      'addressId',
+      'Morada',
+    )
+
+  const db = getClient(client)
+
+  return runInTransaction(
+    db,
+    async (transaction) => {
+      const address =
+        await transaction.address.findFirst({
+          where: {
+            id: normalizedAddressId,
+            userId: normalizedUserId,
+          },
+          select: addressSelect,
+        })
+
+      if (!address) {
+        throw new AddressNotFoundError()
+      }
+
+      const updateResult =
+        await transaction.user.updateMany({
+          where: {
+            id: normalizedUserId,
+          },
+          data: {
+            defaultAddressId:
+              normalizedAddressId,
+          },
+        })
+
+      if (updateResult.count !== 1) {
+        throw new AddressNotFoundError()
+      }
+
+      return toUserAddress(
+        address,
+        normalizedAddressId,
+      )
+    },
+  )
 }
 
 export async function deleteUserAddress(
@@ -418,15 +641,73 @@ export async function deleteUserAddress(
 
   const db = getClient(client)
 
-  const deleteResult =
-    await db.address.deleteMany({
-      where: {
-        id: normalizedAddressId,
-        userId: normalizedUserId,
-      },
-    })
+  await runInTransaction(
+    db,
+    async (transaction) => {
+      const address =
+        await transaction.address.findFirst({
+          where: {
+            id: normalizedAddressId,
+            userId: normalizedUserId,
+          },
+          select: addressSelect,
+        })
 
-  if (deleteResult.count !== 1) {
-    throw new AddressNotFoundError()
-  }
+      if (!address) {
+        throw new AddressNotFoundError()
+      }
+
+      const defaultAddressId =
+        await getDefaultAddressId(
+          normalizedUserId,
+          transaction,
+        )
+
+      const deleteResult =
+        await transaction.address.deleteMany({
+          where: {
+            id: normalizedAddressId,
+            userId: normalizedUserId,
+          },
+        })
+
+      if (deleteResult.count !== 1) {
+        throw new AddressNotFoundError()
+      }
+
+      if (
+        defaultAddressId !==
+        normalizedAddressId
+      ) {
+        return
+      }
+
+      const replacement =
+        await transaction.address.findFirst({
+          where: {
+            userId: normalizedUserId,
+          },
+          orderBy: {
+            id: 'asc',
+          },
+          select: addressSelect,
+        })
+
+      const promotionResult =
+        await transaction.user.updateMany({
+          where: {
+            id: normalizedUserId,
+          },
+          data: {
+            defaultAddressId:
+              replacement?.id ??
+              null,
+          },
+        })
+
+      if (promotionResult.count !== 1) {
+        throw new AddressNotFoundError()
+      }
+    },
+  )
 }

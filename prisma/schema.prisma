@@ -76,7 +76,9 @@ model User {
   failedLoginAttempts        Int              @default(0)
   failedLoginWindowStartedAt DateTime?
   loginBlockedUntil          DateTime?
-  addresses                  Address[]
+  addresses                  Address[]       @relation("UserAddresses")
+  defaultAddressId           String?         @unique
+  defaultAddress             Address?        @relation("UserDefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull)
   cartItems                  CartItem[]
   guestCartMerges            GuestCartMerge[]
   orders                     Order[]
@@ -226,15 +228,16 @@ model GuestCartMerge {
 }
 
 model Address {
-  id           String  @id @default(cuid())
-  userId       String?
-  name         String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  postalCode   String
-  country      String
-  user         User?   @relation(fields: [userId], references: [id])
+  id             String  @id @default(cuid())
+  userId         String?
+  name           String
+  addressLine1   String
+  addressLine2   String?
+  city           String
+  postalCode     String
+  country        String
+  user           User?   @relation("UserAddresses", fields: [userId], references: [id])
+  defaultForUser User?   @relation("UserDefaultAddress")
 
   @@index([userId])
 }

@@ -3,6 +3,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import {
   afterEach,
@@ -26,6 +27,7 @@ function createAddress(
     city: string
     postalCode: string
     country: string
+    isDefault: boolean
   }> = {},
 ) {
   return {
@@ -37,6 +39,7 @@ function createAddress(
     city: 'Porto',
     postalCode: '4000-001',
     country: 'Portugal',
+    isDefault: false,
     ...overrides,
   }
 }
@@ -121,6 +124,131 @@ describe('AddressesClient', () => {
     )
   })
 
+  test('assinala a morada predefinida e permite escolher outra', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        addresses: [
+          createAddress({
+            id: 'address-1',
+            isDefault: true,
+          }),
+          createAddress({
+            id: 'address-2',
+            name: 'João Silva',
+            addressLine1:
+              'Rua Nova 20',
+            isDefault: false,
+          }),
+        ],
+      }),
+    )
+
+    render(<AddressesClient />)
+
+    expect(
+      await screen.findByText(
+        'Predefinida',
+      ),
+    ).toBeInTheDocument()
+
+    expect(
+      screen.getByRole(
+        'button',
+        {
+          name:
+            'Tornar predefinida',
+        },
+      ),
+    ).toBeEnabled()
+  })
+
+  test('define outra morada como predefinida através da API', async () => {
+    const secondAddress =
+      createAddress({
+        id: 'address-2',
+        name: 'João Silva',
+        addressLine1:
+          'Rua Nova 20',
+        isDefault: false,
+      })
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          addresses: [
+            createAddress({
+              isDefault: true,
+            }),
+            secondAddress,
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          address: {
+            ...secondAddress,
+            isDefault: true,
+          },
+        }),
+      )
+
+    render(<AddressesClient />)
+
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        {
+          name:
+            'Tornar predefinida',
+        },
+      ),
+    )
+
+    await waitFor(() => {
+      expect(
+        fetchMock,
+      ).toHaveBeenCalledTimes(2)
+    })
+
+    expect(
+      fetchMock.mock.calls[1]?.[0],
+    ).toBe(
+      '/api/addresses/default',
+    )
+
+    const options =
+      fetchMock.mock
+        .calls[1]?.[1] as
+        | RequestInit
+        | undefined
+
+    expect(
+      options?.method,
+    ).toBe('PATCH')
+
+    expect(
+      JSON.parse(
+        String(options?.body),
+      ),
+    ).toEqual({
+      addressId: 'address-2',
+    })
+
+    expect(
+      screen.getAllByText(
+        'Predefinida',
+      ),
+    ).toHaveLength(1)
+
+    expect(
+      screen.getByText(
+        'Rua Nova 20',
+      ).closest('article'),
+    ).toHaveTextContent(
+      'Predefinida',
+    )
+  })
+
   test('mostra estado vazio sem inventar moradas', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({
@@ -199,7 +327,9 @@ describe('AddressesClient', () => {
 
   test('cria uma morada através da API', async () => {
     const address =
-      createAddress()
+      createAddress({
+        isDefault: true,
+      })
 
     fetchMock
       .mockResolvedValueOnce(
@@ -332,6 +462,12 @@ describe('AddressesClient', () => {
         'Nome',
       ),
     ).toHaveValue('')
+
+    expect(
+      screen.getByText(
+        'Predefinida',
+      ),
+    ).toBeInTheDocument()
   })
 
   test('edita uma morada existente', async () => {
@@ -541,7 +677,9 @@ describe('AddressesClient', () => {
       .mockResolvedValueOnce(
         jsonResponse({
           addresses: [
-            createAddress(),
+            createAddress({
+              isDefault: true,
+            }),
           ],
         }),
       )
@@ -597,6 +735,76 @@ describe('AddressesClient', () => {
     ).toEqual({
       addressId: 'address-1',
     })
+  })
+
+  test('ao remover a predefinida assinala a morada seguinte como predefinida', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          addresses: [
+            createAddress({
+              id: 'address-1',
+              isDefault: true,
+            }),
+            createAddress({
+              id: 'address-2',
+              name: 'João Silva',
+              addressLine1:
+                'Rua Nova 20',
+              isDefault: false,
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 204,
+        }),
+      )
+
+    render(<AddressesClient />)
+
+    await screen.findByText(
+      'Rua Central 10',
+    )
+
+    const defaultArticle =
+      screen.getByText(
+        'Rua Central 10',
+      ).closest('article')
+
+    if (!defaultArticle) {
+      throw new Error(
+        'Morada predefinida não encontrada',
+      )
+    }
+
+    fireEvent.click(
+      within(
+        defaultArticle,
+      ).getByRole(
+        'button',
+        {
+          name: 'Remover',
+        },
+      ),
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(
+          'Rua Central 10',
+        ),
+      ).not.toBeInTheDocument()
+    })
+
+    expect(
+      screen.getByText(
+        'Rua Nova 20',
+      ).closest('article'),
+    ).toHaveTextContent(
+      'Predefinida',
+    )
   })
 
   test('não apaga a morada quando a confirmação é cancelada', async () => {

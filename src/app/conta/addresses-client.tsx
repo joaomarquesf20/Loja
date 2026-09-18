@@ -14,6 +14,7 @@ type Address = {
   city: string
   postalCode: string
   country: string
+  isDefault: boolean
 }
 
 type AddressForm = {
@@ -77,7 +78,9 @@ function isAddress(
     typeof value.city === 'string' &&
     typeof value.postalCode ===
       'string' &&
-    typeof value.country === 'string'
+    typeof value.country === 'string' &&
+    typeof value.isDefault ===
+      'boolean'
   )
 }
 
@@ -175,6 +178,28 @@ function getErrorMessage(
     : fallback
 }
 
+
+function sortAddresses(
+  addresses: Address[],
+) {
+  return [...addresses].sort(
+    (first, second) => {
+      if (
+        first.isDefault !==
+        second.isDefault
+      ) {
+        return first.isDefault
+          ? -1
+          : 1
+      }
+
+      return first.id.localeCompare(
+        second.id,
+      )
+    },
+  )
+}
+
 export function AddressesClient() {
   const [mode, setMode] =
     useState<AddressesMode>(
@@ -225,7 +250,9 @@ export function AddressesClient() {
 
         if (!cancelled) {
           setAddresses(
-            nextAddresses,
+            sortAddresses(
+              nextAddresses,
+            ),
           )
           setMode('ready')
         }
@@ -354,25 +381,23 @@ export function AddressesClient() {
       if (addressId) {
         setAddresses(
           (current) =>
-            current.map(
-              (address) =>
-                address.id ===
-                addressId
-                  ? savedAddress
-                  : address,
+            sortAddresses(
+              current.map(
+                (address) =>
+                  address.id ===
+                  addressId
+                    ? savedAddress
+                    : address,
+              ),
             ),
         )
       } else {
         setAddresses(
           (current) =>
-            [
+            sortAddresses([
               ...current,
               savedAddress,
-            ].sort((first, second) =>
-              first.id.localeCompare(
-                second.id,
-              ),
-            ),
+            ]),
         )
       }
 
@@ -384,6 +409,88 @@ export function AddressesClient() {
           editingId
             ? 'Não foi possível atualizar a morada'
             : 'Não foi possível criar a morada',
+        ),
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function setDefaultAddress(
+    address: Address,
+  ) {
+    if (
+      isPending ||
+      address.isDefault
+    ) {
+      return
+    }
+
+    setError(null)
+    setPendingAction(
+      `default:${address.id}`,
+    )
+
+    try {
+      const response = await fetch(
+        '/api/addresses/default',
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            addressId:
+              address.id,
+          }),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+          ),
+        )
+      }
+
+      const savedAddress =
+        await parseAddress(
+          response,
+        )
+
+      setAddresses(
+        (current) =>
+          sortAddresses(
+            current.map(
+              (currentAddress) => {
+                if (
+                  currentAddress.id ===
+                  savedAddress.id
+                ) {
+                  return savedAddress
+                }
+
+                if (
+                  currentAddress.isDefault
+                ) {
+                  return {
+                    ...currentAddress,
+                    isDefault: false,
+                  }
+                }
+
+                return currentAddress
+              },
+            ),
+          ),
+      )
+    } catch (caughtError) {
+      setError(
+        getErrorMessage(
+          caughtError,
+          'Não foi possível definir a morada predefinida',
         ),
       )
     } finally {
@@ -437,12 +544,43 @@ export function AddressesClient() {
       }
 
       setAddresses(
-        (current) =>
-          current.filter(
-            (currentAddress) =>
-              currentAddress.id !==
-              address.id,
-          ),
+        (current) => {
+          const remaining =
+            current.filter(
+              (currentAddress) =>
+                currentAddress.id !==
+                address.id,
+            )
+
+          if (
+            !address.isDefault ||
+            remaining.length === 0
+          ) {
+            return sortAddresses(
+              remaining,
+            )
+          }
+
+          const replacementId =
+            [...remaining]
+              .sort(
+                (first, second) =>
+                  first.id.localeCompare(
+                    second.id,
+                  ),
+              )[0]?.id
+
+          return sortAddresses(
+            remaining.map(
+              (currentAddress) => ({
+                ...currentAddress,
+                isDefault:
+                  currentAddress.id ===
+                  replacementId,
+              }),
+            ),
+          )
+        },
       )
 
       if (
@@ -474,7 +612,11 @@ export function AddressesClient() {
       const nextAddresses =
         await fetchAddresses()
 
-      setAddresses(nextAddresses)
+      setAddresses(
+        sortAddresses(
+          nextAddresses,
+        ),
+      )
       setMode('ready')
     } catch (caughtError) {
       setError(
@@ -561,14 +703,26 @@ export function AddressesClient() {
                 pendingAction ===
                 `delete:${address.id}`
 
+              const isSettingDefault =
+                pendingAction ===
+                `default:${address.id}`
+
               return (
                 <article
                   key={address.id}
                   className="rounded-lg border p-4"
                 >
-                  <h3 className="font-semibold">
-                    {address.name}
-                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold">
+                      {address.name}
+                    </h3>
+
+                    {address.isDefault ? (
+                      <span className="rounded-full border px-2 py-0.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                        Predefinida
+                      </span>
+                    ) : null}
+                  </div>
 
                   <address className="mt-2 not-italic text-sm leading-6 text-neutral-600 dark:text-neutral-400">
                     <div>
@@ -598,6 +752,25 @@ export function AddressesClient() {
                   </address>
 
                   <div className="mt-4 flex flex-wrap gap-3">
+                    {!address.isDefault ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void setDefaultAddress(
+                            address,
+                          )
+                        }
+                        disabled={
+                          isPending
+                        }
+                        className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-900"
+                      >
+                        {isSettingDefault
+                          ? 'A definir…'
+                          : 'Tornar predefinida'}
+                      </button>
+                    ) : null}
+
                     <button
                       type="button"
                       onClick={() =>
