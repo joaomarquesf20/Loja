@@ -8,11 +8,11 @@ import {
 } from 'next-auth/react'
 import { useState } from 'react'
 
-const navigationLinkClass =
-  'rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+const navLinkClass =
+  'rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface'
 
-const secondaryActionClass =
-  'rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold transition hover:border-foreground/25 hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+const actionClass =
+  'rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold text-foreground transition hover:border-slate-300 hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface'
 
 export default function SiteHeader() {
   const pathname = usePathname()
@@ -69,65 +69,52 @@ export default function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-background">
-      <div className="mx-auto flex min-h-20 max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-6">
+    <header className="sticky top-0 z-50 border-b border-line bg-surface/95 text-foreground backdrop-blur">
+      <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex min-w-0 items-center gap-6">
           <Link
             href="/"
             aria-label="PFAUTOPARTS"
-            className="group flex items-center gap-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="flex shrink-0 items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <span
               aria-hidden="true"
-              className="grid size-10 place-items-center rounded-xl bg-brand text-sm font-black tracking-tight text-white shadow-sm transition group-hover:bg-brand-strong"
+              className="grid size-9 place-items-center rounded-lg bg-brand text-xs font-black text-white"
             >
               PF
             </span>
 
-            <span className="leading-none">
-              <span className="block text-sm font-black tracking-[0.12em]">
-                PFAUTO
-                <span className="text-brand">
-                  PARTS
-                </span>
-              </span>
-
-              <span className="mt-1 hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-muted sm:block">
-                Peças automóveis
+            <span className="text-sm font-black tracking-[0.1em]">
+              PFAUTO
+              <span className="text-brand">
+                PARTS
               </span>
             </span>
           </Link>
 
           <nav
             aria-label="Navegação principal"
-            className="hidden items-center gap-1 md:flex"
+            className="hidden items-center gap-1 lg:flex"
           >
             <Link
               href="/#categorias"
-              className={navigationLinkClass}
+              className={navLinkClass}
             >
-              Categorias
+              Peças Auto
             </Link>
 
             <Link
               href="/#produtos"
-              className={navigationLinkClass}
+              className={navLinkClass}
             >
               Catálogo
             </Link>
           </nav>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Link
-            href="/carrinho"
-            className="rounded-xl bg-foreground px-3.5 py-2 text-sm font-bold text-background transition hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          >
-            Carrinho
-          </Link>
-
+        <div className="flex items-center justify-end gap-2">
           {status === 'loading' ? (
-            <span className="px-2 text-sm text-muted">
+            <span className="hidden px-2 text-sm text-muted sm:inline">
               A verificar sessão…
             </span>
           ) : user ? (
@@ -136,7 +123,7 @@ export default function SiteHeader() {
                 'ADMIN' && (
                 <Link
                   href="/admin"
-                  className={secondaryActionClass}
+                  className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
                 >
                   Administração
                 </Link>
@@ -144,7 +131,7 @@ export default function SiteHeader() {
 
               <Link
                 href="/conta"
-                className="max-w-48 truncate rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="hidden max-w-40 truncate rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:inline-flex"
                 title={
                   user.email ??
                   undefined
@@ -161,7 +148,7 @@ export default function SiteHeader() {
                 disabled={
                   isSigningOut
                 }
-                className={secondaryActionClass}
+                className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 md:inline-flex"
               >
                 {isSigningOut
                   ? 'A sair…'
@@ -171,7 +158,7 @@ export default function SiteHeader() {
               {signOutError && (
                 <span
                   role="alert"
-                  className="basis-full text-right text-sm font-medium text-red-700 dark:text-red-400"
+                  className="sr-only"
                 >
                   {signOutError}
                 </span>
@@ -181,40 +168,67 @@ export default function SiteHeader() {
             <>
               <Link
                 href="/registar"
-                className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:inline-flex"
+                className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
               >
                 Criar conta
               </Link>
 
               <Link
                 href="/login"
-                className={secondaryActionClass}
+                className={actionClass}
               >
                 Entrar
               </Link>
             </>
           )}
-        </div>
 
-        <nav
-          aria-label="Navegação da loja em ecrã pequeno"
-          className="flex w-full items-center gap-1 border-t border-line pt-2 md:hidden"
-        >
+          <Link
+            href="/carrinho"
+            className="rounded-xl bg-accent px-3.5 py-2 text-sm font-bold text-white transition hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+          >
+            Carrinho
+          </Link>
+        </div>
+      </div>
+
+      <nav
+        aria-label="Navegação da loja em ecrã pequeno"
+        className="border-t border-line lg:hidden"
+      >
+        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6">
           <Link
             href="/#categorias"
-            className={navigationLinkClass}
+            className={navLinkClass}
           >
-            Categorias
+            Peças Auto
           </Link>
 
           <Link
             href="/#produtos"
-            className={navigationLinkClass}
+            className={navLinkClass}
           >
             Catálogo
           </Link>
-        </nav>
-      </div>
+
+          {user && (
+            <Link
+              href="/conta"
+              className={navLinkClass}
+            >
+              Conta
+            </Link>
+          )}
+
+          {user?.role === 'ADMIN' && (
+            <Link
+              href="/admin"
+              className={navLinkClass}
+            >
+              Administração
+            </Link>
+          )}
+        </div>
+      </nav>
     </header>
   )
 }
