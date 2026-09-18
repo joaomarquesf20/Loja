@@ -8,6 +8,12 @@ import {
 } from 'next-auth/react'
 import { useState } from 'react'
 
+const navigationLinkClass =
+  'rounded-lg px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
+const secondaryActionClass =
+  'rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold transition hover:border-foreground/25 hover:bg-surface-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
 export default function SiteHeader() {
   const pathname = usePathname()
 
@@ -63,28 +69,65 @@ export default function SiteHeader() {
   }
 
   return (
-    <header className="border-b bg-background text-foreground">
-      <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="text-sm font-bold tracking-[0.2em] focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
-        >
-          PFAUTOPARTS
-        </Link>
+    <header className="sticky top-0 z-50 border-b border-line bg-background">
+      <div className="mx-auto flex min-h-20 max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-6">
+          <Link
+            href="/"
+            aria-label="PFAUTOPARTS"
+            className="group flex items-center gap-3 rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <span
+              aria-hidden="true"
+              className="grid size-10 place-items-center rounded-xl bg-brand text-sm font-black tracking-tight text-white shadow-sm transition group-hover:bg-brand-strong"
+            >
+              PF
+            </span>
 
-        <nav
-          aria-label="Navegação principal"
-          className="flex flex-wrap items-center justify-end gap-2"
-        >
+            <span className="leading-none">
+              <span className="block text-sm font-black tracking-[0.12em]">
+                PFAUTO
+                <span className="text-brand">
+                  PARTS
+                </span>
+              </span>
+
+              <span className="mt-1 hidden text-[10px] font-semibold uppercase tracking-[0.2em] text-muted sm:block">
+                Peças automóveis
+              </span>
+            </span>
+          </Link>
+
+          <nav
+            aria-label="Navegação principal"
+            className="hidden items-center gap-1 md:flex"
+          >
+            <Link
+              href="/#categorias"
+              className={navigationLinkClass}
+            >
+              Categorias
+            </Link>
+
+            <Link
+              href="/#produtos"
+              className={navigationLinkClass}
+            >
+              Catálogo
+            </Link>
+          </nav>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Link
             href="/carrinho"
-            className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+            className="rounded-xl bg-foreground px-3.5 py-2 text-sm font-bold text-background transition hover:opacity-85 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             Carrinho
           </Link>
 
           {status === 'loading' ? (
-            <span className="px-2 text-sm text-neutral-500">
+            <span className="px-2 text-sm text-muted">
               A verificar sessão…
             </span>
           ) : user ? (
@@ -93,7 +136,7 @@ export default function SiteHeader() {
                 'ADMIN' && (
                 <Link
                   href="/admin"
-                  className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+                  className={secondaryActionClass}
                 >
                   Administração
                 </Link>
@@ -101,7 +144,7 @@ export default function SiteHeader() {
 
               <Link
                 href="/conta"
-                className="max-w-48 truncate rounded-lg px-2 py-2 text-sm text-neutral-600 transition hover:bg-neutral-50 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:text-neutral-400 dark:hover:bg-neutral-900"
+                className="max-w-48 truncate rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 title={
                   user.email ??
                   undefined
@@ -118,7 +161,7 @@ export default function SiteHeader() {
                 disabled={
                   isSigningOut
                 }
-                className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-900"
+                className={secondaryActionClass}
               >
                 {isSigningOut
                   ? 'A sair…'
@@ -128,7 +171,7 @@ export default function SiteHeader() {
               {signOutError && (
                 <span
                   role="alert"
-                  className="text-sm text-red-700 dark:text-red-400"
+                  className="basis-full text-right text-sm font-medium text-red-700 dark:text-red-400"
                 >
                   {signOutError}
                 </span>
@@ -138,19 +181,38 @@ export default function SiteHeader() {
             <>
               <Link
                 href="/registar"
-                className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+                className="hidden rounded-xl px-3 py-2 text-sm font-semibold text-muted transition hover:bg-surface-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:inline-flex"
               >
                 Criar conta
               </Link>
 
               <Link
                 href="/login"
-                className="rounded-lg border px-3 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
+                className={secondaryActionClass}
               >
                 Entrar
               </Link>
             </>
           )}
+        </div>
+
+        <nav
+          aria-label="Navegação da loja em ecrã pequeno"
+          className="flex w-full items-center gap-1 border-t border-line pt-2 md:hidden"
+        >
+          <Link
+            href="/#categorias"
+            className={navigationLinkClass}
+          >
+            Categorias
+          </Link>
+
+          <Link
+            href="/#produtos"
+            className={navigationLinkClass}
+          >
+            Catálogo
+          </Link>
         </nav>
       </div>
     </header>
