@@ -656,7 +656,7 @@ describe(
     )
 
     test(
-      'sem moradas permite levantamento em loja',
+      'sem moradas mantém entrega disponível e mostra criação de morada',
       async () => {
         fetchMock.mockResolvedValueOnce(
           jsonResponse({
@@ -668,32 +668,234 @@ describe(
           <CheckoutClient />,
         )
 
-        const pickup =
+        const delivery =
           await screen.findByLabelText(
-            'Levantar em loja',
+            'Entrega ao domicílio',
           )
 
         expect(
-          pickup,
+          delivery,
         ).toBeChecked()
+
+        expect(
+          delivery,
+        ).toBeEnabled()
+
+        expect(
+          screen.getByLabelText(
+            'Levantar em loja',
+          ),
+        ).toBeEnabled()
+
+        expect(
+          screen.getByText(
+            /Ainda não tens moradas guardadas/,
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByRole(
+            'group',
+            {
+              name:
+                'Adicionar nova morada',
+            },
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByLabelText(
+            'País',
+          ),
+        ).toHaveValue('Portugal')
+      },
+    )
+
+    test(
+      'cria morada no checkout, guarda-a na conta e seleciona-a para entrega',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                address:
+                  createAddress(),
+              },
+              201,
+            ),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.change(
+          await screen.findByLabelText(
+            'Nome',
+          ),
+          {
+            target: {
+              value: 'Maria Silva',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Morada nova',
+          ),
+          {
+            target: {
+              value:
+                'Rua Central 10',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Localidade',
+          ),
+          {
+            target: {
+              value: 'Porto',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Código postal',
+          ),
+          {
+            target: {
+              value: '4000-001',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar e usar esta morada',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByLabelText(
+            'Morada',
+          ),
+        ).toHaveValue('address-1')
 
         expect(
           screen.getByLabelText(
             'Entrega ao domicílio',
           ),
-        ).toBeDisabled()
+        ).toBeChecked()
 
         expect(
-          screen.getByLabelText(
-            'Nome de contacto',
+          screen.getByText(
+            'Rua Central 10',
           ),
         ).toBeTruthy()
 
         expect(
-          screen.queryByText(
-            'Não tens moradas guardadas',
+          fetchMock.mock.calls[1]?.[0],
+        ).toBe('/api/addresses')
+
+        const options =
+          fetchMock.mock.calls[1]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(options?.method).toBe(
+          'POST',
+        )
+
+        expect(
+          JSON.parse(
+            String(options?.body),
           ),
-        ).toBeNull()
+        ).toEqual({
+          name: 'Maria Silva',
+          addressLine1:
+            'Rua Central 10',
+          addressLine2: '',
+          city: 'Porto',
+          postalCode: '4000-001',
+          country: 'Portugal',
+        })
+      },
+    )
+
+    test(
+      'mantém formulário de morada quando a criação falha',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [],
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                error:
+                  'Código postal inválido',
+              },
+              400,
+            ),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Guardar e usar esta morada',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Código postal inválido',
+        )
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar e usar esta morada',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          screen.getByRole(
+            'group',
+            {
+              name:
+                'Adicionar nova morada',
+            },
+          ),
+        ).toBeTruthy()
       },
     )
 
@@ -781,8 +983,14 @@ describe(
           <CheckoutClient />,
         )
 
-        fireEvent.change(
+        fireEvent.click(
           await screen.findByLabelText(
+            'Levantar em loja',
+          ),
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
             'Nome de contacto',
           ),
           {
@@ -1111,8 +1319,14 @@ describe(
           <CheckoutClient />,
         )
 
-        fireEvent.change(
+        fireEvent.click(
           await screen.findByLabelText(
+            'Levantar em loja',
+          ),
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
             'Nome de contacto',
           ),
           {

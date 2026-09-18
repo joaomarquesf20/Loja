@@ -18,6 +18,24 @@ type Address = {
   country: string
 }
 
+type AddressForm = {
+  name: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  postalCode: string
+  country: string
+}
+
+const emptyAddressForm: AddressForm = {
+  name: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  postalCode: '',
+  country: 'Portugal',
+}
+
 type FulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
@@ -65,6 +83,7 @@ type LoadMode =
   | 'error'
 
 type PendingAction =
+  | 'address'
   | 'preview'
   | 'checkout'
   | 'payment'
@@ -276,6 +295,24 @@ async function parseAddresses(
   return body.addresses
 }
 
+async function parseAddress(
+  response: Response,
+): Promise<Address> {
+  const body: unknown =
+    await response.json()
+
+  if (
+    !isRecord(body) ||
+    !isAddress(body.address)
+  ) {
+    throw new Error(
+      'Resposta inválida do servidor',
+    )
+  }
+
+  return body.address
+}
+
 async function parsePreview(
   response: Response,
 ): Promise<CheckoutPreview> {
@@ -424,6 +461,18 @@ export function CheckoutClient() {
   ] = useState('')
 
   const [
+    addressForm,
+    setAddressForm,
+  ] = useState<AddressForm>(
+    emptyAddressForm,
+  )
+
+  const [
+    showAddressForm,
+    setShowAddressForm,
+  ] = useState(false)
+
+  const [
     fulfillmentMethod,
     setFulfillmentMethod,
   ] = useState<FulfillmentMethod>(
@@ -542,9 +591,7 @@ export function CheckoutClient() {
             loadedAddresses.length ===
             0
           ) {
-            setFulfillmentMethod(
-              'PICKUP',
-            )
+            setShowAddressForm(true)
           }
 
           setMode('ready')
@@ -582,16 +629,111 @@ export function CheckoutClient() {
     setError(null)
   }
 
-  function changeFulfillmentMethod(
-    nextMethod: FulfillmentMethod,
+  function updateAddressField(
+    field: keyof AddressForm,
+    value: string,
   ) {
+    setAddressForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function cancelAddressForm() {
     if (
-      nextMethod === 'DELIVERY' &&
+      pendingAction ||
       addresses.length === 0
     ) {
       return
     }
 
+    setAddressForm(emptyAddressForm)
+    setShowAddressForm(false)
+    setError(null)
+  }
+
+  async function handleCreateAddress() {
+    if (pendingAction) {
+      return
+    }
+
+    setPendingAction('address')
+    setError(null)
+
+    try {
+      const response = await fetch(
+        '/api/addresses',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify(
+            addressForm,
+          ),
+        },
+      )
+
+      if (response.status === 401) {
+        setMode('unauthenticated')
+
+        replace(
+          '/login?callbackUrl=%2Fcheckout',
+        )
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+            'Não foi possível criar a morada',
+          ),
+        )
+      }
+
+      const savedAddress =
+        await parseAddress(response)
+
+      setAddresses((current) =>
+        [...current, savedAddress].sort(
+          (first, second) =>
+            first.id.localeCompare(
+              second.id,
+            ),
+        ),
+      )
+
+      setSelectedAddressId(
+        savedAddress.id,
+      )
+
+      setPickupName((current) =>
+        current.trim()
+          ? current
+          : savedAddress.name,
+      )
+
+      setFulfillmentMethod('DELIVERY')
+      setAddressForm(emptyAddressForm)
+      setShowAddressForm(false)
+      invalidatePreview()
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Não foi possível criar a morada',
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  function changeFulfillmentMethod(
+    nextMethod: FulfillmentMethod,
+  ) {
     setFulfillmentMethod(
       nextMethod,
     )
@@ -1162,8 +1304,7 @@ export function CheckoutClient() {
                   'DELIVERY'
                 }
                 disabled={
-                  pendingAction !== null ||
-                  addresses.length === 0
+                  pendingAction !== null
                 }
                 onChange={() =>
                   changeFulfillmentMethod(
@@ -1177,8 +1318,8 @@ export function CheckoutClient() {
                   Entrega ao domicílio
                 </span>
                 <span className="mt-1 block text-xs text-gray-600">
-                  Entrega numa morada
-                  guardada.
+                  Usa uma morada guardada
+                  ou adiciona uma aqui.
                 </span>
               </span>
             </label>
@@ -1227,20 +1368,10 @@ export function CheckoutClient() {
           <>
             {addresses.length === 0 ? (
               <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p>
-                  Não tens moradas
-                  guardadas. Podes
-                  levantar em loja ou
-                  adicionar uma morada
-                  na tua conta.
-                </p>
-
-                <Link
-                  href="/conta"
-                  className="mt-3 inline-flex font-semibold underline"
-                >
-                  Gerir moradas
-                </Link>
+                Ainda não tens moradas
+                guardadas. Adiciona uma
+                morada abaixo para receber
+                a encomenda ao domicílio.
               </div>
             ) : (
               <>
@@ -1313,8 +1444,224 @@ export function CheckoutClient() {
                     </p>
                   </div>
                 ) : null}
+
+                {!showAddressForm ? (
+                  <button
+                    type="button"
+                    disabled={
+                      pendingAction !==
+                      null
+                    }
+                    onClick={() => {
+                      setError(null)
+                      setShowAddressForm(
+                        true,
+                      )
+                    }}
+                    className="mt-4 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Adicionar nova morada
+                  </button>
+                ) : null}
               </>
             )}
+
+            {showAddressForm ? (
+              <fieldset
+                disabled={
+                  pendingAction !== null
+                }
+                className="mt-5 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4 disabled:opacity-60"
+              >
+                <legend className="px-1 text-sm font-semibold text-gray-950">
+                  Adicionar nova morada
+                </legend>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-name"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Nome
+                  </label>
+
+                  <input
+                    id="checkout-address-name"
+                    type="text"
+                    autoComplete="name"
+                    maxLength={120}
+                    value={
+                      addressForm.name
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'name',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-line-1"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Morada nova
+                  </label>
+
+                  <input
+                    id="checkout-address-line-1"
+                    type="text"
+                    autoComplete="address-line1"
+                    maxLength={200}
+                    value={
+                      addressForm.addressLine1
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'addressLine1',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-line-2"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Complemento da morada
+                    (opcional)
+                  </label>
+
+                  <input
+                    id="checkout-address-line-2"
+                    type="text"
+                    autoComplete="address-line2"
+                    maxLength={200}
+                    value={
+                      addressForm.addressLine2
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'addressLine2',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-city"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Localidade
+                  </label>
+
+                  <input
+                    id="checkout-address-city"
+                    type="text"
+                    autoComplete="address-level2"
+                    maxLength={100}
+                    value={
+                      addressForm.city
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'city',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-postal-code"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    Código postal
+                  </label>
+
+                  <input
+                    id="checkout-address-postal-code"
+                    type="text"
+                    autoComplete="postal-code"
+                    maxLength={20}
+                    value={
+                      addressForm.postalCode
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'postalCode',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="checkout-address-country"
+                    className="block text-sm font-medium text-gray-900"
+                  >
+                    País
+                  </label>
+
+                  <input
+                    id="checkout-address-country"
+                    type="text"
+                    autoComplete="country-name"
+                    maxLength={100}
+                    value={
+                      addressForm.country
+                    }
+                    onChange={(event) =>
+                      updateAddressField(
+                        'country',
+                        event.target.value,
+                      )
+                    }
+                    className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-950"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleCreateAddress()
+                    }
+                    className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {pendingAction ===
+                    'address'
+                      ? 'A guardar...'
+                      : 'Guardar e usar esta morada'}
+                  </button>
+
+                  {addresses.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={
+                        cancelAddressForm
+                      }
+                      className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Cancelar
+                    </button>
+                  ) : null}
+                </div>
+              </fieldset>
+            ) : null}
           </>
         ) : (
           <div className="mt-5">
