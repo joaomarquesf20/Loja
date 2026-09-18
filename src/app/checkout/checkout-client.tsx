@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   type FormEvent,
   useEffect,
@@ -409,6 +410,8 @@ function createDeliveryShipping(
 }
 
 export function CheckoutClient() {
+  const { replace } = useRouter()
+
   const [mode, setMode] =
     useState<LoadMode>('loading')
 
@@ -498,6 +501,10 @@ export function CheckoutClient() {
             setMode(
               'unauthenticated',
             )
+
+            replace(
+              '/login?callbackUrl=%2Fcheckout',
+            )
           }
 
           return
@@ -561,7 +568,7 @@ export function CheckoutClient() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [replace])
 
   const selectedAddress =
     addresses.find(
@@ -959,7 +966,7 @@ export function CheckoutClient() {
         </p>
 
         <Link
-          href="/login"
+          href="/login?callbackUrl=%2Fcheckout"
           className="mt-5 inline-flex rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
         >
           Iniciar sessão

@@ -13,6 +13,22 @@ import {
   vi,
 } from 'vitest'
 
+const navigationMocks = vi.hoisted(
+  () => ({
+    replace: vi.fn(),
+  }),
+)
+
+vi.mock(
+  'next/navigation',
+  () => ({
+    useRouter: () => ({
+      replace:
+        navigationMocks.replace,
+    }),
+  }),
+)
+
 import { CheckoutClient } from './checkout-client'
 
 function jsonResponse(
@@ -82,6 +98,8 @@ describe(
   () => {
     beforeEach(() => {
       fetchMock.mockReset()
+      navigationMocks.replace.mockReset()
+
       vi.stubGlobal(
         'fetch',
         fetchMock,

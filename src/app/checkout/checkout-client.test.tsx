@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from '@testing-library/react'
 import {
   afterEach,
@@ -12,6 +13,22 @@ import {
   test,
   vi,
 } from 'vitest'
+
+const navigationMocks = vi.hoisted(
+  () => ({
+    replace: vi.fn(),
+  }),
+)
+
+vi.mock(
+  'next/navigation',
+  () => ({
+    useRouter: () => ({
+      replace:
+        navigationMocks.replace,
+    }),
+  }),
+)
 
 import { CheckoutClient } from './checkout-client'
 
@@ -159,6 +176,7 @@ describe(
   () => {
     beforeEach(() => {
       fetchMock.mockReset()
+      navigationMocks.replace.mockReset()
 
       vi.stubGlobal(
         'fetch',
@@ -592,7 +610,7 @@ describe(
     )
 
     test(
-      'pede autenticação quando a API de moradas devolve 401',
+      'encaminha para o login com retorno ao checkout quando a API de moradas devolve 401',
       async () => {
         fetchMock.mockResolvedValueOnce(
           jsonResponse(
@@ -614,6 +632,14 @@ describe(
           ),
         ).toBeTruthy()
 
+        await waitFor(() => {
+          expect(
+            navigationMocks.replace,
+          ).toHaveBeenCalledWith(
+            '/login?callbackUrl=%2Fcheckout',
+          )
+        })
+
         expect(
           screen.getByRole(
             'link',
@@ -624,7 +650,7 @@ describe(
           ),
         ).toHaveAttribute(
           'href',
-          '/login',
+          '/login?callbackUrl=%2Fcheckout',
         )
       },
     )
