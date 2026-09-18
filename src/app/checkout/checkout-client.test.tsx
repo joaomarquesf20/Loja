@@ -837,6 +837,256 @@ describe(
     )
 
     test(
+      'edita a morada selecionada no checkout e exige novo preview',
+      async () => {
+        const updatedAddress = {
+          ...createAddress(),
+          addressLine1:
+            'Avenida Central 25',
+          city: 'Braga',
+          postalCode: '4700-001',
+        }
+
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        )
+
+        expect(
+          screen.getByRole(
+            'group',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByLabelText(
+            'Nome',
+          ),
+        ).toHaveValue('Maria Silva')
+
+        expect(
+          screen.getByLabelText(
+            'Morada (linha 1)',
+          ),
+        ).toHaveValue(
+          'Rua Central 10',
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Morada (linha 1)',
+          ),
+          {
+            target: {
+              value:
+                'Avenida Central 25',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Localidade',
+          ),
+          {
+            target: {
+              value: 'Braga',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Código postal',
+          ),
+          {
+            target: {
+              value: '4700-001',
+            },
+          },
+        )
+
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            address: updatedAddress,
+          }),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar alterações',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'Avenida Central 25',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByLabelText(
+            'Morada',
+          ),
+        ).toHaveValue('address-1')
+
+        expect(
+          screen.queryByRole(
+            'group',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          fetchMock.mock.calls[2]?.[0],
+        ).toBe('/api/addresses')
+
+        const options =
+          fetchMock.mock.calls[2]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(options?.method).toBe(
+          'PATCH',
+        )
+
+        expect(
+          JSON.parse(
+            String(options?.body),
+          ),
+        ).toEqual({
+          addressId: 'address-1',
+          name: 'Maria Silva',
+          addressLine1:
+            'Avenida Central 25',
+          addressLine2: '',
+          city: 'Braga',
+          postalCode: '4700-001',
+          country: 'Portugal',
+        })
+      },
+    )
+
+    test(
+      'permite cancelar a edição sem alterar a morada',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            addresses: [
+              createAddress(),
+            ],
+          }),
+        )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Morada (linha 1)',
+          ),
+          {
+            target: {
+              value:
+                'Rua que não deve ser guardada',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Cancelar edição',
+            },
+          ),
+        )
+
+        expect(
+          screen.queryByRole(
+            'group',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByText(
+            'Rua Central 10',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Editar morada',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
       'mantém formulário de morada quando a criação falha',
       async () => {
         fetchMock

@@ -473,6 +473,11 @@ export function CheckoutClient() {
   ] = useState(false)
 
   const [
+    editingAddressId,
+    setEditingAddressId,
+  ] = useState<string | null>(null)
+
+  const [
     fulfillmentMethod,
     setFulfillmentMethod,
   ] = useState<FulfillmentMethod>(
@@ -639,6 +644,29 @@ export function CheckoutClient() {
     }))
   }
 
+  function startEditingAddress(
+    address: Address,
+  ) {
+    if (pendingAction) {
+      return
+    }
+
+    setError(null)
+    setEditingAddressId(address.id)
+    setAddressForm({
+      name: address.name,
+      addressLine1:
+        address.addressLine1,
+      addressLine2:
+        address.addressLine2 ?? '',
+      city: address.city,
+      postalCode:
+        address.postalCode,
+      country: address.country,
+    })
+    setShowAddressForm(true)
+  }
+
   function cancelAddressForm() {
     if (
       pendingAction ||
@@ -647,15 +675,18 @@ export function CheckoutClient() {
       return
     }
 
+    setEditingAddressId(null)
     setAddressForm(emptyAddressForm)
     setShowAddressForm(false)
     setError(null)
   }
 
-  async function handleCreateAddress() {
+  async function handleSaveAddress() {
     if (pendingAction) {
       return
     }
+
+    const addressId = editingAddressId
 
     setPendingAction('address')
     setError(null)
@@ -664,14 +695,21 @@ export function CheckoutClient() {
       const response = await fetch(
         '/api/addresses',
         {
-          method: 'POST',
+          method: addressId
+            ? 'PATCH'
+            : 'POST',
           headers: {
             'Content-Type':
               'application/json',
           },
-          body: JSON.stringify(
-            addressForm,
-          ),
+          body: JSON.stringify({
+            ...(addressId
+              ? {
+                  addressId,
+                }
+              : {}),
+            ...addressForm,
+          }),
         },
       )
 
@@ -689,7 +727,9 @@ export function CheckoutClient() {
         throw new Error(
           await getResponseError(
             response,
-            'Não foi possível criar a morada',
+            addressId
+              ? 'Não foi possível atualizar a morada'
+              : 'Não foi possível criar a morada',
           ),
         )
       }
@@ -697,26 +737,37 @@ export function CheckoutClient() {
       const savedAddress =
         await parseAddress(response)
 
-      setAddresses((current) =>
-        [...current, savedAddress].sort(
-          (first, second) =>
-            first.id.localeCompare(
-              second.id,
-            ),
-        ),
-      )
+      if (addressId) {
+        setAddresses((current) =>
+          current.map((address) =>
+            address.id === addressId
+              ? savedAddress
+              : address,
+          ),
+        )
+      } else {
+        setAddresses((current) =>
+          [...current, savedAddress].sort(
+            (first, second) =>
+              first.id.localeCompare(
+                second.id,
+              ),
+          ),
+        )
+
+        setPickupName((current) =>
+          current.trim()
+            ? current
+            : savedAddress.name,
+        )
+      }
 
       setSelectedAddressId(
         savedAddress.id,
       )
 
-      setPickupName((current) =>
-        current.trim()
-          ? current
-          : savedAddress.name,
-      )
-
       setFulfillmentMethod('DELIVERY')
+      setEditingAddressId(null)
       setAddressForm(emptyAddressForm)
       setShowAddressForm(false)
       invalidatePreview()
@@ -724,7 +775,9 @@ export function CheckoutClient() {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Não foi possível criar a morada',
+          : addressId
+            ? 'Não foi possível atualizar a morada'
+            : 'Não foi possível criar a morada',
       )
     } finally {
       setPendingAction(null)
@@ -1446,22 +1499,48 @@ export function CheckoutClient() {
                 ) : null}
 
                 {!showAddressForm ? (
-                  <button
-                    type="button"
-                    disabled={
-                      pendingAction !==
-                      null
-                    }
-                    onClick={() => {
-                      setError(null)
-                      setShowAddressForm(
-                        true,
-                      )
-                    }}
-                    className="mt-4 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Adicionar nova morada
-                  </button>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {selectedAddress ? (
+                      <button
+                        type="button"
+                        disabled={
+                          pendingAction !==
+                          null
+                        }
+                        onClick={() =>
+                          startEditingAddress(
+                            selectedAddress,
+                          )
+                        }
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Editar morada
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      disabled={
+                        pendingAction !==
+                        null
+                      }
+                      onClick={() => {
+                        setError(null)
+                        setEditingAddressId(
+                          null,
+                        )
+                        setAddressForm(
+                          emptyAddressForm,
+                        )
+                        setShowAddressForm(
+                          true,
+                        )
+                      }}
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Adicionar nova morada
+                    </button>
+                  </div>
                 ) : null}
               </>
             )}
@@ -1474,7 +1553,9 @@ export function CheckoutClient() {
                 className="mt-5 space-y-4 rounded-lg border border-gray-200 bg-gray-50 p-4 disabled:opacity-60"
               >
                 <legend className="px-1 text-sm font-semibold text-gray-950">
-                  Adicionar nova morada
+                  {editingAddressId
+                    ? 'Editar morada'
+                    : 'Adicionar nova morada'}
                 </legend>
 
                 <div>
@@ -1508,7 +1589,9 @@ export function CheckoutClient() {
                     htmlFor="checkout-address-line-1"
                     className="block text-sm font-medium text-gray-900"
                   >
-                    Morada nova
+                    {editingAddressId
+                      ? 'Morada (linha 1)'
+                      : 'Morada nova'}
                   </label>
 
                   <input
@@ -1638,14 +1721,16 @@ export function CheckoutClient() {
                   <button
                     type="button"
                     onClick={() =>
-                      void handleCreateAddress()
+                      void handleSaveAddress()
                     }
                     className="rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {pendingAction ===
                     'address'
                       ? 'A guardar...'
-                      : 'Guardar e usar esta morada'}
+                      : editingAddressId
+                        ? 'Guardar alterações'
+                        : 'Guardar e usar esta morada'}
                   </button>
 
                   {addresses.length > 0 ? (
@@ -1656,7 +1741,9 @@ export function CheckoutClient() {
                       }
                       className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Cancelar
+                      {editingAddressId
+                        ? 'Cancelar edição'
+                        : 'Cancelar'}
                     </button>
                   ) : null}
                 </div>
