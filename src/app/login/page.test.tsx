@@ -241,6 +241,20 @@ describe('LoginPage', () => {
 
     render(<LoginPage />)
 
+    await waitFor(() => {
+      expect(
+        screen.getByRole(
+          'link',
+          {
+            name: 'Criar conta',
+          },
+        ),
+      ).toHaveAttribute(
+        'href',
+        '/registar?callbackUrl=%2Fcheckout',
+      )
+    })
+
     submitLogin()
 
     await waitFor(() => {

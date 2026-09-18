@@ -99,6 +99,11 @@ describe('RegisterPage', () => {
     vi.resetAllMocks()
 
     window.localStorage.clear()
+    window.history.replaceState(
+      {},
+      '',
+      '/registar',
+    )
 
     vi.stubGlobal(
       'fetch',
@@ -160,6 +165,63 @@ describe('RegisterPage', () => {
       '/login',
     )
   })
+
+  test('preserva callback interno no acesso ao login', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/registar?callbackUrl=%2Fcheckout',
+    )
+
+    render(<RegisterPage />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole(
+          'link',
+          {
+            name: 'Entrar',
+          },
+        ),
+      ).toHaveAttribute(
+        'href',
+        '/login?callbackUrl=%2Fcheckout',
+      )
+    })
+  })
+
+  test.each([
+    'https://example.com/checkout',
+    '//example.com/checkout',
+    '/\\example.com/checkout',
+  ])(
+    'não propaga callback externo ou ambíguo %s',
+    async (unsafeCallbackUrl) => {
+      window.history.replaceState(
+        {},
+        '',
+        `/registar?callbackUrl=${encodeURIComponent(
+          unsafeCallbackUrl,
+        )}`,
+      )
+
+      render(<RegisterPage />)
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole(
+            'link',
+            {
+              name: 'Entrar',
+            },
+          ),
+        ).toHaveAttribute(
+          'href',
+          '/login',
+        )
+      })
+    },
+  )
 
   test('não apresenta formulário enquanto a sessão está a carregar', () => {
     mocks.useSession.mockReturnValue(
@@ -245,6 +307,12 @@ describe('RegisterPage', () => {
       ),
     )
 
+    window.history.replaceState(
+      {},
+      '',
+      '/registar?callbackUrl=%2Fcheckout',
+    )
+
     render(<RegisterPage />)
 
     submitRegistration()
@@ -294,7 +362,7 @@ describe('RegisterPage', () => {
       ),
     ).toHaveAttribute(
       'href',
-      '/login',
+      '/login?callbackUrl=%2Fcheckout',
     )
 
     expect(

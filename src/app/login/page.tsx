@@ -9,6 +9,7 @@ import {
 } from 'next-auth/react'
 import {
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from 'react'
 import {
@@ -16,6 +17,10 @@ import {
   discardGuestCartMergeAttempt,
   getOrCreateGuestCartMergeAttempt,
 } from '@/lib/guest-cart'
+import {
+  getCallbackHref,
+  getSafeCallbackUrl,
+} from '@/lib/safe-callback-url'
 
 type CartMergeErrorCode =
   | 'UNAUTHENTICATED'
@@ -142,44 +147,31 @@ function getMergeErrorMessage(
   return 'Não foi possível juntar o carrinho à conta. O carrinho de convidado foi preservado.'
 }
 
-function getSafeCallbackUrl() {
+function readSafeCallbackUrl() {
   if (
     typeof window === 'undefined'
   ) {
     return '/'
   }
 
-  const callbackUrl =
+  return getSafeCallbackUrl(
     new URLSearchParams(
       window.location.search,
-    ).get('callbackUrl')
+    ).get('callbackUrl'),
+    window.location.origin,
+  )
+}
 
-  if (
-    !callbackUrl ||
-    !callbackUrl.startsWith('/') ||
-    callbackUrl.startsWith('//') ||
-    callbackUrl.includes('\\')
-  ) {
-    return '/'
-  }
+function subscribeToHydration() {
+  return () => {}
+}
 
-  try {
-    const parsed = new URL(
-      callbackUrl,
-      window.location.origin,
-    )
+function getHydratedSnapshot() {
+  return true
+}
 
-    if (
-      parsed.origin !==
-      window.location.origin
-    ) {
-      return '/'
-    }
-
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`
-  } catch {
-    return '/'
-  }
+function getServerHydratedSnapshot() {
+  return false
 }
 
 export default function LoginPage() {
@@ -207,6 +199,20 @@ export default function LoginPage() {
     setIsSubmitting,
   ] = useState(false)
 
+  const isHydrated =
+    useSyncExternalStore(
+      subscribeToHydration,
+      getHydratedSnapshot,
+      getServerHydratedSnapshot,
+    )
+
+  const registerHref = isHydrated
+    ? getCallbackHref(
+        '/registar',
+        readSafeCallbackUrl(),
+      )
+    : '/registar'
+
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
   ) {
@@ -220,7 +226,7 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     const callbackUrl =
-      getSafeCallbackUrl()
+      readSafeCallbackUrl()
 
     let signedIn = false
 
@@ -492,7 +498,7 @@ export default function LoginPage() {
           <p className="mt-6 text-sm text-neutral-600 dark:text-neutral-400">
             Não tens conta?{' '}
             <Link
-              href="/registar"
+              href={registerHref}
               className="font-semibold text-foreground hover:underline"
             >
               Criar conta

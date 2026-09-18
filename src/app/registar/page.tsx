@@ -4,8 +4,13 @@ import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import {
   useState,
+  useSyncExternalStore,
   type FormEvent,
 } from 'react'
+import {
+  getCallbackHref,
+  getSafeCallbackUrl,
+} from '@/lib/safe-callback-url'
 
 type RegistrationErrorCode =
   | 'INVALID_JSON'
@@ -99,6 +104,33 @@ function getRegistrationErrorMessage(
   return 'Não foi possível criar a conta. Tenta novamente.'
 }
 
+function readSafeCallbackUrl() {
+  if (
+    typeof window === 'undefined'
+  ) {
+    return '/'
+  }
+
+  return getSafeCallbackUrl(
+    new URLSearchParams(
+      window.location.search,
+    ).get('callbackUrl'),
+    window.location.origin,
+  )
+}
+
+function subscribeToHydration() {
+  return () => {}
+}
+
+function getHydratedSnapshot() {
+  return true
+}
+
+function getServerHydratedSnapshot() {
+  return false
+}
+
 export default function RegisterPage() {
   const {
     data: session,
@@ -128,6 +160,20 @@ export default function RegisterPage() {
     isCreated,
     setIsCreated,
   ] = useState(false)
+
+  const isHydrated =
+    useSyncExternalStore(
+      subscribeToHydration,
+      getHydratedSnapshot,
+      getServerHydratedSnapshot,
+    )
+
+  const loginHref = isHydrated
+    ? getCallbackHref(
+        '/login',
+        readSafeCallbackUrl(),
+      )
+    : '/login'
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>,
@@ -252,7 +298,7 @@ export default function RegisterPage() {
           </p>
 
           <Link
-            href="/login"
+            href={loginHref}
             className="mt-6 inline-flex rounded-lg border px-4 py-2 text-sm font-semibold transition hover:border-neutral-500 hover:bg-neutral-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 dark:hover:bg-neutral-900"
           >
             Entrar
@@ -397,7 +443,7 @@ export default function RegisterPage() {
           <p className="mt-6 text-sm text-neutral-600 dark:text-neutral-400">
             Já tens conta?{' '}
             <Link
-              href="/login"
+              href={loginHref}
               className="font-semibold text-foreground hover:underline"
             >
               Entrar
