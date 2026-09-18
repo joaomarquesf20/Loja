@@ -142,6 +142,46 @@ function getMergeErrorMessage(
   return 'Não foi possível juntar o carrinho à conta. O carrinho de convidado foi preservado.'
 }
 
+function getSafeCallbackUrl() {
+  if (
+    typeof window === 'undefined'
+  ) {
+    return '/'
+  }
+
+  const callbackUrl =
+    new URLSearchParams(
+      window.location.search,
+    ).get('callbackUrl')
+
+  if (
+    !callbackUrl ||
+    !callbackUrl.startsWith('/') ||
+    callbackUrl.startsWith('//') ||
+    callbackUrl.includes('\\')
+  ) {
+    return '/'
+  }
+
+  try {
+    const parsed = new URL(
+      callbackUrl,
+      window.location.origin,
+    )
+
+    if (
+      parsed.origin !==
+      window.location.origin
+    ) {
+      return '/'
+    }
+
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`
+  } catch {
+    return '/'
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter()
 
@@ -178,6 +218,9 @@ export default function LoginPage() {
 
     setError(null)
     setIsSubmitting(true)
+
+    const callbackUrl =
+      getSafeCallbackUrl()
 
     let signedIn = false
 
@@ -278,7 +321,7 @@ export default function LoginPage() {
 
       await update()
 
-      router.replace('/')
+      router.replace(callbackUrl)
       router.refresh()
     } catch {
       if (signedIn) {

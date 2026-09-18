@@ -263,7 +263,9 @@ describe('CartClient', () => {
 
     expect(
       loginLink.getAttribute('href'),
-    ).toBe('/login')
+    ).toBe(
+      '/login?callbackUrl=%2Fcheckout',
+    )
 
     expect(
       screen.queryByRole(

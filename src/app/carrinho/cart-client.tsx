@@ -742,7 +742,7 @@ export function CartClient() {
                 </p>
 
                 <Link
-                  href="/login"
+                  href="/login?callbackUrl=%2Fcheckout"
                   className="mt-3 flex w-full items-center justify-center rounded-lg bg-gray-950 px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800"
                 >
                   Iniciar sessão para

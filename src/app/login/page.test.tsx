@@ -138,6 +138,11 @@ describe('LoginPage', () => {
     vi.resetAllMocks()
 
     window.localStorage.clear()
+    window.history.replaceState(
+      {},
+      '',
+      '/login',
+    )
 
     vi.stubGlobal(
       'fetch',
@@ -227,6 +232,59 @@ describe('LoginPage', () => {
     ).toHaveBeenCalledTimes(1)
   })
 
+  test('regressa a um callback interno depois do login', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/login?callbackUrl=%2Fcheckout',
+    )
+
+    render(<LoginPage />)
+
+    submitLogin()
+
+    await waitFor(() => {
+      expect(
+        mocks.replace,
+      ).toHaveBeenCalledWith(
+        '/checkout',
+      )
+    })
+
+    expect(
+      mocks.update,
+    ).toHaveBeenCalledTimes(1)
+  })
+
+  test.each([
+    'https://example.com/checkout',
+    '//example.com/checkout',
+    '/\\example.com/checkout',
+  ])(
+    'ignora callback externo ou ambíguo %s',
+    async (unsafeCallbackUrl) => {
+      window.history.replaceState(
+        {},
+        '',
+        `/login?callbackUrl=${encodeURIComponent(
+          unsafeCallbackUrl,
+        )}`,
+      )
+
+      render(<LoginPage />)
+
+      submitLogin()
+
+      await waitFor(() => {
+        expect(
+          mocks.replace,
+        ).toHaveBeenCalledWith(
+          '/',
+        )
+      })
+    },
+  )
+
   test('faz merge do carrinho convidado antes de entrar na loja', async () => {
     const guestItems =
       setGuestCart()
@@ -235,6 +293,12 @@ describe('LoginPage', () => {
       createJsonResponse({
         mergedItemCount: 2,
       }),
+    )
+
+    window.history.replaceState(
+      {},
+      '',
+      '/login?callbackUrl=%2Fcheckout',
     )
 
     render(<LoginPage />)
@@ -291,7 +355,7 @@ describe('LoginPage', () => {
       expect(
         mocks.replace,
       ).toHaveBeenCalledWith(
-        '/',
+        '/checkout',
       )
     })
 
