@@ -1087,6 +1087,286 @@ describe(
     )
 
     test(
+      'apaga a morada selecionada, escolhe a seguinte e invalida o preview',
+      async () => {
+        const secondAddress = {
+          ...createAddress(),
+          id: 'address-2',
+          name: 'Ana Costa',
+          addressLine1:
+            'Rua Nova 20',
+        }
+
+        await requestDeliveryPreview(
+          createPreview(),
+          [
+            createAddress(),
+            secondAddress,
+          ],
+        )
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Apagar morada',
+            },
+          ),
+        )
+
+        expect(
+          screen.getByRole(
+            'group',
+            {
+              name:
+                'Confirmar eliminação da morada',
+            },
+          ),
+        ).toBeTruthy()
+
+        fetchMock.mockResolvedValueOnce(
+          new Response(null, {
+            status: 204,
+          }),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Confirmar eliminação',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            screen.getByLabelText(
+              'Morada',
+            ),
+          ).toHaveValue('address-2')
+        })
+
+        expect(
+          screen.queryByText(
+            'Rua Central 10',
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByText(
+            'Rua Nova 20',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          fetchMock.mock.calls[2]?.[0],
+        ).toBe('/api/addresses')
+
+        const options =
+          fetchMock.mock.calls[2]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(options?.method).toBe(
+          'DELETE',
+        )
+
+        expect(
+          JSON.parse(
+            String(options?.body),
+          ),
+        ).toEqual({
+          addressId: 'address-1',
+        })
+      },
+    )
+
+    test(
+      'ao apagar a última morada mantém entrega disponível e abre criação de morada',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              addresses: [
+                createAddress(),
+              ],
+            }),
+          )
+          .mockResolvedValueOnce(
+            new Response(null, {
+              status: 204,
+            }),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name: 'Apagar morada',
+            },
+          ),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Confirmar eliminação',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            /Ainda não tens moradas guardadas/,
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByLabelText(
+            'Entrega ao domicílio',
+          ),
+        ).toBeChecked()
+
+        expect(
+          screen.queryByLabelText(
+            'Morada',
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByRole(
+            'group',
+            {
+              name:
+                'Adicionar nova morada',
+            },
+          ),
+        ).toBeTruthy()
+
+        expect(
+          fetchMock.mock.calls[1]?.[0],
+        ).toBe('/api/addresses')
+
+        const options =
+          fetchMock.mock.calls[1]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(options?.method).toBe(
+          'DELETE',
+        )
+
+        expect(
+          JSON.parse(
+            String(options?.body),
+          ),
+        ).toEqual({
+          addressId: 'address-1',
+        })
+      },
+    )
+
+    test(
+      'permite cancelar a eliminação sem apagar a morada',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            addresses: [
+              createAddress(),
+            ],
+          }),
+        )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name: 'Apagar morada',
+            },
+          ),
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Cancelar',
+            },
+          ),
+        )
+
+        expect(
+          screen.queryByRole(
+            'group',
+            {
+              name:
+                'Confirmar eliminação da morada',
+            },
+          ),
+        ).toBeNull()
+
+        expect(
+          screen.getByText(
+            'Rua Central 10',
+          ),
+        ).toBeTruthy()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Apagar morada',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
       'mantém formulário de morada quando a criação falha',
       async () => {
         fetchMock

@@ -478,6 +478,11 @@ export function CheckoutClient() {
   ] = useState<string | null>(null)
 
   const [
+    addressPendingDeletionId,
+    setAddressPendingDeletionId,
+  ] = useState<string | null>(null)
+
+  const [
     fulfillmentMethod,
     setFulfillmentMethod,
   ] = useState<FulfillmentMethod>(
@@ -652,6 +657,7 @@ export function CheckoutClient() {
     }
 
     setError(null)
+    setAddressPendingDeletionId(null)
     setEditingAddressId(address.id)
     setAddressForm({
       name: address.name,
@@ -767,6 +773,7 @@ export function CheckoutClient() {
       )
 
       setFulfillmentMethod('DELIVERY')
+      setAddressPendingDeletionId(null)
       setEditingAddressId(null)
       setAddressForm(emptyAddressForm)
       setShowAddressForm(false)
@@ -778,6 +785,83 @@ export function CheckoutClient() {
           : addressId
             ? 'Não foi possível atualizar a morada'
             : 'Não foi possível criar a morada',
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleDeleteAddress() {
+    if (
+      pendingAction ||
+      !addressPendingDeletionId
+    ) {
+      return
+    }
+
+    const addressId =
+      addressPendingDeletionId
+
+    setPendingAction('address')
+    setError(null)
+
+    try {
+      const response = await fetch(
+        '/api/addresses',
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            addressId,
+          }),
+        },
+      )
+
+      if (response.status === 401) {
+        setMode('unauthenticated')
+
+        replace(
+          '/login?callbackUrl=%2Fcheckout',
+        )
+
+        return
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+            'Não foi possível apagar a morada',
+          ),
+        )
+      }
+
+      const remainingAddresses =
+        addresses.filter(
+          (address) =>
+            address.id !== addressId,
+        )
+
+      setAddresses(remainingAddresses)
+      setSelectedAddressId(
+        remainingAddresses[0]?.id ?? '',
+      )
+      setAddressPendingDeletionId(null)
+      setEditingAddressId(null)
+      setAddressForm(emptyAddressForm)
+      setShowAddressForm(
+        remainingAddresses.length === 0,
+      )
+      setFulfillmentMethod('DELIVERY')
+      invalidatePreview()
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Não foi possível apagar a morada',
       )
     } finally {
       setPendingAction(null)
@@ -1449,6 +1533,9 @@ export function CheckoutClient() {
                       setSelectedAddressId(
                         event.target.value,
                       )
+                      setAddressPendingDeletionId(
+                        null,
+                      )
 
                       invalidatePreview()
                     }}
@@ -1499,48 +1586,122 @@ export function CheckoutClient() {
                 ) : null}
 
                 {!showAddressForm ? (
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    {selectedAddress ? (
+                  addressPendingDeletionId &&
+                  selectedAddress?.id ===
+                    addressPendingDeletionId ? (
+                    <div
+                      role="group"
+                      aria-label="Confirmar eliminação da morada"
+                      className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4"
+                    >
+                      <p className="text-sm text-red-900">
+                        Tens a certeza de que
+                        queres apagar esta
+                        morada?
+                      </p>
+
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          disabled={
+                            pendingAction !==
+                            null
+                          }
+                          onClick={() =>
+                            void handleDeleteAddress()
+                          }
+                          className="rounded-lg bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {pendingAction ===
+                          'address'
+                            ? 'A apagar...'
+                            : 'Confirmar eliminação'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={
+                            pendingAction !==
+                            null
+                          }
+                          onClick={() => {
+                            setAddressPendingDeletionId(
+                              null,
+                            )
+                            setError(null)
+                          }}
+                          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      {selectedAddress ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={
+                              pendingAction !==
+                              null
+                            }
+                            onClick={() =>
+                              startEditingAddress(
+                                selectedAddress,
+                              )
+                            }
+                            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Editar morada
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={
+                              pendingAction !==
+                              null
+                            }
+                            onClick={() => {
+                              setError(null)
+                              setAddressPendingDeletionId(
+                                selectedAddress.id,
+                              )
+                            }}
+                            className="rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Apagar morada
+                          </button>
+                        </>
+                      ) : null}
+
                       <button
                         type="button"
                         disabled={
                           pendingAction !==
                           null
                         }
-                        onClick={() =>
-                          startEditingAddress(
-                            selectedAddress,
+                        onClick={() => {
+                          setError(null)
+                          setAddressPendingDeletionId(
+                            null,
                           )
-                        }
+                          setEditingAddressId(
+                            null,
+                          )
+                          setAddressForm(
+                            emptyAddressForm,
+                          )
+                          setShowAddressForm(
+                            true,
+                          )
+                        }}
                         className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Editar morada
+                        Adicionar nova morada
                       </button>
-                    ) : null}
-
-                    <button
-                      type="button"
-                      disabled={
-                        pendingAction !==
-                        null
-                      }
-                      onClick={() => {
-                        setError(null)
-                        setEditingAddressId(
-                          null,
-                        )
-                        setAddressForm(
-                          emptyAddressForm,
-                        )
-                        setShowAddressForm(
-                          true,
-                        )
-                      }}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Adicionar nova morada
-                    </button>
-                  </div>
+                    </div>
+                  )
                 ) : null}
               </>
             )}
