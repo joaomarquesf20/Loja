@@ -9,6 +9,7 @@ import {
 type AddToCartButtonProps = {
   productId: string
   inStock: boolean
+  variant?: 'default' | 'compact'
 }
 
 function isErrorResponse(
@@ -50,6 +51,7 @@ async function getErrorMessage(
 export default function AddToCartButton({
   productId,
   inStock,
+  variant = 'default',
 }: AddToCartButtonProps) {
   const [isPending, setIsPending] =
     useState(false)
@@ -131,27 +133,60 @@ export default function AddToCartButton({
     }
   }
 
+  const isCompact =
+    variant === 'compact'
+
   return (
-    <div className="mt-6">
+    <div
+      className={
+        isCompact ? '' : 'mt-6'
+      }
+    >
       <button
         type="button"
         disabled={
           !inStock || isPending
         }
         onClick={handleAddToCart}
-        className="w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        aria-label={
+          isCompact
+            ? !inStock
+              ? 'Produto sem stock'
+              : isPending
+                ? 'A adicionar ao carrinho'
+                : 'Adicionar ao carrinho'
+            : undefined
+        }
+        title={
+          isCompact
+            ? 'Adicionar ao carrinho'
+            : undefined
+        }
+        className={
+          isCompact
+            ? 'grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+            : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
+        }
       >
-        {!inStock
-          ? 'Sem stock'
-          : isPending
-            ? 'A adicionar...'
-            : 'Adicionar ao carrinho'}
+        {isCompact
+          ? message
+            ? '✓'
+            : '+'
+          : !inStock
+            ? 'Sem stock'
+            : isPending
+              ? 'A adicionar...'
+              : 'Adicionar ao carrinho'}
       </button>
 
       {message && (
         <p
           role="status"
-          className="mt-3 text-sm font-medium text-green-700 dark:text-green-400"
+          className={
+            isCompact
+              ? 'sr-only'
+              : 'mt-3 text-sm font-medium text-green-700 dark:text-green-400'
+          }
         >
           {message}
         </p>
@@ -160,7 +195,11 @@ export default function AddToCartButton({
       {error && (
         <p
           role="alert"
-          className="mt-3 text-sm font-medium text-red-700 dark:text-red-400"
+          className={
+            isCompact
+              ? 'sr-only'
+              : 'mt-3 text-sm font-medium text-red-700 dark:text-red-400'
+          }
         >
           {error}
         </p>

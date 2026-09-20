@@ -15,10 +15,11 @@ type HeaderCategory = {
 
 type SiteHeaderProps = {
   categories?: HeaderCategory[]
+  commercialMessage?: string | null
 }
 
 const navLinkClass =
-  'whitespace-nowrap py-3 text-xs font-black uppercase tracking-[0.08em] text-white/70 transition hover:text-white focus:outline-none focus-visible:text-white focus-visible:underline focus-visible:decoration-brand focus-visible:decoration-2 focus-visible:underline-offset-8'
+  'whitespace-nowrap py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white/62 transition hover:text-white focus:outline-none focus-visible:text-white'
 
 function SearchIcon() {
   return (
@@ -116,6 +117,7 @@ function AdminIcon() {
 
 export default function SiteHeader({
   categories = [],
+  commercialMessage = null,
 }: SiteHeaderProps) {
   const pathname = usePathname()
 
@@ -171,17 +173,14 @@ export default function SiteHeader({
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.08)]">
-      <div className="border-b border-white/8 bg-black/20">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 sm:px-6 lg:px-8">
-          <span>
-            Styling · Performance · Aftermarket
-          </span>
-          <span className="hidden sm:inline">
-            PFAutoParts
-          </span>
+    <header className="sticky top-0 z-50 bg-[#0b0d0f] text-white shadow-[0_1px_0_rgba(255,255,255,0.08)]">
+      {commercialMessage && (
+        <div className="border-b border-white/7 bg-black/30">
+          <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/48 sm:px-6 lg:px-8">
+            {commercialMessage}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:px-6 lg:gap-5 lg:px-8">
         <Link
@@ -191,47 +190,54 @@ export default function SiteHeader({
         >
           <span
             aria-hidden="true"
-            className="grid size-9 place-items-center rounded-lg bg-brand text-xs font-black text-white"
+            className="grid size-9 place-items-center rounded-md border border-brand/45 bg-brand/10 text-[10px] font-black tracking-[0.08em] text-brand"
           >
             PF
           </span>
 
-          <span className="hidden text-sm font-black tracking-[0.11em] sm:inline">
-            PFAUTO
-            <span className="text-brand">
-              PARTS
+          <span className="hidden leading-none sm:block">
+            <span className="block text-sm font-black tracking-[0.13em]">
+              PFAUTO
+              <span className="text-brand">
+                PARTS
+              </span>
+            </span>
+            <span className="mt-1 block text-[8px] font-bold uppercase tracking-[0.24em] text-white/34">
+              Performance · Styling
             </span>
           </span>
         </Link>
 
         <form
-          action="/"
+          action="/#produtos"
           method="get"
           role="search"
-          className="relative min-w-0"
+          className="relative min-w-0 justify-self-stretch lg:max-w-xl lg:justify-self-end"
         >
-          <SearchIcon />
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <SearchIcon />
+          </span>
 
           <input
             type="search"
             name="q"
             aria-label="Pesquisar produtos"
             placeholder="Pesquisar produtos, marcas ou categorias..."
-            className="h-10 w-full rounded-xl border border-white/10 bg-white px-10 py-2 text-sm font-medium text-foreground outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25"
+            className="h-10 w-full rounded-md border border-white/12 bg-[#171a1d] px-9 pr-20 text-sm font-medium text-white outline-none placeholder:text-white/30 focus:border-brand/70 focus:ring-1 focus:ring-brand/40"
           />
 
           <button
             type="submit"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-brand px-3 py-1.5 text-xs font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-white/7 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white/68 transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            Pesquisar
+            Procurar
           </button>
         </form>
 
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1">
           {status === 'loading' ? (
-            <span className="hidden px-2 text-xs font-semibold text-white/55 lg:inline">
-              A verificar sessão…
+            <span className="hidden px-2 text-xs text-white/40 xl:inline">
+              A verificar…
             </span>
           ) : user ? (
             <>
@@ -241,7 +247,7 @@ export default function SiteHeader({
                   href="/admin"
                   aria-label="Administração"
                   title="Administração"
-                  className="grid size-9 place-items-center rounded-lg text-white/60 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className="grid size-9 place-items-center rounded text-white/48 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <AdminIcon />
                 </Link>
@@ -249,7 +255,7 @@ export default function SiteHeader({
 
               <Link
                 href="/conta"
-                className="hidden max-w-36 items-center gap-2 truncate rounded-lg px-2.5 py-2 text-sm font-bold text-white/70 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
+                className="hidden max-w-36 items-center gap-2 truncate rounded px-2 py-2 text-sm font-bold text-white/62 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
                 title={
                   user.email ??
                   undefined
@@ -267,7 +273,7 @@ export default function SiteHeader({
                 disabled={
                   isSigningOut
                 }
-                className="hidden rounded-lg px-2 py-2 text-xs font-bold text-white/50 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 xl:inline-flex"
+                className="hidden rounded px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/35 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50 xl:inline-flex"
               >
                 {isSigningOut
                   ? 'A sair…'
@@ -287,14 +293,14 @@ export default function SiteHeader({
             <>
               <Link
                 href="/registar"
-                className="hidden rounded-lg px-2 py-2 text-xs font-bold text-white/50 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand xl:inline-flex"
+                className="hidden rounded px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/35 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand xl:inline-flex"
               >
                 Criar conta
               </Link>
 
               <Link
                 href="/login"
-                className="hidden items-center gap-2 rounded-lg px-2 py-2 text-sm font-bold text-white/75 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
+                className="hidden items-center gap-2 rounded px-2 py-2 text-sm font-bold text-white/62 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
               >
                 <UserIcon />
                 Entrar
@@ -305,7 +311,7 @@ export default function SiteHeader({
           <Link
             href="/carrinho"
             aria-label="Carrinho"
-            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2.5 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex items-center gap-2 rounded-md border border-brand/45 bg-brand/10 px-3 py-2.5 text-sm font-black text-brand transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <CartIcon />
             <span className="hidden xl:inline">
@@ -317,9 +323,9 @@ export default function SiteHeader({
 
       <nav
         aria-label="Navegação principal"
-        className="border-t border-white/8"
+        className="border-t border-white/7 bg-black/15"
       >
-        <div className="mx-auto flex max-w-7xl items-center gap-5 overflow-x-auto px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-center gap-6 overflow-x-auto px-4 sm:px-6 lg:px-8">
           {categories.length > 0 ? (
             categories.map(
               (category) => (

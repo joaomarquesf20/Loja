@@ -7,6 +7,7 @@ import './globals.css'
 import Providers from './providers'
 import SiteHeader from './site-header'
 import { listCatalogCategories } from '@/server/catalog'
+import { getCommercialSettings } from '@/server/commercial-settings'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -50,11 +51,76 @@ async function getHeaderCategories() {
   }
 }
 
+function formatMoney(
+  value: string,
+) {
+  return new Intl.NumberFormat(
+    'pt-PT',
+    {
+      style: 'currency',
+      currency: 'EUR',
+      maximumFractionDigits: 0,
+    },
+  ).format(Number(value))
+}
+
+async function getCommercialMessage() {
+  try {
+    const settings =
+      await getCommercialSettings()
+
+    const mainland =
+      settings.regions.find(
+        (region) =>
+          region.region ===
+          'PORTUGAL_MAINLAND',
+      )
+
+    if (!mainland?.checkoutEnabled) {
+      return null
+    }
+
+    const thresholds =
+      mainland.shippingRules
+        .filter(
+          (rule) =>
+            rule.checkoutEnabled &&
+            rule.freeShippingThreshold !==
+              null,
+        )
+        .map((rule) =>
+          Number(
+            rule.freeShippingThreshold,
+          ),
+        )
+        .filter(Number.isFinite)
+
+    if (thresholds.length > 0) {
+      const threshold = Math.min(
+        ...thresholds,
+      )
+
+      return `Portes grátis em artigos elegíveis a partir de ${formatMoney(
+        String(threshold),
+      )}`
+    }
+
+    return 'Entregas disponíveis em Portugal Continental'
+  } catch {
+    return null
+  }
+}
+
 export default async function RootLayout({
   children,
 }: LayoutProps<'/'>) {
-  const headerCategories =
-    await getHeaderCategories()
+  const [
+    headerCategories,
+    commercialMessage,
+  ] = await Promise.all([
+    getHeaderCategories(),
+    getCommercialMessage(),
+  ])
 
   return (
     <html
@@ -66,6 +132,9 @@ export default async function RootLayout({
           <SiteHeader
             categories={
               headerCategories
+            }
+            commercialMessage={
+              commercialMessage
             }
           />
           {children}

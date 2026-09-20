@@ -3,7 +3,6 @@ import BrandCard from '@/components/storefront/brand-card'
 import CategoryCard from '@/components/storefront/category-card'
 import EditorialCard from '@/components/storefront/editorial-card'
 import ProductCard from '@/components/storefront/product-card'
-import SectionHeading from '@/components/storefront/section-heading'
 import {
   listCatalogCategories,
   listCatalogProducts,
@@ -20,15 +19,17 @@ type HomeProps = {
   }>
 }
 
-const CURATED_CATEGORY_IMAGES = [
-  'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=1200&q=80',
-  'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1200&q=80',
-]
-
 const HERO_IMAGE =
-  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=85'
+  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=88'
+
+const CURATED_IMAGES = [
+  'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=82',
+  'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1000&q=82',
+  'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1000&q=82',
+  'https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&w=1000&q=82',
+  'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=1000&q=82',
+  'https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=1000&q=82',
+]
 
 function firstProductImage(
   products: CatalogProduct[],
@@ -56,9 +57,9 @@ function getCategoryImage(
 
   return (
     ownProductImage ??
-    CURATED_CATEGORY_IMAGES[
+    CURATED_IMAGES[
       index %
-        CURATED_CATEGORY_IMAGES.length
+        CURATED_IMAGES.length
     ]
   )
 }
@@ -83,17 +84,14 @@ function matchesSearch(
     return true
   }
 
-  const searchableValues = [
+  return [
     product.name,
     product.brand?.name ?? '',
     product.category.name,
-  ]
-
-  return searchableValues.some(
-    (value) =>
-      value
-        .toLocaleLowerCase('pt-PT')
-        .includes(query),
+  ].some((value) =>
+    value
+      .toLocaleLowerCase('pt-PT')
+      .includes(query),
   )
 }
 
@@ -118,8 +116,21 @@ export default async function Home({
       ),
     )
 
+  const topLevelCategories =
+    categories.filter(
+      (category) =>
+        category.parentId === null,
+    )
+
+  const storefrontCategories =
+    (
+      topLevelCategories.length > 0
+        ? topLevelCategories
+        : categories
+    ).slice(0, 6)
+
   const categoryCards =
-    categories.slice(0, 8).map(
+    storefrontCategories.map(
       (category, index) => ({
         category,
         image: getCategoryImage(
@@ -130,8 +141,8 @@ export default async function Home({
       }),
     )
 
-  const editorialCategories =
-    categoryCards.slice(0, 3)
+  const editorial =
+    categoryCards[0] ?? null
 
   const brandsById = new Map<
     string,
@@ -151,15 +162,22 @@ export default async function Home({
 
   const brands = Array.from(
     brandsById.values(),
-  ).sort((first, second) =>
-    first.name.localeCompare(
-      second.name,
-    ),
   )
+    .sort((first, second) =>
+      first.name.localeCompare(
+        second.name,
+      ),
+    )
+    .slice(0, 8)
+
+  const displayedProducts =
+    normalizedQuery
+      ? visibleProducts
+      : products.slice(0, 8)
 
   return (
-    <main className="flex-1 bg-background text-foreground">
-      <section className="relative isolate overflow-hidden bg-[#101316] text-white">
+    <main className="flex-1 bg-[#0b0d0f] text-white">
+      <section className="relative isolate overflow-hidden border-b border-white/7">
         <div
           aria-hidden="true"
           className="absolute inset-0 bg-cover bg-center"
@@ -170,62 +188,63 @@ export default async function Home({
 
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(10,12,14,0.95)_0%,rgba(10,12,14,0.82)_38%,rgba(10,12,14,0.35)_70%,rgba(10,12,14,0.2)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,9,10,0.97)_0%,rgba(7,9,10,0.82)_34%,rgba(7,9,10,0.35)_66%,rgba(7,9,10,0.12)_100%)]"
         />
 
-        <div className="relative mx-auto flex min-h-[24rem] max-w-7xl items-center px-4 py-10 sm:px-6 lg:min-h-[27rem] lg:px-8">
-          <div className="max-w-2xl">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">
-              Styling · Performance · Aftermarket
+        <div className="relative mx-auto flex min-h-[22rem] max-w-7xl items-center px-4 py-10 sm:px-6 lg:min-h-[25rem] lg:px-8">
+          <div className="max-w-xl">
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand">
+              Premium aftermarket
             </p>
 
-            <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
-              Constrói o carro
-              <span className="block text-brand">
-                à tua maneira.
+            <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-[3.5rem]">
+              Eleva o teu projeto.
+              <span className="block text-white/72">
+                Sem compromissos.
               </span>
             </h1>
 
-            <p className="mt-5 max-w-xl text-base leading-7 text-white/70 sm:text-lg">
-              Peças e acessórios para
-              transformar presença,
-              comportamento e carácter.
+            <p className="mt-5 max-w-lg text-sm leading-6 text-white/58 sm:text-base">
+              Styling, performance e
+              componentes para quem quer
+              mais presença e mais carácter.
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                href="/#categorias"
-                className="rounded-xl bg-brand px-5 py-3 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-              >
-                Comprar agora
-              </Link>
-
-              <Link
-                href="/#produtos"
-                className="rounded-xl border border-white/25 bg-black/20 px-5 py-3 text-sm font-black text-white backdrop-blur transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-              >
-                Ver produtos
-              </Link>
-            </div>
+            <Link
+              href="/#categorias"
+              className="mt-7 inline-flex rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              Explorar catálogo
+              <span className="ml-3">
+                →
+              </span>
+            </Link>
           </div>
         </div>
       </section>
 
-      {categories.length > 0 && (
+      {categoryCards.length > 0 && (
         <section
           id="categorias"
           aria-labelledby="categories-heading"
-          className="scroll-mt-36"
+          className="scroll-mt-40 border-b border-white/7"
         >
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-            <SectionHeading
-              id="categories-heading"
-              eyebrow="Explorar"
-              title="Compra por categoria"
-              description="Entra diretamente nas categorias disponíveis no catálogo PFAutoParts."
-            />
+          <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+                  Shop by category
+                </p>
+                <h2
+                  id="categories-heading"
+                  className="mt-1.5 text-xl font-black tracking-[-0.025em]"
+                >
+                  Encontra o próximo upgrade
+                </h2>
+              </div>
+            </div>
 
-            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
               {categoryCards.map(
                 ({
                   category,
@@ -243,55 +262,88 @@ export default async function Home({
         </section>
       )}
 
+      {brands.length > 0 && (
+        <section
+          id="marcas"
+          aria-label="Marcas"
+          className="scroll-mt-40 border-b border-white/7 bg-[#0e1012]"
+        >
+          <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-white/6 px-4 sm:grid-cols-4 sm:px-6 lg:grid-cols-8 lg:px-8">
+            {brands.map((brand) => (
+              <BrandCard
+                key={brand.id}
+                name={brand.name}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {editorial && (
+        <section className="border-b border-white/7">
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <EditorialCard
+              category={
+                editorial.category
+              }
+              image={
+                editorial.image
+              }
+            />
+          </div>
+        </section>
+      )}
+
       <section
         id="produtos"
         aria-labelledby="products-heading"
-        className="scroll-mt-36 border-y border-line bg-surface"
+        className="scroll-mt-40"
       >
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-          <SectionHeading
-            id="products-heading"
-            eyebrow="Catálogo"
-            title={
-              normalizedQuery
-                ? 'Resultados da pesquisa'
-                : 'Produtos para o próximo upgrade'
-            }
-            description={
-              normalizedQuery
-                ? `Resultados encontrados para “${Array.isArray(q) ? q[0] : q}”.`
-                : 'Produtos reais atualmente disponíveis no catálogo, com marca, preço e disponibilidade.'
-            }
-            aside={
-              normalizedQuery ? (
-                <Link
-                  href="/#produtos"
-                  className="text-sm font-black text-brand hover:underline hover:underline-offset-4"
-                >
-                  Limpar pesquisa
-                </Link>
-              ) : undefined
-            }
-          />
+        <div className="mx-auto max-w-7xl px-4 py-9 sm:px-6 lg:px-8 lg:py-11">
+          <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+                {normalizedQuery
+                  ? 'Pesquisa'
+                  : 'Seleção PFAutoParts'}
+              </p>
 
-          {visibleProducts.length ===
+              <h2
+                id="products-heading"
+                className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
+              >
+                {normalizedQuery
+                  ? 'Resultados encontrados'
+                  : 'Produtos em destaque'}
+              </h2>
+            </div>
+
+            {normalizedQuery && (
+              <Link
+                href="/#produtos"
+                className="text-[10px] font-black uppercase tracking-[0.1em] text-white/45 transition hover:text-brand"
+              >
+                Limpar pesquisa
+              </Link>
+            )}
+          </div>
+
+          {displayedProducts.length ===
           0 ? (
-            <div className="mt-8 rounded-3xl border border-dashed border-line bg-background p-10 text-center sm:p-14">
-              <h3 className="text-xl font-black">
+            <div className="py-14 text-center">
+              <h3 className="text-lg font-black">
                 Nenhum produto encontrado
               </h3>
 
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
-                Experimenta pesquisar por
-                outro nome, marca ou
-                categoria.
+              <p className="mt-2 text-sm text-white/42">
+                Experimenta outro nome,
+                marca ou categoria.
               </p>
             </div>
           ) : (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {visibleProducts
-                .slice(0, 8)
-                .map((product) => (
+            <div className="mt-5 grid gap-px overflow-hidden bg-white/7 sm:grid-cols-2 lg:grid-cols-4">
+              {displayedProducts.map(
+                (product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
@@ -302,83 +354,20 @@ export default async function Home({
         </div>
       </section>
 
-      {editorialCategories.length >
-        0 && (
-        <section className="bg-background">
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-            <SectionHeading
-              eyebrow="Build inspiration"
-              title="Muda a presença. Muda a experiência."
-              description="Explora algumas das áreas do catálogo e encontra a próxima direção para o teu projeto."
-            />
-
-            <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:grid-rows-2">
-              {editorialCategories.map(
-                (
-                  {
-                    category,
-                    image,
-                  },
-                  index,
-                ) => (
-                  <EditorialCard
-                    key={category.id}
-                    category={category}
-                    image={image}
-                    featured={
-                      index === 0
-                    }
-                  />
-                ),
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {brands.length > 0 && (
-        <section
-          id="marcas"
-          aria-labelledby="brands-heading"
-          className="scroll-mt-36 border-t border-line bg-surface"
-        >
-          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-            <SectionHeading
-              id="brands-heading"
-              eyebrow="Marcas"
-              title="Escolhe pelo fabricante"
-              description="Marcas presentes nos produtos ativos da loja."
-            />
-
-            <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              {brands
-                .slice(0, 10)
-                .map((brand) => (
-                  <BrandCard
-                    key={brand.id}
-                    name={brand.name}
-                  />
-                ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section className="bg-brand text-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-9 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+      <section className="border-t border-white/7 bg-[#111315]">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-white/65">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
               PFAutoParts
             </p>
-
-            <h2 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">
-              O próximo upgrade começa aqui.
+            <h2 className="mt-1.5 text-xl font-black tracking-tight sm:text-2xl">
+              A tua build começa com a escolha certa.
             </h2>
           </div>
 
           <Link
             href="/#categorias"
-            className="inline-flex w-fit rounded-xl bg-white px-5 py-3 text-sm font-black text-brand transition hover:bg-black hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex w-fit border-b border-brand pb-1 text-[10px] font-black uppercase tracking-[0.1em] text-white"
           >
             Explorar categorias
           </Link>

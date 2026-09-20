@@ -12,9 +12,9 @@ export default function BrandCard({
       href={`/?q=${encodeURIComponent(
         name,
       )}#produtos`}
-      className="grid min-h-24 place-items-center rounded-2xl border border-line bg-surface px-5 text-center transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-950/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="flex min-h-14 items-center justify-center px-6 text-center transition hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset"
     >
-      <span className="text-base font-black uppercase tracking-[0.08em] text-foreground">
+      <span className="text-sm font-black uppercase tracking-[0.11em] text-white/58 transition hover:text-white">
         {name}
       </span>
     </Link>

@@ -4,65 +4,52 @@ import type { CatalogCategory } from '@/server/catalog'
 type EditorialCardProps = {
   category: CatalogCategory
   image?: string | null
-  featured?: boolean
 }
 
 export default function EditorialCard({
   category,
   image,
-  featured = false,
 }: EditorialCardProps) {
   return (
     <Link
       href={`/categorias/${category.slug}`}
-      className={`group relative isolate overflow-hidden rounded-3xl bg-accent text-white shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-        featured
-          ? 'min-h-[25rem] lg:row-span-2'
-          : 'min-h-48'
-      }`}
+      className="group relative isolate block min-h-[19rem] overflow-hidden rounded-sm bg-[#15181b] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
-      {image ? (
+      {image && (
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-105"
+          className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-[1.025]"
           style={{
             backgroundImage: `url("${image}")`,
           }}
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[radial-gradient(circle_at_75%_20%,rgba(239,91,42,0.5),transparent_24%),linear-gradient(135deg,#272d32_0%,#121417_72%)]"
         />
       )}
 
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent"
+        className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,10,11,0.9)_0%,rgba(8,10,11,0.7)_42%,rgba(8,10,11,0.2)_78%,rgba(8,10,11,0.08)_100%)]"
       />
 
-      <div className="relative flex h-full min-h-[inherit] flex-col justify-end p-6 sm:p-7">
-        <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">
-          PFAutoParts
+      <div className="relative flex min-h-[19rem] max-w-xl flex-col justify-center p-7 sm:p-10">
+        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">
+          Build your way
         </p>
 
-        <h3
-          className={`mt-2 font-black uppercase tracking-[-0.03em] ${
-            featured
-              ? 'text-4xl sm:text-5xl'
-              : 'text-2xl sm:text-3xl'
-          }`}
-        >
-          {category.name}
+        <h3 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">
+          {category.name}.
+          <span className="block text-white/72">
+            Mais presença. Mais carácter.
+          </span>
         </h3>
 
-        <p className="mt-2 max-w-md text-sm leading-6 text-white/70">
-          Descobre a seleção e dá
-          outra presença ao teu carro.
+        <p className="mt-4 max-w-md text-sm leading-6 text-white/58">
+          Explora a categoria e encontra
+          componentes para levar o teu
+          projeto noutra direção.
         </p>
 
-        <span className="mt-5 inline-flex w-fit items-center border-b border-brand pb-1 text-sm font-black">
-          Ver categoria
+        <span className="mt-5 w-fit border-b border-brand pb-1 text-xs font-black uppercase tracking-[0.1em]">
+          Explorar categoria
         </span>
       </div>
     </Link>
