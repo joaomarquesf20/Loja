@@ -28,10 +28,9 @@ export default function StorefrontFooter({
           </Link>
 
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/42">
-            Jantes premium, suspensões,
-            body-kits e personalização
-            automóvel para projetos com
-            identidade.
+            Jantes premium, suspensão,
+            body-kits e acessórios para
+            personalização automóvel.
           </p>
         </div>
 

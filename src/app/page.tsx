@@ -204,9 +204,23 @@ export default async function Home({
     )
 
   const editorial =
-    categoryCards.length >= 2
+    categoryCards.find(({ category }) => {
+      const value =
+        `${category.name} ${category.slug}`
+          .toLocaleLowerCase('pt-PT')
+
+      return (
+        value.includes('exterior') ||
+        value.includes('body-kit') ||
+        value.includes('bodykit') ||
+        value.includes('splitter') ||
+        value.includes('spoiler') ||
+        value.includes('difusor')
+      )
+    }) ??
+    (categoryCards.length >= 2
       ? categoryCards[0]
-      : null
+      : null)
 
   const brandsById = new Map<
     string,
@@ -460,14 +474,14 @@ export default async function Home({
             <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
               <div className="border-b border-white/8 pb-4">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-                  Catálogo
+                  Mais opções
                 </p>
 
                 <h2
                   id="more-products-heading"
                   className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
                 >
-                  Mais do catálogo
+                  Mais para o teu projeto
                 </h2>
               </div>
 
