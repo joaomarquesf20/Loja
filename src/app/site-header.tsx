@@ -186,24 +186,14 @@ export default function SiteHeader({
         <Link
           href="/"
           aria-label="PFAUTOPARTS"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="flex shrink-0 items-center rounded-sm px-0.5 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
-          <span
-            aria-hidden="true"
-            className="grid size-9 place-items-center rounded-md border border-brand/45 bg-brand/10 text-[10px] font-black tracking-[0.08em] text-brand"
-          >
-            PF
-          </span>
-
-          <span className="hidden leading-none sm:block">
-            <span className="block text-sm font-black tracking-[0.13em]">
+          <span className="text-sm font-black uppercase tracking-[0.16em] sm:text-[15px]">
+            <span className="text-white">
               PFAUTO
-              <span className="text-brand">
-                PARTS
-              </span>
             </span>
-            <span className="mt-1 block text-[8px] font-bold uppercase tracking-[0.24em] text-white/34">
-              Performance · Styling
+            <span className="text-brand">
+              PARTS
             </span>
           </span>
         </Link>
