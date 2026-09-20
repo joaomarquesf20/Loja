@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -90,24 +91,18 @@ function UserIcon() {
   )
 }
 
-function AdminIcon() {
+function ChevronIcon() {
   return (
     <svg
       aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-4"
+      viewBox="0 0 20 20"
+      className="size-3.5"
       fill="none"
     >
       <path
-        d="M12 3.5 19 7v5c0 4.2-2.8 7-7 8.5C7.8 19 5 16.2 5 12V7l7-3.5Z"
+        d="m6 8 4 4 4-4"
         stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M9.5 12 11 13.5l3.5-3.5"
-        stroke="currentColor"
-        strokeWidth="1.7"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -137,6 +132,11 @@ export default function SiteHeader({
   ] = useState<string | null>(
     null,
   )
+
+  const [
+    isAccountMenuOpen,
+    setIsAccountMenuOpen,
+  ] = useState(false)
 
   if (
     pathname === '/admin' ||
@@ -182,29 +182,29 @@ export default function SiteHeader({
         </div>
       )}
 
-      <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:px-6 lg:gap-5 lg:px-8">
+      <div className="mx-auto grid max-w-7xl grid-cols-[auto_auto] items-center gap-x-3 gap-y-3 px-4 py-3 sm:px-6 md:grid-cols-[210px_minmax(320px,1fr)_auto] lg:gap-x-6 lg:px-8">
         <Link
           href="/"
           aria-label="PFAUTOPARTS"
-          className="flex shrink-0 items-center rounded-sm px-0.5 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="flex w-fit shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
-          <span className="text-sm font-black uppercase tracking-[0.16em] sm:text-[15px]">
-            <span className="text-white">
-              PFAUTO
-            </span>
-            <span className="text-brand">
-              PARTS
-            </span>
-          </span>
+          <Image
+            src="/brand/pfautoparts-logo-horizontal.png"
+            alt=""
+            width={256}
+            height={42}
+            priority
+            className="h-auto w-[158px] sm:w-[188px]"
+          />
         </Link>
 
         <form
           action="/#produtos"
           method="get"
           role="search"
-          className="relative min-w-0 justify-self-stretch lg:max-w-xl lg:justify-self-end"
+          className="order-3 col-span-2 flex h-11 min-w-0 overflow-hidden rounded-md border border-white/12 bg-[#171a1d] transition focus-within:border-brand/65 focus-within:ring-1 focus-within:ring-brand/35 md:order-none md:col-span-1"
         >
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+          <span className="pointer-events-none grid w-10 shrink-0 place-items-center text-white/34">
             <SearchIcon />
           </span>
 
@@ -213,62 +213,98 @@ export default function SiteHeader({
             name="q"
             aria-label="Pesquisar produtos"
             placeholder="Pesquisar produtos, marcas ou categorias..."
-            className="h-10 w-full rounded-md border border-white/12 bg-[#171a1d] px-9 pr-20 text-sm font-medium text-white outline-none placeholder:text-white/30 focus:border-brand/70 focus:ring-1 focus:ring-brand/40"
+            className="min-w-0 flex-1 bg-transparent px-0 py-2 text-sm font-medium text-white outline-none placeholder:text-white/28"
           />
 
           <button
             type="submit"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-white/7 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white/68 transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex shrink-0 items-center justify-center border-l border-white/10 px-4 text-[10px] font-black uppercase tracking-[0.09em] text-white/58 transition hover:bg-brand hover:text-white focus:outline-none focus-visible:bg-brand focus-visible:text-white sm:px-5"
           >
-            Procurar
+            Pesquisar
           </button>
         </form>
 
-        <div className="flex items-center justify-end gap-1">
+        <div className="relative flex items-center justify-end gap-1.5">
           {status === 'loading' ? (
             <span className="hidden px-2 text-xs text-white/40 xl:inline">
               A verificar sessão…
             </span>
           ) : user ? (
-            <>
-              {user.role ===
-                'ADMIN' && (
-                <Link
-                  href="/admin"
-                  aria-label="Administração"
-                  title="Administração"
-                  className="grid size-9 place-items-center rounded text-white/48 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <AdminIcon />
-                </Link>
-              )}
-
-              <Link
-                href="/conta"
-                className="hidden max-w-36 items-center gap-2 truncate rounded px-2 py-2 text-sm font-bold text-white/62 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
-                title={
-                  user.email ??
-                  undefined
-                }
-              >
-                <UserIcon />
-                {accountLabel}
-              </Link>
-
+            <div className="relative">
               <button
                 type="button"
-                onClick={
-                  handleSignOut
+                aria-label="Conta"
+                aria-expanded={
+                  isAccountMenuOpen
                 }
-                disabled={
-                  isSigningOut
+                onClick={() =>
+                  setIsAccountMenuOpen(
+                    (current) =>
+                      !current,
+                  )
                 }
-                className="hidden rounded px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/35 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:opacity-50 xl:inline-flex"
+                className="inline-flex h-10 items-center gap-2 rounded-md px-2.5 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
-                {isSigningOut
-                  ? 'A sair…'
-                  : 'Sair'}
+                <UserIcon />
+                <span className="hidden lg:inline">
+                  Conta
+                </span>
+                <ChevronIcon />
               </button>
+
+              {isAccountMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-md border border-white/10 bg-[#15181b] p-1.5 shadow-2xl shadow-black/45"
+                >
+                  <div className="border-b border-white/8 px-3 py-2.5">
+                    <p className="truncate text-xs font-black text-white/88">
+                      {accountLabel}
+                    </p>
+                    {user.email && (
+                      <p className="mt-0.5 truncate text-[10px] text-white/38">
+                        {user.email}
+                      </p>
+                    )}
+                  </div>
+
+                  <Link
+                    href="/conta"
+                    title={
+                      user.email ??
+                      undefined
+                    }
+                    className="mt-1 flex items-center rounded px-3 py-2 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white"
+                  >
+                    {accountLabel}
+                  </Link>
+
+                  {user.role ===
+                    'ADMIN' && (
+                    <Link
+                      href="/admin"
+                      className="flex items-center rounded px-3 py-2 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white"
+                    >
+                      Administração
+                    </Link>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={
+                      handleSignOut
+                    }
+                    disabled={
+                      isSigningOut
+                    }
+                    className="flex w-full items-center rounded px-3 py-2 text-left text-sm font-bold text-white/48 transition hover:bg-white/7 hover:text-white disabled:opacity-50"
+                  >
+                    {isSigningOut
+                      ? 'A sair…'
+                      : 'Sair'}
+                  </button>
+                </div>
+              )}
 
               {signOutError && (
                 <span
@@ -278,7 +314,7 @@ export default function SiteHeader({
                   {signOutError}
                 </span>
               )}
-            </>
+            </div>
           ) : (
             <>
               <Link
@@ -290,7 +326,7 @@ export default function SiteHeader({
 
               <Link
                 href="/login"
-                className="hidden items-center gap-2 rounded px-2 py-2 text-sm font-bold text-white/62 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
+                className="hidden items-center gap-2 rounded px-2.5 py-2 text-sm font-bold text-white/62 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:inline-flex"
               >
                 <UserIcon />
                 Entrar
@@ -301,7 +337,7 @@ export default function SiteHeader({
           <Link
             href="/carrinho"
             aria-label="Carrinho"
-            className="inline-flex items-center gap-2 rounded-md border border-brand/45 bg-brand/10 px-3 py-2.5 text-sm font-black text-brand transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex h-10 items-center gap-2 rounded-md border border-brand/45 bg-brand/10 px-3 text-sm font-black text-brand transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <CartIcon />
             <span className="hidden xl:inline">
@@ -315,7 +351,7 @@ export default function SiteHeader({
         aria-label="Navegação principal"
         className="border-t border-white/7 bg-black/15"
       >
-        <div className="mx-auto flex max-w-7xl items-center justify-center gap-6 overflow-x-auto px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center gap-6 overflow-x-auto px-4 sm:px-6 lg:px-8">
           {categories.length > 0 ? (
             categories.map(
               (category) => (

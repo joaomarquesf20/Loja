@@ -39,6 +39,17 @@ vi.mock(
 
 import SiteHeader from './site-header'
 
+function openAccountMenu() {
+  fireEvent.click(
+    screen.getByRole(
+      'button',
+      {
+        name: 'Conta',
+      },
+    ),
+  )
+}
+
 describe('SiteHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -144,7 +155,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('mostra utilizador autenticado com acesso à conta e logout', () => {
+  test('mostra utilizador autenticado dentro do menu de conta', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -162,6 +173,7 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     expect(
       screen.getByRole(
@@ -200,24 +212,6 @@ describe('SiteHeader', () => {
       screen.queryByRole(
         'link',
         {
-          name: 'Criar conta',
-        },
-      ),
-    ).not.toBeInTheDocument()
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
-          name: 'Entrar',
-        },
-      ),
-    ).not.toBeInTheDocument()
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
           name:
             'Administração',
         },
@@ -225,7 +219,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('mostra acesso à administração apenas para ADMIN', () => {
+  test('mostra acesso à administração apenas no menu de conta de ADMIN', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -243,6 +237,7 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     expect(
       screen.getByRole('link', {
@@ -265,15 +260,6 @@ describe('SiteHeader', () => {
       'href',
       '/conta',
     )
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
-          name: 'Criar conta',
-        },
-      ),
-    ).not.toBeInTheDocument()
   })
 
   test('não mostra o cabeçalho público dentro do admin', () => {
@@ -308,6 +294,7 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     fireEvent.click(
       screen.getByRole(
@@ -349,6 +336,7 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     fireEvent.click(
       screen.getByRole(

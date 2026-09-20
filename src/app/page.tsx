@@ -95,6 +95,64 @@ function matchesSearch(
   )
 }
 
+function categoryGridClass(
+  count: number,
+) {
+  if (count === 1) {
+    return 'grid max-w-md grid-cols-1 gap-3'
+  }
+
+  if (count === 2) {
+    return 'grid max-w-3xl gap-3 sm:grid-cols-2'
+  }
+
+  if (count === 3) {
+    return 'grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3'
+  }
+
+  return 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+}
+
+function brandGridClass(
+  count: number,
+) {
+  if (count === 1) {
+    return 'grid max-w-xs grid-cols-1'
+  }
+
+  if (count === 2) {
+    return 'grid max-w-lg grid-cols-2'
+  }
+
+  if (count === 3) {
+    return 'grid max-w-2xl grid-cols-3'
+  }
+
+  if (count <= 5) {
+    return 'grid max-w-4xl grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+  }
+
+  return 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8'
+}
+
+function productGridClass(
+  count: number,
+) {
+  if (count === 1) {
+    return 'grid max-w-sm grid-cols-1'
+  }
+
+  if (count === 2) {
+    return 'grid max-w-3xl gap-px sm:grid-cols-2'
+  }
+
+  if (count === 3) {
+    return 'grid max-w-5xl gap-px sm:grid-cols-2 lg:grid-cols-3'
+  }
+
+  return 'grid gap-px sm:grid-cols-2 lg:grid-cols-4'
+}
+
 export default async function Home({
   searchParams,
 }: HomeProps) {
@@ -180,7 +238,7 @@ export default async function Home({
       <section className="relative isolate overflow-hidden border-b border-white/7">
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center"
+          className="absolute inset-0 bg-cover bg-[position:62%_50%] sm:bg-[position:66%_48%]"
           style={{
             backgroundImage: `url("${HERO_IMAGE}")`,
           }}
@@ -188,10 +246,15 @@ export default async function Home({
 
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,9,10,0.97)_0%,rgba(7,9,10,0.82)_34%,rgba(7,9,10,0.35)_66%,rgba(7,9,10,0.12)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,9,10,0.98)_0%,rgba(7,9,10,0.9)_30%,rgba(7,9,10,0.48)_58%,rgba(7,9,10,0.16)_100%)]"
         />
 
-        <div className="relative mx-auto flex min-h-[22rem] max-w-7xl items-center px-4 py-10 sm:px-6 lg:min-h-[25rem] lg:px-8">
+        <div
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0b0d0f]/55 to-transparent"
+        />
+
+        <div className="relative mx-auto flex min-h-[21rem] max-w-7xl items-center px-4 py-9 sm:min-h-[23rem] sm:px-6 lg:min-h-[24rem] lg:px-8">
           <div className="max-w-xl">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand">
               Premium aftermarket
@@ -204,7 +267,7 @@ export default async function Home({
               </span>
             </h1>
 
-            <p className="mt-5 max-w-lg text-sm leading-6 text-white/58 sm:text-base">
+            <p className="mt-5 max-w-lg text-sm leading-6 text-white/62 sm:text-base">
               Styling, performance e
               componentes para quem quer
               mais presença e mais carácter.
@@ -212,7 +275,7 @@ export default async function Home({
 
             <Link
               href="/#categorias"
-              className="mt-7 inline-flex rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="mt-7 inline-flex items-center rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
             >
               Explorar catálogo
               <span className="ml-3">
@@ -229,22 +292,26 @@ export default async function Home({
           aria-labelledby="categories-heading"
           className="scroll-mt-40 border-b border-white/7"
         >
-          <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
-            <div className="mb-4 flex items-end justify-between gap-4">
-              <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-                  Shop by category
-                </p>
-                <h2
-                  id="categories-heading"
-                  className="mt-1.5 text-xl font-black tracking-[-0.025em]"
-                >
-                  Encontra o próximo upgrade
-                </h2>
-              </div>
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="mb-5">
+              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+                Shop by category
+              </p>
+              <h2
+                id="categories-heading"
+                className="mt-1.5 text-xl font-black tracking-[-0.025em]"
+              >
+                Encontra o próximo upgrade
+              </h2>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div
+              className={
+                categoryGridClass(
+                  categoryCards.length,
+                )
+              }
+            >
               {categoryCards.map(
                 ({
                   category,
@@ -268,13 +335,21 @@ export default async function Home({
           aria-label="Marcas"
           className="scroll-mt-40 border-b border-white/7 bg-[#0e1012]"
         >
-          <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-white/6 px-4 sm:grid-cols-4 sm:px-6 lg:grid-cols-8 lg:px-8">
-            {brands.map((brand) => (
-              <BrandCard
-                key={brand.id}
-                name={brand.name}
-              />
-            ))}
+          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+            <div
+              className={
+                brandGridClass(
+                  brands.length,
+                )
+              }
+            >
+              {brands.map((brand) => (
+                <BrandCard
+                  key={brand.id}
+                  name={brand.name}
+                />
+              ))}
+            </div>
           </div>
         </section>
       )}
@@ -330,25 +405,33 @@ export default async function Home({
 
           {displayedProducts.length ===
           0 ? (
-            <div className="py-14 text-center">
+            <div className="max-w-xl py-12">
               <h3 className="text-lg font-black">
-                Nenhum produto encontrado
+                {normalizedQuery
+                  ? 'Nenhum produto encontrado'
+                  : 'Ainda não existem produtos no catálogo'}
               </h3>
 
-              <p className="mt-2 text-sm text-white/42">
-                Experimenta outro nome,
-                marca ou categoria.
+              <p className="mt-2 text-sm leading-6 text-white/42">
+                {normalizedQuery
+                  ? 'Experimenta outro nome, marca ou categoria.'
+                  : 'Assim que forem adicionados produtos ativos, esta área é preenchida automaticamente.'}
               </p>
             </div>
           ) : (
-            <div className="mt-5 grid gap-px overflow-hidden bg-white/7 sm:grid-cols-2 lg:grid-cols-4">
+            <div
+              className={`mt-5 overflow-hidden bg-white/7 ${productGridClass(
+                displayedProducts.length,
+              )}`}
+            >
               {displayedProducts.map(
                 (product) => (
                   <ProductCard
                     key={product.id}
                     product={product}
                   />
-                ))}
+                ),
+              )}
             </div>
           )}
         </div>
