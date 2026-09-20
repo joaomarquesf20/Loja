@@ -200,7 +200,9 @@ export default async function Home({
     )
 
   const editorial =
-    categoryCards[0] ?? null
+    categoryCards.length >= 2
+      ? categoryCards[0]
+      : null
 
   const brandsById = new Map<
     string,
@@ -409,13 +411,13 @@ export default async function Home({
               <h3 className="text-lg font-black">
                 {normalizedQuery
                   ? 'Nenhum produto encontrado'
-                  : 'Ainda não existem produtos no catálogo'}
+                  : 'Ainda não há produtos disponíveis'}
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-white/42">
                 {normalizedQuery
                   ? 'Experimenta outro nome, marca ou categoria.'
-                  : 'Assim que forem adicionados produtos ativos, esta área é preenchida automaticamente.'}
+                  : 'Estamos a preparar a seleção PFAutoParts. Volta em breve.'}
               </p>
             </div>
           ) : (
