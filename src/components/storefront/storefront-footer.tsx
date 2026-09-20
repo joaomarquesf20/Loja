@@ -10,8 +10,8 @@ export default function StorefrontFooter({
   categories,
 }: StorefrontFooterProps) {
   return (
-    <footer className="border-t border-white/7 bg-[#080a0c] text-white">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.3fr_1fr_1fr] lg:px-8 lg:py-14">
+    <footer className="border-t border-white/6 bg-[#080a0c] text-white">
+      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-14 sm:px-6 md:grid-cols-[1.45fr_1fr_1fr] lg:gap-16 lg:px-8 lg:py-18">
         <div>
           <Link
             href="/"
@@ -27,7 +27,7 @@ export default function StorefrontFooter({
             />
           </Link>
 
-          <p className="mt-4 max-w-sm text-sm leading-6 text-white/42">
+          <p className="mt-5 max-w-sm text-sm leading-6 text-white/46">
             Jantes premium, suspensão,
             body-kits e acessórios para
             personalização automóvel.
@@ -39,7 +39,7 @@ export default function StorefrontFooter({
             Comprar
           </h2>
 
-          <nav className="mt-4 grid gap-2.5">
+          <nav className="mt-5 grid gap-3">
             {categories
               .slice(0, 5)
               .map((category) => (
@@ -68,7 +68,7 @@ export default function StorefrontFooter({
             Conta
           </h2>
 
-          <nav className="mt-4 grid gap-2.5">
+          <nav className="mt-5 grid gap-3">
             <Link
               href="/conta"
               className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
@@ -94,7 +94,7 @@ export default function StorefrontFooter({
       </div>
 
       <div className="border-t border-white/6">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-4 text-[10px] font-medium uppercase tracking-[0.08em] text-white/24 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[10px] font-medium uppercase tracking-[0.08em] text-white/24 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span>
             © {new Date().getFullYear()} PFAutoParts
           </span>

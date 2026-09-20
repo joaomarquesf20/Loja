@@ -141,14 +141,14 @@ function productGridClass(
   }
 
   if (count === 2) {
-    return 'grid max-w-3xl gap-4 sm:grid-cols-2'
+    return 'grid max-w-3xl gap-5 sm:grid-cols-2'
   }
 
   if (count === 3) {
-    return 'grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3'
+    return 'grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3'
   }
 
-  return 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'
+  return 'grid gap-5 sm:grid-cols-2 lg:grid-cols-4'
 }
 
 export default async function Home({
@@ -385,7 +385,7 @@ export default async function Home({
         aria-labelledby="products-heading"
         className="scroll-mt-40"
       >
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
           <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
@@ -451,7 +451,7 @@ export default async function Home({
       {!normalizedQuery &&
         editorial && (
           <section className="border-y border-white/7 bg-[#0e1012]">
-            <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+            <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <EditorialCard
                 category={
                   editorial.category
@@ -471,10 +471,10 @@ export default async function Home({
             aria-labelledby="more-products-heading"
             className="border-b border-white/7"
           >
-            <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+            <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
               <div className="border-b border-white/8 pb-4">
                 <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-                  Mais opções
+                  Outras escolhas
                 </p>
 
                 <h2

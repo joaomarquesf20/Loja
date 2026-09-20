@@ -13,12 +13,12 @@ export default function EditorialCard({
   return (
     <Link
       href={`/categorias/${category.slug}`}
-      className="group relative isolate block min-h-[19rem] overflow-hidden rounded-sm bg-[#15181b] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      className="group relative isolate block min-h-[22rem] overflow-hidden rounded-sm bg-[#15181b] text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
       {image && (
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-[1.025]"
+          className="absolute inset-0 bg-cover bg-center transition duration-700 group-hover:scale-[1.02]"
           style={{
             backgroundImage: `url("${image}")`,
           }}
@@ -30,12 +30,12 @@ export default function EditorialCard({
         className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,10,11,0.9)_0%,rgba(8,10,11,0.7)_42%,rgba(8,10,11,0.2)_78%,rgba(8,10,11,0.08)_100%)]"
       />
 
-      <div className="relative flex min-h-[19rem] max-w-xl flex-col justify-center p-7 sm:p-10">
+      <div className="relative flex min-h-[22rem] max-w-2xl flex-col justify-center p-8 sm:p-11 lg:p-12">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">
           Personalização automóvel
         </p>
 
-        <h3 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">
+        <h3 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-[2.65rem]">
           {category.name}.
           <span className="block text-white/72">
             Mais presença. Mais identidade.

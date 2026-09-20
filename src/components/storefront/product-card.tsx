@@ -15,10 +15,10 @@ function ProductImage({
 
   if (!image) {
     return (
-      <div className="relative flex aspect-[5/4] items-center justify-center overflow-hidden bg-[#171a1d]">
+      <div className="relative flex aspect-[6/5] items-center justify-center overflow-hidden bg-[#171a1d]">
         <div
           aria-hidden="true"
-          className="size-24 rounded-full border-[14px] border-white/8"
+          className="size-28 rounded-full border-[16px] border-white/8"
         />
 
         <span className="absolute bottom-4 text-[10px] font-bold uppercase tracking-[0.12em] text-white/24">
@@ -32,7 +32,7 @@ function ProductImage({
     <div
       role="img"
       aria-label={product.name}
-      className="aspect-[5/4] bg-[#171a1d] bg-contain bg-center bg-no-repeat transition duration-300 group-hover:scale-[1.02]"
+      className="aspect-[6/5] bg-[#171a1d] bg-contain bg-center bg-no-repeat transition duration-300 group-hover:scale-[1.015]"
       style={{
         backgroundImage: `url("${image}")`,
       }}
@@ -55,12 +55,15 @@ export default function ProductCard({
         />
       </Link>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
+      <div className="flex flex-1 flex-col px-5 pb-5 pt-4">
         <div className="flex min-h-4 items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.09em]">
-          <span className="truncate text-white/42">
-            {product.brand?.name ??
-              'PFAutoParts'}
-          </span>
+          {product.brand ? (
+            <span className="truncate text-white/42">
+              {product.brand.name}
+            </span>
+          ) : (
+            <span aria-hidden="true" />
+          )}
 
           <StockBadge
             inStock={product.inStock}
@@ -69,21 +72,21 @@ export default function ProductCard({
 
         <Link
           href={`/produtos/${product.slug}`}
-          className="mt-2.5 line-clamp-2 rounded-sm text-[15px] font-bold leading-snug text-white/88 transition hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="mt-2.5 min-h-[2.75rem] line-clamp-2 rounded-sm text-[15px] font-bold leading-[1.45] text-white/88 transition hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           {product.name}
         </Link>
 
-        <div className="mt-auto pt-4">
+        <div className="mt-auto pt-5">
           <Price
             value={product.price}
-            className="text-lg font-black tracking-tight text-white"
+            className="text-xl font-black tracking-tight text-white"
           />
 
-          <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
+          <div className="mt-4 grid grid-cols-[1fr_auto] items-stretch gap-2.5">
             <Link
               href={`/produtos/${product.slug}`}
-              className="inline-flex items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="inline-flex min-h-9 items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               Ver produto
             </Link>
