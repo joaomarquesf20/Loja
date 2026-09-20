@@ -16,6 +16,7 @@ import {
   type CatalogSort,
   type CatalogVehicleConfiguration,
 } from '@/server/catalog'
+import CategorySortControl from './category-sort-control'
 import MobileFilterDrawer from './mobile-filter-drawer'
 import VehicleFilter from './vehicle-filter'
 
@@ -778,89 +779,12 @@ export default async function CategoryPage({
                 />
               </MobileFilterDrawer>
 
-              <form
-                action={`/categorias/${category.slug}`}
-                method="get"
-                className="flex items-center gap-2"
-              >
-                {inStockOnly && (
-                  <input
-                    type="hidden"
-                    name="stock"
-                    value="available"
-                  />
-                )}
-
-                {selectedBrandSlugs.map(
-                  (brandSlug) => (
-                    <input
-                      key={brandSlug}
-                      type="hidden"
-                      name="brand"
-                      value={brandSlug}
-                    />
-                  ),
-                )}
-
-                {priceMin !==
-                  undefined && (
-                  <input
-                    type="hidden"
-                    name="priceMin"
-                    value={priceMin}
-                  />
-                )}
-
-                {priceMax !==
-                  undefined && (
-                  <input
-                    type="hidden"
-                    name="priceMax"
-                    value={priceMax}
-                  />
-                )}
-
-                {selectedVehicleConfigurationId && (
-                  <input
-                    type="hidden"
-                    name="vehicle"
-                    value={
-                      selectedVehicleConfigurationId
-                    }
-                  />
-                )}
-
-                <label className="sr-only" htmlFor="category-sort">
-                  Ordenar produtos
-                </label>
-
-                <select
-                  id="category-sort"
-                  name="sort"
-                  defaultValue={sort ?? ''}
-                  className="h-10 rounded-sm border border-white/10 bg-[#15181b] px-3 text-xs font-bold text-white/72 outline-none focus:border-brand/60"
-                >
-                  <option value="">
-                    Nome: A–Z
-                  </option>
-                  <option value="name-desc">
-                    Nome: Z–A
-                  </option>
-                  <option value="price-asc">
-                    Preço: menor para maior
-                  </option>
-                  <option value="price-desc">
-                    Preço: maior para menor
-                  </option>
-                </select>
-
-                <button
-                  type="submit"
-                  className="hidden h-10 rounded-sm border border-white/10 px-3 text-[10px] font-black uppercase tracking-[0.08em] text-white/58 transition hover:border-white/24 hover:text-white sm:inline-flex sm:items-center"
-                >
-                  Ordenar
-                </button>
-              </form>
+              <CategorySortControl
+                categorySlug={
+                  category.slug
+                }
+                value={sort}
+              />
             </div>
           </div>
         </div>
