@@ -3,6 +3,7 @@ import BrandCard from '@/components/storefront/brand-card'
 import CategoryCard from '@/components/storefront/category-card'
 import EditorialCard from '@/components/storefront/editorial-card'
 import ProductCard from '@/components/storefront/product-card'
+import StorefrontFooter from '@/components/storefront/storefront-footer'
 import {
   getStorefrontCategoryImage,
   isStorefrontCategoryVisible,
@@ -230,10 +231,15 @@ export default async function Home({
     )
     .slice(0, 8)
 
-  const displayedProducts =
+  const highlightedProducts =
     normalizedQuery
-      ? visibleProducts
-      : products.slice(0, 8)
+      ? visibleProducts.slice(0, 8)
+      : products.slice(0, 4)
+
+  const additionalProducts =
+    normalizedQuery
+      ? []
+      : products.slice(4, 8)
 
   return (
     <main className="flex-1 bg-[#0b0d0f] text-white">
@@ -356,27 +362,12 @@ export default async function Home({
         </section>
       )}
 
-      {editorial && (
-        <section className="border-b border-white/7">
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <EditorialCard
-              category={
-                editorial.category
-              }
-              image={
-                editorial.image
-              }
-            />
-          </div>
-        </section>
-      )}
-
       <section
         id="produtos"
         aria-labelledby="products-heading"
         className="scroll-mt-40"
       >
-        <div className="mx-auto max-w-7xl px-4 py-9 sm:px-6 lg:px-8 lg:py-11">
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
             <div>
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
@@ -405,7 +396,7 @@ export default async function Home({
             )}
           </div>
 
-          {displayedProducts.length ===
+          {highlightedProducts.length ===
           0 ? (
             <div className="max-w-xl py-12">
               <h3 className="text-lg font-black">
@@ -422,11 +413,11 @@ export default async function Home({
             </div>
           ) : (
             <div
-              className={`mt-5 ${productGridClass(
-                displayedProducts.length,
+              className={`mt-6 ${productGridClass(
+                highlightedProducts.length,
               )}`}
             >
-              {displayedProducts.map(
+              {highlightedProducts.map(
                 (product) => (
                   <ProductCard
                     key={product.id}
@@ -439,25 +430,66 @@ export default async function Home({
         </div>
       </section>
 
-      <section className="border-t border-white/7 bg-[#111315]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-              PFAutoParts
-            </p>
-            <h2 className="mt-1.5 text-xl font-black tracking-tight sm:text-2xl">
-              O teu projeto começa com a escolha certa.
-            </h2>
-          </div>
+      {!normalizedQuery &&
+        editorial && (
+          <section className="border-y border-white/7 bg-[#0e1012]">
+            <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+              <EditorialCard
+                category={
+                  editorial.category
+                }
+                image={
+                  editorial.image
+                }
+              />
+            </div>
+          </section>
+        )}
 
-          <Link
-            href="/#categorias"
-            className="inline-flex w-fit border-b border-brand pb-1 text-[10px] font-black uppercase tracking-[0.1em] text-white"
+      {!normalizedQuery &&
+        additionalProducts.length >
+          0 && (
+          <section
+            aria-labelledby="more-products-heading"
+            className="border-b border-white/7"
           >
-            Explorar categorias
-          </Link>
-        </div>
-      </section>
+            <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+              <div className="border-b border-white/8 pb-4">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+                  Catálogo
+                </p>
+
+                <h2
+                  id="more-products-heading"
+                  className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
+                >
+                  Mais do catálogo
+                </h2>
+              </div>
+
+              <div
+                className={`mt-6 ${productGridClass(
+                  additionalProducts.length,
+                )}`}
+              >
+                {additionalProducts.map(
+                  (product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                    />
+                  ),
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+      <StorefrontFooter
+        categories={
+          storefrontCategories
+        }
+      />
     </main>
   )
 }
