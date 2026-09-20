@@ -15,7 +15,7 @@ function ProductImage({
 
   if (!image) {
     return (
-      <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden bg-[#171a1d]">
+      <div className="relative flex aspect-[5/4] items-center justify-center overflow-hidden bg-[#171a1d]">
         <div
           aria-hidden="true"
           className="size-24 rounded-full border-[14px] border-white/8"
@@ -32,7 +32,7 @@ function ProductImage({
     <div
       role="img"
       aria-label={product.name}
-      className="aspect-[4/3] bg-[#171a1d] bg-contain bg-center bg-no-repeat transition duration-300 group-hover:scale-[1.02]"
+      className="aspect-[5/4] bg-[#171a1d] bg-contain bg-center bg-no-repeat transition duration-300 group-hover:scale-[1.02]"
       style={{
         backgroundImage: `url("${image}")`,
       }}
@@ -56,7 +56,7 @@ export default function ProductCard({
       </Link>
 
       <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
-        <div className="flex min-h-4 items-center justify-between gap-3 text-[9px] font-black uppercase tracking-[0.1em]">
+        <div className="flex min-h-4 items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.09em]">
           <span className="truncate text-white/42">
             {product.brand?.name ??
               'PFAutoParts'}
@@ -69,7 +69,7 @@ export default function ProductCard({
 
         <Link
           href={`/produtos/${product.slug}`}
-          className="mt-2 line-clamp-2 rounded-sm text-sm font-bold leading-snug text-white/88 transition hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="mt-2.5 line-clamp-2 rounded-sm text-[15px] font-bold leading-snug text-white/88 transition hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           {product.name}
         </Link>

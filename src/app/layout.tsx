@@ -8,6 +8,7 @@ import Providers from './providers'
 import SiteHeader from './site-header'
 import { listCatalogCategories } from '@/server/catalog'
 import { getCommercialSettings } from '@/server/commercial-settings'
+import { isStorefrontCategoryVisible } from '@/lib/storefront-category-media'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -30,8 +31,13 @@ async function getHeaderCategories() {
     const categories =
       await listCatalogCategories()
 
-    const topLevel =
+    const commercialCategories =
       categories.filter(
+        isStorefrontCategoryVisible,
+      )
+
+    const topLevel =
+      commercialCategories.filter(
         (category) =>
           category.parentId === null,
       )
@@ -39,7 +45,7 @@ async function getHeaderCategories() {
     return (
       topLevel.length > 0
         ? topLevel
-        : categories
+        : commercialCategories
     )
       .slice(0, 7)
       .map((category) => ({

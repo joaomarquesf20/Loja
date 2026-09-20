@@ -7,7 +7,7 @@ export default function StockBadge({
 }: StockBadgeProps) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+      className={`inline-flex items-center gap-1.5 text-[10px] font-semibold ${
         inStock
           ? 'text-success'
           : 'text-danger'

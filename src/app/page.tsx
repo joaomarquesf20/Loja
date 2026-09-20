@@ -4,6 +4,10 @@ import CategoryCard from '@/components/storefront/category-card'
 import EditorialCard from '@/components/storefront/editorial-card'
 import ProductCard from '@/components/storefront/product-card'
 import {
+  getStorefrontCategoryImage,
+  isStorefrontCategoryVisible,
+} from '@/lib/storefront-category-media'
+import {
   listCatalogCategories,
   listCatalogProducts,
   type CatalogCategory,
@@ -22,15 +26,6 @@ type HomeProps = {
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=88'
 
-const CURATED_IMAGES = [
-  'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=82',
-  'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1000&q=82',
-  'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1000&q=82',
-  'https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&w=1000&q=82',
-  'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=1000&q=82',
-  'https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=1000&q=82',
-]
-
 function firstProductImage(
   products: CatalogProduct[],
 ) {
@@ -44,23 +39,24 @@ function firstProductImage(
 function getCategoryImage(
   category: CatalogCategory,
   products: CatalogProduct[],
-  index: number,
 ) {
-  const ownProductImage =
+  const curatedImage =
+    getStorefrontCategoryImage(
+      category,
+    )
+
+  if (curatedImage) {
+    return curatedImage
+  }
+
+  return (
     firstProductImage(
       products.filter(
         (product) =>
           product.category.id ===
           category.id,
       ),
-    )
-
-  return (
-    ownProductImage ??
-    CURATED_IMAGES[
-      index %
-        CURATED_IMAGES.length
-    ]
+    ) ?? null
   )
 }
 
@@ -174,8 +170,13 @@ export default async function Home({
       ),
     )
 
-  const topLevelCategories =
+  const commercialCategories =
     categories.filter(
+      isStorefrontCategoryVisible,
+    )
+
+  const topLevelCategories =
+    commercialCategories.filter(
       (category) =>
         category.parentId === null,
     )
@@ -184,17 +185,16 @@ export default async function Home({
     (
       topLevelCategories.length > 0
         ? topLevelCategories
-        : categories
+        : commercialCategories
     ).slice(0, 6)
 
   const categoryCards =
     storefrontCategories.map(
-      (category, index) => ({
+      (category) => ({
         category,
         image: getCategoryImage(
           category,
           products,
-          index,
         ),
       }),
     )
