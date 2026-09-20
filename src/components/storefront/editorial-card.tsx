@@ -32,7 +32,7 @@ export default function EditorialCard({
 
       <div className="relative flex min-h-[19rem] max-w-xl flex-col justify-center p-7 sm:p-10">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">
-          Build your way
+          Ao teu estilo
         </p>
 
         <h3 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">

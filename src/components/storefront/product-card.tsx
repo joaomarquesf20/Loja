@@ -44,7 +44,7 @@ export default function ProductCard({
   product,
 }: ProductCardProps) {
   return (
-    <article className="group flex h-full flex-col bg-[#111315]">
+    <article className="group flex h-full flex-col overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 transition hover:ring-white/12">
       <Link
         href={`/produtos/${product.slug}`}
         aria-label={`Ver ${product.name}`}
@@ -55,7 +55,7 @@ export default function ProductCard({
         />
       </Link>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-3">
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5">
         <div className="flex min-h-4 items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.09em]">
           <span className="truncate text-white/42">
             {product.brand?.name ??
@@ -80,7 +80,7 @@ export default function ProductCard({
             className="text-lg font-black tracking-tight text-white"
           />
 
-          <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+          <div className="mt-4 grid grid-cols-[1fr_auto] gap-2">
             <Link
               href={`/produtos/${product.slug}`}
               className="inline-flex items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"

@@ -113,22 +113,22 @@ function brandGridClass(
   count: number,
 ) {
   if (count === 1) {
-    return 'grid max-w-xs grid-cols-1'
+    return 'grid max-w-xs grid-cols-1 gap-2'
   }
 
   if (count === 2) {
-    return 'grid max-w-lg grid-cols-2'
+    return 'grid max-w-lg grid-cols-2 gap-2'
   }
 
   if (count === 3) {
-    return 'grid max-w-2xl grid-cols-3'
+    return 'grid max-w-2xl grid-cols-3 gap-2'
   }
 
   if (count <= 5) {
-    return 'grid max-w-4xl grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+    return 'grid max-w-4xl grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5'
   }
 
-  return 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8'
+  return 'grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8'
 }
 
 function productGridClass(
@@ -139,14 +139,14 @@ function productGridClass(
   }
 
   if (count === 2) {
-    return 'grid max-w-3xl gap-px sm:grid-cols-2'
+    return 'grid max-w-3xl gap-4 sm:grid-cols-2'
   }
 
   if (count === 3) {
-    return 'grid max-w-5xl gap-px sm:grid-cols-2 lg:grid-cols-3'
+    return 'grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3'
   }
 
-  return 'grid gap-px sm:grid-cols-2 lg:grid-cols-4'
+  return 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'
 }
 
 export default async function Home({
@@ -259,7 +259,7 @@ export default async function Home({
         <div className="relative mx-auto flex min-h-[21rem] max-w-7xl items-center px-4 py-9 sm:min-h-[23rem] sm:px-6 lg:min-h-[24rem] lg:px-8">
           <div className="max-w-xl">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand">
-              Premium aftermarket
+              Aftermarket premium
             </p>
 
             <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-[3.5rem]">
@@ -297,7 +297,7 @@ export default async function Home({
           <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
             <div className="mb-5">
               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-                Shop by category
+                Comprar por categoria
               </p>
               <h2
                 id="categories-heading"
@@ -335,9 +335,9 @@ export default async function Home({
         <section
           id="marcas"
           aria-label="Marcas"
-          className="scroll-mt-40 border-b border-white/7 bg-[#0e1012]"
+          className="scroll-mt-40 border-b border-white/6 bg-[#0e1012]"
         >
-          <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-3.5 sm:px-6 lg:px-8">
             <div
               className={
                 brandGridClass(
@@ -422,7 +422,7 @@ export default async function Home({
             </div>
           ) : (
             <div
-              className={`mt-5 overflow-hidden bg-white/7 ${productGridClass(
+              className={`mt-5 ${productGridClass(
                 displayedProducts.length,
               )}`}
             >
@@ -446,7 +446,7 @@ export default async function Home({
               PFAutoParts
             </p>
             <h2 className="mt-1.5 text-xl font-black tracking-tight sm:text-2xl">
-              A tua build começa com a escolha certa.
+              O teu projeto começa com a escolha certa.
             </h2>
           </div>
 

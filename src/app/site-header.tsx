@@ -20,7 +20,7 @@ type SiteHeaderProps = {
 }
 
 const navLinkClass =
-  'whitespace-nowrap py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white/62 transition hover:text-white focus:outline-none focus-visible:text-white'
+  'whitespace-nowrap py-2.5 text-[11px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:text-white focus:outline-none focus-visible:text-white'
 
 function SearchIcon() {
   return (
@@ -175,14 +175,14 @@ export default function SiteHeader({
   return (
     <header className="sticky top-0 z-50 bg-[#0b0d0f] text-white shadow-[0_1px_0_rgba(255,255,255,0.08)]">
       {commercialMessage && (
-        <div className="border-b border-white/7 bg-black/30">
-          <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/48 sm:px-6 lg:px-8">
+        <div className="border-b border-white/6 bg-black/25">
+          <div className="mx-auto flex max-w-7xl items-center justify-center px-4 py-1 text-[11px] font-medium tracking-[0.025em] text-white/48 sm:px-6 lg:px-8">
             {commercialMessage}
           </div>
         </div>
       )}
 
-      <div className="mx-auto grid max-w-7xl grid-cols-[auto_auto] items-center gap-x-3 gap-y-3 px-4 py-3 sm:px-6 md:grid-cols-[210px_minmax(320px,1fr)_auto] lg:gap-x-6 lg:px-8">
+      <div className="mx-auto grid max-w-7xl grid-cols-[auto_auto] items-center gap-x-3 gap-y-2.5 px-4 py-2.5 sm:px-6 md:grid-cols-[210px_minmax(320px,1fr)_auto] lg:gap-x-6 lg:px-8">
         <Link
           href="/"
           aria-label="PFAUTOPARTS"
@@ -202,7 +202,7 @@ export default function SiteHeader({
           action="/#produtos"
           method="get"
           role="search"
-          className="order-3 col-span-2 flex h-11 min-w-0 overflow-hidden rounded-md border border-white/12 bg-[#171a1d] transition focus-within:border-brand/65 focus-within:ring-1 focus-within:ring-brand/35 md:order-none md:col-span-1"
+          className="order-3 col-span-2 flex h-10 min-w-0 overflow-hidden rounded-md border border-white/12 bg-[#171a1d] transition focus-within:border-brand/65 focus-within:ring-1 focus-within:ring-brand/35 md:order-none md:col-span-1"
         >
           <span className="pointer-events-none grid w-10 shrink-0 place-items-center text-white/34">
             <SearchIcon />
@@ -243,7 +243,7 @@ export default function SiteHeader({
                       !current,
                   )
                 }
-                className="inline-flex h-10 items-center gap-2 rounded-md px-2.5 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className="inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <UserIcon />
                 <span className="hidden lg:inline">
@@ -337,7 +337,7 @@ export default function SiteHeader({
           <Link
             href="/carrinho"
             aria-label="Carrinho"
-            className="inline-flex h-10 items-center gap-2 rounded-md border border-brand/45 bg-brand/10 px-3 text-sm font-black text-brand transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-brand/45 bg-brand/10 px-3 text-sm font-black text-brand transition hover:bg-brand hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <CartIcon />
             <span className="hidden xl:inline">
