@@ -227,7 +227,7 @@ export default function SiteHeader({
         <div className="flex items-center justify-end gap-1">
           {status === 'loading' ? (
             <span className="hidden px-2 text-xs text-white/40 xl:inline">
-              A verificar…
+              A verificar sessão…
             </span>
           ) : user ? (
             <>
