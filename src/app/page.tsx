@@ -216,6 +216,7 @@ export default async function Home() {
         >
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
             <SectionHeading
+              id="categories-heading"
               eyebrow="Shop the build"
               title="Compra por categoria"
               description="Explora as categorias que existem atualmente no catálogo PFAutoParts."
@@ -274,6 +275,7 @@ export default async function Home() {
       >
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <SectionHeading
+            id="products-heading"
             eyebrow="PFAutoParts"
             title="Produtos do catálogo"
             description="Produtos reais atualmente disponíveis na loja, com preço e stock fornecidos pelo catálogo existente."
@@ -313,6 +315,7 @@ export default async function Home() {
         >
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
             <SectionHeading
+              id="brands-heading"
               eyebrow="Brands"
               title="Marcas no catálogo"
               description="Fabricantes presentes nos produtos ativos da PFAutoParts."

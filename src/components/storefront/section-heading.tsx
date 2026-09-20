@@ -1,4 +1,5 @@
 type SectionHeadingProps = {
+  id?: string
   eyebrow?: string
   title: string
   description?: string
@@ -6,6 +7,7 @@ type SectionHeadingProps = {
 }
 
 export default function SectionHeading({
+  id,
   eyebrow,
   title,
   description,
@@ -20,7 +22,10 @@ export default function SectionHeading({
           </p>
         )}
 
-        <h2 className="mt-2 text-2xl font-black tracking-[-0.025em] text-foreground sm:text-3xl">
+        <h2
+          id={id}
+          className="mt-2 text-2xl font-black tracking-[-0.025em] text-foreground sm:text-3xl"
+        >
           {title}
         </h2>
 
