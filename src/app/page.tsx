@@ -7,13 +7,30 @@ import SectionHeading from '@/components/storefront/section-heading'
 import {
   listCatalogCategories,
   listCatalogProducts,
+  type CatalogCategory,
   type CatalogProduct,
 } from '@/server/catalog'
 
 export const dynamic =
   'force-dynamic'
 
-function firstImage(
+type HomeProps = {
+  searchParams: Promise<{
+    q?: string | string[]
+  }>
+}
+
+const CURATED_CATEGORY_IMAGES = [
+  'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=1200&q=80',
+  'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1200&q=80',
+]
+
+const HERO_IMAGE =
+  'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=85'
+
+function firstProductImage(
   products: CatalogProduct[],
 ) {
   return products
@@ -23,42 +40,94 @@ function firstImage(
     .find(Boolean)
 }
 
-export default async function Home() {
-  const [products, categories] =
+function getCategoryImage(
+  category: CatalogCategory,
+  products: CatalogProduct[],
+  index: number,
+) {
+  const ownProductImage =
+    firstProductImage(
+      products.filter(
+        (product) =>
+          product.category.id ===
+          category.id,
+      ),
+    )
+
+  return (
+    ownProductImage ??
+    CURATED_CATEGORY_IMAGES[
+      index %
+        CURATED_CATEGORY_IMAGES.length
+    ]
+  )
+}
+
+function normalizeSearchQuery(
+  rawQuery: string | string[] | undefined,
+) {
+  const value = Array.isArray(rawQuery)
+    ? rawQuery[0]
+    : rawQuery
+
+  return value?.trim().toLocaleLowerCase(
+    'pt-PT',
+  ) ?? ''
+}
+
+function matchesSearch(
+  product: CatalogProduct,
+  query: string,
+) {
+  if (!query) {
+    return true
+  }
+
+  const searchableValues = [
+    product.name,
+    product.brand?.name ?? '',
+    product.category.name,
+  ]
+
+  return searchableValues.some(
+    (value) =>
+      value
+        .toLocaleLowerCase('pt-PT')
+        .includes(query),
+  )
+}
+
+export default async function Home({
+  searchParams,
+}: HomeProps) {
+  const [{ q }, products, categories] =
     await Promise.all([
+      searchParams,
       listCatalogProducts(),
       listCatalogCategories(),
     ])
 
-  const heroImages = products
-    .flatMap((product) =>
-      product.images.map(
-        (image) => ({
-          image,
-          product,
-        }),
+  const normalizedQuery =
+    normalizeSearchQuery(q)
+
+  const visibleProducts =
+    products.filter((product) =>
+      matchesSearch(
+        product,
+        normalizedQuery,
       ),
     )
-    .slice(0, 3)
 
   const categoryCards =
     categories.slice(0, 8).map(
-      (category) => {
-        const categoryProducts =
-          products.filter(
-            (product) =>
-              product.category.id ===
-              category.id,
-          )
-
-        return {
+      (category, index) => ({
+        category,
+        image: getCategoryImage(
           category,
-          image:
-            firstImage(
-              categoryProducts,
-            ) ?? null,
-        }
-      },
+          products,
+          index,
+        ),
+      }),
     )
 
   const editorialCategories =
@@ -90,120 +159,54 @@ export default async function Home() {
 
   return (
     <main className="flex-1 bg-background text-foreground">
-      <section className="relative overflow-hidden bg-[#101316] text-white">
+      <section className="relative isolate overflow-hidden bg-[#101316] text-white">
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(239,91,42,0.17),transparent_28%),linear-gradient(120deg,#101316_0%,#171b1f_68%,#0e1012_100%)]"
+          className="absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `url("${HERO_IMAGE}")`,
+          }}
         />
 
-        <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:px-8 lg:py-20">
-          <div className="relative z-10">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(10,12,14,0.95)_0%,rgba(10,12,14,0.82)_38%,rgba(10,12,14,0.35)_70%,rgba(10,12,14,0.2)_100%)]"
+        />
+
+        <div className="relative mx-auto flex min-h-[24rem] max-w-7xl items-center px-4 py-10 sm:px-6 lg:min-h-[27rem] lg:px-8">
+          <div className="max-w-2xl">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">
               Styling · Performance · Aftermarket
             </p>
 
-            <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
-              Dá outra identidade
+            <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-6xl">
+              Constrói o carro
               <span className="block text-brand">
-                ao teu carro.
+                à tua maneira.
               </span>
             </h1>
 
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/65 sm:text-lg">
-              Jantes, exterior,
-              suspensão, iluminação e
-              componentes para quem vive
-              o automóvel para além do
-              original.
+            <p className="mt-5 max-w-xl text-base leading-7 text-white/70 sm:text-lg">
+              Peças e acessórios para
+              transformar presença,
+              comportamento e carácter.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <Link
                 href="/#categorias"
-                className="rounded-xl bg-brand px-5 py-3 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#101316]"
+                className="rounded-xl bg-brand px-5 py-3 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 Comprar agora
               </Link>
 
               <Link
                 href="/#produtos"
-                className="rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#101316]"
+                className="rounded-xl border border-white/25 bg-black/20 px-5 py-3 text-sm font-black text-white backdrop-blur transition hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
-                Explorar produtos
+                Ver produtos
               </Link>
             </div>
-
-            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-[0.11em] text-white/45">
-              <span>Aftermarket</span>
-              <span>Styling</span>
-              <span>Performance</span>
-            </div>
-          </div>
-
-          <div className="relative min-h-[22rem] sm:min-h-[28rem]">
-            {heroImages.length > 0 ? (
-              <div className="absolute inset-0 grid grid-cols-5 grid-rows-5 gap-3">
-                {heroImages[0] && (
-                  <div
-                    className="col-span-4 row-span-5 overflow-hidden rounded-3xl bg-white/5 bg-cover bg-center shadow-2xl shadow-black/25"
-                    style={{
-                      backgroundImage: `url("${heroImages[0].image}")`,
-                    }}
-                    role="img"
-                    aria-label={
-                      heroImages[0]
-                        .product.name
-                    }
-                  />
-                )}
-
-                {heroImages[1] && (
-                  <div
-                    className="col-span-1 row-span-2 overflow-hidden rounded-2xl bg-white/5 bg-cover bg-center"
-                    style={{
-                      backgroundImage: `url("${heroImages[1].image}")`,
-                    }}
-                    role="img"
-                    aria-label={
-                      heroImages[1]
-                        .product.name
-                    }
-                  />
-                )}
-
-                {heroImages[2] && (
-                  <div
-                    className="col-span-1 row-span-3 overflow-hidden rounded-2xl bg-white/5 bg-cover bg-center"
-                    style={{
-                      backgroundImage: `url("${heroImages[2].image}")`,
-                    }}
-                    role="img"
-                    aria-label={
-                      heroImages[2]
-                        .product.name
-                    }
-                  />
-                )}
-              </div>
-            ) : (
-              <div className="absolute inset-0 overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_70%_22%,rgba(239,91,42,0.42),transparent_24%),linear-gradient(145deg,#2a3035_0%,#15181c_62%)] shadow-2xl shadow-black/25">
-                <div
-                  aria-hidden="true"
-                  className="absolute -right-10 top-1/2 size-72 -translate-y-1/2 rounded-full border-[42px] border-white/8 shadow-[inset_0_0_0_12px_rgba(255,255,255,0.03)] sm:size-96 sm:border-[58px]"
-                />
-
-                <div className="absolute bottom-7 left-7 max-w-xs">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">
-                    PFAutoParts
-                  </p>
-
-                  <p className="mt-2 text-xl font-black leading-tight text-white/90">
-                    A tua base para um
-                    projeto com identidade.
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -212,17 +215,17 @@ export default async function Home() {
         <section
           id="categorias"
           aria-labelledby="categories-heading"
-          className="scroll-mt-28"
+          className="scroll-mt-36"
         >
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
             <SectionHeading
               id="categories-heading"
-              eyebrow="Shop the build"
+              eyebrow="Explorar"
               title="Compra por categoria"
-              description="Explora as categorias que existem atualmente no catálogo PFAutoParts."
+              description="Entra diretamente nas categorias disponíveis no catálogo PFAutoParts."
             />
 
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {categoryCards.map(
                 ({
                   category,
@@ -240,11 +243,76 @@ export default async function Home() {
         </section>
       )}
 
+      <section
+        id="produtos"
+        aria-labelledby="products-heading"
+        className="scroll-mt-36 border-y border-line bg-surface"
+      >
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
+          <SectionHeading
+            id="products-heading"
+            eyebrow="Catálogo"
+            title={
+              normalizedQuery
+                ? 'Resultados da pesquisa'
+                : 'Produtos para o próximo upgrade'
+            }
+            description={
+              normalizedQuery
+                ? `Resultados encontrados para “${Array.isArray(q) ? q[0] : q}”.`
+                : 'Produtos reais atualmente disponíveis no catálogo, com marca, preço e disponibilidade.'
+            }
+            aside={
+              normalizedQuery ? (
+                <Link
+                  href="/#produtos"
+                  className="text-sm font-black text-brand hover:underline hover:underline-offset-4"
+                >
+                  Limpar pesquisa
+                </Link>
+              ) : undefined
+            }
+          />
+
+          {visibleProducts.length ===
+          0 ? (
+            <div className="mt-8 rounded-3xl border border-dashed border-line bg-background p-10 text-center sm:p-14">
+              <h3 className="text-xl font-black">
+                Nenhum produto encontrado
+              </h3>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
+                Experimenta pesquisar por
+                outro nome, marca ou
+                categoria.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {visibleProducts
+                .slice(0, 8)
+                .map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                  />
+                ))}
+            </div>
+          )}
+        </div>
+      </section>
+
       {editorialCategories.length >
         0 && (
-        <section className="border-y border-line bg-surface">
+        <section className="bg-background">
           <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-            <div className="grid gap-4 lg:grid-cols-2 lg:grid-rows-2">
+            <SectionHeading
+              eyebrow="Build inspiration"
+              title="Muda a presença. Muda a experiência."
+              description="Explora algumas das áreas do catálogo e encontra a próxima direção para o teu projeto."
+            />
+
+            <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:grid-rows-2">
               {editorialCategories.map(
                 (
                   {
@@ -268,60 +336,21 @@ export default async function Home() {
         </section>
       )}
 
-      <section
-        id="produtos"
-        aria-labelledby="products-heading"
-        className="scroll-mt-28"
-      >
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-          <SectionHeading
-            id="products-heading"
-            eyebrow="PFAutoParts"
-            title="Produtos do catálogo"
-            description="Produtos reais atualmente disponíveis na loja, com preço e stock fornecidos pelo catálogo existente."
-          />
-
-          {products.length === 0 ? (
-            <div className="mt-8 rounded-3xl border border-dashed border-line bg-surface p-12 text-center">
-              <h3 className="text-xl font-black">
-                Catálogo sem produtos
-              </h3>
-
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
-                Neste momento não existem
-                produtos disponíveis.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {products.map(
-                (product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                  />
-                ),
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
       {brands.length > 0 && (
         <section
           id="marcas"
           aria-labelledby="brands-heading"
-          className="scroll-mt-28 border-t border-line bg-surface"
+          className="scroll-mt-36 border-t border-line bg-surface"
         >
-          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
+          <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
             <SectionHeading
               id="brands-heading"
-              eyebrow="Brands"
-              title="Marcas no catálogo"
-              description="Fabricantes presentes nos produtos ativos da PFAutoParts."
+              eyebrow="Marcas"
+              title="Escolhe pelo fabricante"
+              description="Marcas presentes nos produtos ativos da loja."
             />
 
-            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
               {brands
                 .slice(0, 10)
                 .map((brand) => (
@@ -336,7 +365,7 @@ export default async function Home() {
       )}
 
       <section className="bg-brand text-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-9 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-white/65">
               PFAutoParts

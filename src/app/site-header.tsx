@@ -8,8 +8,42 @@ import {
 } from 'next-auth/react'
 import { useState } from 'react'
 
+type HeaderCategory = {
+  name: string
+  slug: string
+}
+
+type SiteHeaderProps = {
+  categories?: HeaderCategory[]
+}
+
 const navLinkClass =
-  'whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold text-white/70 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+  'whitespace-nowrap py-3 text-xs font-black uppercase tracking-[0.08em] text-white/70 transition hover:text-white focus:outline-none focus-visible:text-white focus-visible:underline focus-visible:decoration-brand focus-visible:decoration-2 focus-visible:underline-offset-8'
+
+function SearchIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="size-4"
+      fill="none"
+    >
+      <circle
+        cx="10.5"
+        cy="10.5"
+        r="5.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="m15 15 4.5 4.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
 
 function CartIcon() {
   return (
@@ -80,7 +114,9 @@ function AdminIcon() {
   )
 }
 
-export default function SiteHeader() {
+export default function SiteHeader({
+  categories = [],
+}: SiteHeaderProps) {
   const pathname = usePathname()
 
   const {
@@ -136,7 +172,18 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 bg-accent text-white shadow-[0_1px_0_rgba(255,255,255,0.08)]">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="border-b border-white/8 bg-black/20">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/45 sm:px-6 lg:px-8">
+          <span>
+            Styling · Performance · Aftermarket
+          </span>
+          <span className="hidden sm:inline">
+            PFAutoParts
+          </span>
+        </div>
+      </div>
+
+      <div className="mx-auto grid max-w-7xl grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3 sm:px-6 lg:gap-5 lg:px-8">
         <Link
           href="/"
           aria-label="PFAUTOPARTS"
@@ -149,7 +196,7 @@ export default function SiteHeader() {
             PF
           </span>
 
-          <span className="text-sm font-black tracking-[0.11em]">
+          <span className="hidden text-sm font-black tracking-[0.11em] sm:inline">
             PFAUTO
             <span className="text-brand">
               PARTS
@@ -157,35 +204,33 @@ export default function SiteHeader() {
           </span>
         </Link>
 
-        <nav
-          aria-label="Navegação principal"
-          className="hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex"
+        <form
+          action="/"
+          method="get"
+          role="search"
+          className="relative min-w-0"
         >
-          <Link
-            href="/#categorias"
-            className={navLinkClass}
-          >
-            Categorias
-          </Link>
+          <SearchIcon />
 
-          <Link
-            href="/#produtos"
-            className={navLinkClass}
-          >
-            Produtos
-          </Link>
+          <input
+            type="search"
+            name="q"
+            aria-label="Pesquisar produtos"
+            placeholder="Pesquisar produtos, marcas ou categorias..."
+            className="h-10 w-full rounded-xl border border-white/10 bg-white px-10 py-2 text-sm font-medium text-foreground outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/25"
+          />
 
-          <Link
-            href="/#marcas"
-            className={navLinkClass}
+          <button
+            type="submit"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg bg-brand px-3 py-1.5 text-xs font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
-            Marcas
-          </Link>
-        </nav>
+            Pesquisar
+          </button>
+        </form>
 
         <div className="flex items-center justify-end gap-1.5">
           {status === 'loading' ? (
-            <span className="hidden px-2 text-xs font-semibold text-white/55 sm:inline">
+            <span className="hidden px-2 text-xs font-semibold text-white/55 lg:inline">
               A verificar sessão…
             </span>
           ) : user ? (
@@ -204,7 +249,7 @@ export default function SiteHeader() {
 
               <Link
                 href="/conta"
-                className="hidden max-w-40 items-center gap-2 truncate rounded-lg px-2.5 py-2 text-sm font-bold text-white/70 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:inline-flex"
+                className="hidden max-w-36 items-center gap-2 truncate rounded-lg px-2.5 py-2 text-sm font-bold text-white/70 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
                 title={
                   user.email ??
                   undefined
@@ -222,7 +267,7 @@ export default function SiteHeader() {
                 disabled={
                   isSigningOut
                 }
-                className="hidden rounded-lg px-2.5 py-2 text-xs font-bold text-white/55 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 md:inline-flex"
+                className="hidden rounded-lg px-2 py-2 text-xs font-bold text-white/50 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 xl:inline-flex"
               >
                 {isSigningOut
                   ? 'A sair…'
@@ -242,14 +287,14 @@ export default function SiteHeader() {
             <>
               <Link
                 href="/registar"
-                className="hidden rounded-lg px-2.5 py-2 text-xs font-bold text-white/55 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
+                className="hidden rounded-lg px-2 py-2 text-xs font-bold text-white/50 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand xl:inline-flex"
               >
                 Criar conta
               </Link>
 
               <Link
                 href="/login"
-                className="hidden items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-bold text-white/75 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:inline-flex"
+                className="hidden items-center gap-2 rounded-lg px-2 py-2 text-sm font-bold text-white/75 transition hover:bg-white/8 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand md:inline-flex"
               >
                 <UserIcon />
                 Entrar
@@ -259,10 +304,11 @@ export default function SiteHeader() {
 
           <Link
             href="/carrinho"
-            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3.5 py-2 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            aria-label="Carrinho"
+            className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2.5 text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <CartIcon />
-            <span className="hidden sm:inline">
+            <span className="hidden xl:inline">
               Carrinho
             </span>
           </Link>
@@ -270,23 +316,34 @@ export default function SiteHeader() {
       </div>
 
       <nav
-        aria-label="Navegação da loja em ecrã pequeno"
-        className="border-t border-white/8 lg:hidden"
+        aria-label="Navegação principal"
+        className="border-t border-white/8"
       >
-        <div className="mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto px-4 py-1.5 sm:px-6">
-          <Link
-            href="/#categorias"
-            className={navLinkClass}
-          >
-            Categorias
-          </Link>
-
-          <Link
-            href="/#produtos"
-            className={navLinkClass}
-          >
-            Produtos
-          </Link>
+        <div className="mx-auto flex max-w-7xl items-center gap-5 overflow-x-auto px-4 sm:px-6 lg:px-8">
+          {categories.length > 0 ? (
+            categories.map(
+              (category) => (
+                <Link
+                  key={
+                    category.slug
+                  }
+                  href={`/categorias/${category.slug}`}
+                  className={
+                    navLinkClass
+                  }
+                >
+                  {category.name}
+                </Link>
+              ),
+            )
+          ) : (
+            <Link
+              href="/#categorias"
+              className={navLinkClass}
+            >
+              Categorias
+            </Link>
+          )}
 
           <Link
             href="/#marcas"
@@ -294,15 +351,6 @@ export default function SiteHeader() {
           >
             Marcas
           </Link>
-
-          {user && (
-            <Link
-              href="/conta"
-              className={navLinkClass}
-            >
-              Conta
-            </Link>
-          )}
         </div>
       </nav>
     </header>

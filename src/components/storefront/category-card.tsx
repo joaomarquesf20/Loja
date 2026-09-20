@@ -32,9 +32,9 @@ export default function CategoryCard({
   return (
     <Link
       href={`/categorias/${category.slug}`}
-      className="group relative isolate min-h-56 overflow-hidden rounded-2xl bg-accent text-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-950/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="group relative isolate min-h-52 overflow-hidden rounded-2xl bg-accent text-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-950/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
-      {image ? (
+      {image && (
         <div
           aria-hidden="true"
           className="absolute inset-0 bg-cover bg-center transition duration-500 group-hover:scale-105"
@@ -42,28 +42,20 @@ export default function CategoryCard({
             backgroundImage: `url("${image}")`,
           }}
         />
-      ) : (
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[radial-gradient(circle_at_72%_26%,rgba(239,91,42,0.42),transparent_22%),linear-gradient(135deg,#242a30_0%,#121417_70%)]"
-        />
       )}
 
       <div
         aria-hidden="true"
-        className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/5"
+        className={`absolute inset-0 ${
+          image
+            ? 'bg-gradient-to-t from-black/90 via-black/35 to-black/5'
+            : 'bg-[radial-gradient(circle_at_70%_25%,rgba(239,91,42,0.48),transparent_25%),linear-gradient(135deg,#242a30_0%,#121417_72%)]'
+        }`}
       />
 
-      {!image && (
-        <div
-          aria-hidden="true"
-          className="absolute right-5 top-5 size-24 rounded-full border-[14px] border-white/8"
-        />
-      )}
-
-      <div className="relative flex h-full min-h-56 flex-col justify-end p-5">
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">
-          Explorar
+      <div className="relative flex h-full min-h-52 flex-col justify-end p-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+          Categoria
         </p>
 
         <div className="mt-2 flex items-end justify-between gap-4">
@@ -79,7 +71,7 @@ export default function CategoryCard({
             )}
           </div>
 
-          <span className="grid size-10 shrink-0 place-items-center rounded-full border border-white/20 bg-white/10 text-white transition group-hover:border-brand group-hover:bg-brand">
+          <span className="grid size-9 shrink-0 place-items-center rounded-full border border-white/20 bg-white/10 text-white transition group-hover:border-brand group-hover:bg-brand">
             <ArrowIcon />
           </span>
         </div>
