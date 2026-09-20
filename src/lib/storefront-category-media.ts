@@ -158,3 +158,102 @@ export function getStorefrontCategoryImage(
 
   return match?.visual.image ?? null
 }
+
+
+const CATEGORY_PRIORITY: Array<{
+  rank: number
+  keywords: string[]
+}> = [
+  {
+    rank: 0,
+    keywords: [
+      'jante',
+      'jantes',
+      'wheel',
+      'wheels',
+      'rim',
+      'rims',
+    ],
+  },
+  {
+    rank: 1,
+    keywords: [
+      'suspensao',
+      'suspensão',
+      'coilover',
+      'coilovers',
+      'mola',
+      'molas',
+      'amortecedor',
+      'amortecedores',
+      'suspension',
+    ],
+  },
+  {
+    rank: 2,
+    keywords: [
+      'exterior',
+      'bodykit',
+      'body-kit',
+      'body kit',
+      'splitter',
+      'spoiler',
+      'difusor',
+      'carrocaria',
+      'carroçaria',
+    ],
+  },
+  {
+    rank: 3,
+    keywords: [
+      'personalizacao',
+      'personalização',
+      'styling',
+      'acessorio',
+      'acessório',
+      'acessorios',
+      'acessórios',
+      'interior',
+    ],
+  },
+]
+
+function getCategoryPriority(
+  category: StorefrontCategoryLike,
+) {
+  const searchable = normalize(
+    `${category.name} ${category.slug}`,
+  )
+
+  return (
+    CATEGORY_PRIORITY.find(
+      ({ keywords }) =>
+        keywords.some((keyword) =>
+          searchable.includes(
+            normalize(keyword),
+          ),
+        ),
+    )?.rank ?? 99
+  )
+}
+
+export function sortStorefrontCategories<
+  T extends StorefrontCategoryLike,
+>(categories: T[]) {
+  return [...categories].sort(
+    (first, second) => {
+      const priorityDifference =
+        getCategoryPriority(first) -
+        getCategoryPriority(second)
+
+      if (priorityDifference !== 0) {
+        return priorityDifference
+      }
+
+      return first.name.localeCompare(
+        second.name,
+        'pt-PT',
+      )
+    },
+  )
+}

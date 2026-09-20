@@ -28,9 +28,9 @@ export default function StorefrontFooter({
           </Link>
 
           <p className="mt-4 max-w-sm text-sm leading-6 text-white/42">
-            Aftermarket automóvel,
-            styling, performance e
-            acessórios para projetos com
+            Jantes premium, suspensões,
+            body-kits e personalização
+            automóvel para projetos com
             identidade.
           </p>
         </div>
@@ -101,7 +101,7 @@ export default function StorefrontFooter({
           </span>
 
           <span>
-            Performance · Styling · Aftermarket
+            Jantes · Suspensão · Body-kits · Personalização
           </span>
         </div>
       </div>

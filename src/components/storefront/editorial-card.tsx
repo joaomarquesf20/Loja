@@ -32,20 +32,21 @@ export default function EditorialCard({
 
       <div className="relative flex min-h-[19rem] max-w-xl flex-col justify-center p-7 sm:p-10">
         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-brand">
-          Ao teu estilo
+          Personalização automóvel
         </p>
 
         <h3 className="mt-3 text-3xl font-black tracking-[-0.035em] sm:text-4xl">
           {category.name}.
           <span className="block text-white/72">
-            Mais presença. Mais carácter.
+            Mais presença. Mais identidade.
           </span>
         </h3>
 
         <p className="mt-4 max-w-md text-sm leading-6 text-white/58">
           Explora a categoria e encontra
-          componentes para levar o teu
-          projeto noutra direção.
+          componentes para definir o visual,
+          a postura e a identidade do teu
+          projeto.
         </p>
 
         <span className="mt-5 w-fit border-b border-brand pb-1 text-xs font-black uppercase tracking-[0.1em]">

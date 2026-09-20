@@ -8,7 +8,10 @@ import Providers from './providers'
 import SiteHeader from './site-header'
 import { listCatalogCategories } from '@/server/catalog'
 import { getCommercialSettings } from '@/server/commercial-settings'
-import { isStorefrontCategoryVisible } from '@/lib/storefront-category-media'
+import {
+  isStorefrontCategoryVisible,
+  sortStorefrontCategories,
+} from '@/lib/storefront-category-media'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -23,7 +26,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'PFAUTOPARTS',
   description:
-    'Aftermarket automóvel, styling, performance e acessórios.',
+    'Jantes premium, suspensões, body-kits e personalização automóvel.',
 }
 
 async function getHeaderCategories() {
@@ -32,8 +35,10 @@ async function getHeaderCategories() {
       await listCatalogCategories()
 
     const commercialCategories =
-      categories.filter(
-        isStorefrontCategoryVisible,
+      sortStorefrontCategories(
+        categories.filter(
+          isStorefrontCategoryVisible,
+        ),
       )
 
     const topLevel =

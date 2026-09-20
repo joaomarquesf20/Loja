@@ -7,6 +7,7 @@ import StorefrontFooter from '@/components/storefront/storefront-footer'
 import {
   getStorefrontCategoryImage,
   isStorefrontCategoryVisible,
+  sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
 import {
   listCatalogCategories,
@@ -172,8 +173,10 @@ export default async function Home({
     )
 
   const commercialCategories =
-    categories.filter(
-      isStorefrontCategoryVisible,
+    sortStorefrontCategories(
+      categories.filter(
+        isStorefrontCategoryVisible,
+      ),
     )
 
   const topLevelCategories =
@@ -187,7 +190,7 @@ export default async function Home({
       topLevelCategories.length > 0
         ? topLevelCategories
         : commercialCategories
-    ).slice(0, 6)
+    ).slice(0, 4)
 
   const categoryCards =
     storefrontCategories.map(
@@ -265,7 +268,7 @@ export default async function Home({
         <div className="relative mx-auto flex min-h-[21rem] max-w-7xl items-center px-4 py-9 sm:min-h-[23rem] sm:px-6 lg:min-h-[24rem] lg:px-8">
           <div className="max-w-xl">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand">
-              Aftermarket premium
+              Jantes · Suspensão · Styling
             </p>
 
             <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-[3.5rem]">
@@ -276,9 +279,10 @@ export default async function Home({
             </h1>
 
             <p className="mt-5 max-w-lg text-sm leading-6 text-white/62 sm:text-base">
-              Styling, performance e
-              componentes para quem quer
-              mais presença e mais carácter.
+              Jantes premium, suspensão,
+              body-kits e componentes de
+              styling para personalizar o
+              teu automóvel.
             </p>
 
             <Link
@@ -309,7 +313,7 @@ export default async function Home({
                 id="categories-heading"
                 className="mt-1.5 text-xl font-black tracking-[-0.025em]"
               >
-                Encontra o próximo upgrade
+                Escolhe a próxima peça do teu projeto
               </h2>
             </div>
 
