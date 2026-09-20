@@ -4,19 +4,19 @@
 
 :root {
   color-scheme: light;
-  --background: #f5f7fa;
-  --foreground: #172033;
+  --background: #f4f4f2;
+  --foreground: #121417;
   --surface: #ffffff;
-  --surface-muted: #eef2f6;
-  --muted: #667085;
-  --line: #dde3ea;
-  --brand: #ef5a2a;
+  --surface-muted: #eceeed;
+  --muted: #687078;
+  --line: #dadfdf;
+  --brand: #ef5b2a;
   --brand-strong: #d94a1b;
-  --brand-soft: #fff1eb;
-  --accent: #17324d;
-  --accent-soft: #edf3f8;
-  --success: #177245;
-  --danger: #b42318;
+  --brand-soft: #fff0e9;
+  --accent: #15191d;
+  --accent-soft: #e9edef;
+  --success: #17814b;
+  --danger: #ba2f2f;
 }
 
 @theme inline {

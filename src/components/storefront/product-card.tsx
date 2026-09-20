@@ -15,24 +15,29 @@ function ProductImage({
 
   if (!image) {
     return (
-      <div className="flex aspect-[4/3] items-center justify-center bg-surface-muted px-5 text-center">
-        <span className="text-sm font-medium text-muted">
-          Sem imagem
+      <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#f0f1ef]">
+        <div
+          aria-hidden="true"
+          className="size-28 rounded-full border-[18px] border-slate-300/50"
+        />
+
+        <span className="absolute bottom-4 text-xs font-bold uppercase tracking-[0.12em] text-muted">
+          Imagem em breve
         </span>
       </div>
     )
   }
 
   return (
-    <div className="aspect-[4/3] overflow-hidden bg-surface-muted">
+    <div className="aspect-square overflow-hidden bg-[#f0f1ef]">
       <Image
         src={image}
         alt=""
-        width={480}
-        height={360}
+        width={520}
+        height={520}
         loading="lazy"
         unoptimized={!image.startsWith('/')}
-        className="h-full w-full object-contain p-5 transition duration-300 group-hover:scale-[1.02]"
+        className="h-full w-full object-contain p-6 transition duration-300 group-hover:scale-[1.035]"
       />
     </div>
   )
@@ -42,7 +47,7 @@ export default function ProductCard({
   product,
 }: ProductCardProps) {
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-950/5">
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-surface transition hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-950/6">
       <Link
         href={`/produtos/${product.slug}`}
         aria-label={`Ver ${product.name}`}
@@ -53,31 +58,24 @@ export default function ProductCard({
         />
       </Link>
 
-      <div className="flex flex-1 flex-col border-t border-line p-5">
-        <div className="flex flex-wrap gap-2 text-[11px] font-bold uppercase tracking-[0.08em]">
-          {product.brand && (
-            <span className="text-accent">
-              {product.brand.name}
-            </span>
-          )}
+      <div className="flex flex-1 flex-col p-5">
+        <div className="flex min-h-5 items-center justify-between gap-3 text-[11px] font-black uppercase tracking-[0.09em]">
+          <span className="truncate text-brand">
+            {product.brand?.name ??
+              'PFAutoParts'}
+          </span>
 
-          <span className="text-muted">
+          <span className="truncate text-muted">
             {product.category.name}
           </span>
         </div>
 
         <Link
           href={`/produtos/${product.slug}`}
-          className="mt-3 rounded-sm text-base font-extrabold leading-snug tracking-tight text-foreground hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="mt-3 line-clamp-2 rounded-sm text-base font-extrabold leading-snug tracking-tight text-foreground transition hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           {product.name}
         </Link>
-
-        {product.description && (
-          <p className="mt-2 line-clamp-2 text-sm leading-5 text-muted">
-            {product.description}
-          </p>
-        )}
 
         <div className="mt-auto flex items-end justify-between gap-4 pt-6">
           <div>
@@ -95,7 +93,7 @@ export default function ProductCard({
 
           <Link
             href={`/produtos/${product.slug}`}
-            className="rounded-xl border border-line bg-background px-3 py-2 text-xs font-bold text-foreground transition hover:border-brand hover:text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="rounded-xl bg-accent px-3.5 py-2.5 text-xs font-black text-white transition hover:bg-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             Ver produto
           </Link>
