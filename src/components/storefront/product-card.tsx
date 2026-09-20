@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import type { CatalogProduct } from '@/server/catalog'
 import Price from './price'
@@ -24,11 +25,13 @@ function ProductImage({
 
   return (
     <div className="aspect-[4/3] overflow-hidden bg-surface-muted">
-      <img
+      <Image
         src={image}
         alt=""
+        width={480}
+        height={360}
         loading="lazy"
-        decoding="async"
+        unoptimized={!image.startsWith('/')}
         className="h-full w-full object-contain p-5 transition duration-300 group-hover:scale-[1.02]"
       />
     </div>

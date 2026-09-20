@@ -219,14 +219,6 @@ export default function SiteHeader() {
             </Link>
           )}
 
-          {user?.role === 'ADMIN' && (
-            <Link
-              href="/admin"
-              className={navLinkClass}
-            >
-              Administração
-            </Link>
-          )}
         </div>
       </nav>
     </header>
