@@ -6,6 +6,7 @@ import {
 import {
   getStorefrontCategoryImage,
   isStorefrontCategoryVisible,
+  sortStorefrontCategories,
 } from './storefront-category-media'
 
 describe('storefront category media', () => {
@@ -53,5 +54,45 @@ describe('storefront category media', () => {
         slug: 'categoria-nova',
       }),
     ).toBeNull()
+  })
+
+  test('prioriza as categorias centrais da marca sem inventar categorias', () => {
+    const categories = [
+      {
+        name: 'Detalhes',
+        slug: 'detalhes',
+      },
+      {
+        name: 'Exterior',
+        slug: 'exterior',
+      },
+      {
+        name: 'Jantes',
+        slug: 'jantes',
+      },
+      {
+        name: 'Acessórios',
+        slug: 'acessorios',
+      },
+      {
+        name: 'Suspensão',
+        slug: 'suspensao',
+      },
+    ]
+
+    expect(
+      sortStorefrontCategories(
+        categories,
+      ).map(
+        (category) =>
+          category.name,
+      ),
+    ).toEqual([
+      'Jantes',
+      'Suspensão',
+      'Exterior',
+      'Acessórios',
+      'Detalhes',
+    ])
   })
 })

@@ -26,37 +26,25 @@ const categories = [
     name: 'Jantes',
     slug: 'dev-jantes',
     description:
-      'Jantes para projetos de styling e performance.',
-  },
-  {
-    name: 'Exterior',
-    slug: 'dev-exterior',
-    description:
-      'Splitters, spoilers, difusores e styling exterior.',
+      'Jantes premium para projetos de styling e personalização.',
   },
   {
     name: 'Suspensão',
     slug: 'dev-suspensao',
     description:
-      'Soluções para postura, altura e comportamento.',
+      'Coilovers, molas e soluções para postura e comportamento.',
   },
   {
-    name: 'Performance',
-    slug: 'dev-performance',
+    name: 'Exterior',
+    slug: 'dev-exterior',
     description:
-      'Admissão, escape e componentes orientados à performance.',
-  },
-  {
-    name: 'Iluminação',
-    slug: 'dev-iluminacao',
-    description:
-      'Iluminação e detalhes para uma presença mais moderna.',
+      'Body-kits, splitters, spoilers e difusores.',
   },
   {
     name: 'Acessórios',
     slug: 'dev-acessorios',
     description:
-      'Acessórios para completar o projeto.',
+      'Acessórios para personalização automóvel.',
   },
 ]
 
@@ -64,6 +52,10 @@ const brands = [
   {
     name: 'BBS',
     slug: 'dev-bbs',
+  },
+  {
+    name: 'OZ Racing',
+    slug: 'dev-oz-racing',
   },
   {
     name: 'KW',
@@ -74,16 +66,12 @@ const brands = [
     slug: 'dev-bilstein',
   },
   {
-    name: 'Akrapovič',
-    slug: 'dev-akrapovic',
+    name: 'H&R',
+    slug: 'dev-h-r',
   },
   {
     name: 'Maxton Design',
     slug: 'dev-maxton-design',
-  },
-  {
-    name: 'Osram',
-    slug: 'dev-osram',
   },
   {
     name: 'Sparco',
@@ -106,43 +94,19 @@ const products = [
     stockQuantity: 8,
     shippingClass: 'STANDARD',
     image:
-      'https://images.unsplash.com/photo-1611016186353-9af58c69a533?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1676222617103-67f8d2eead16?auto=format&fit=crop&w=1000&q=82',
   },
   {
-    name: 'BBS CI-R 18" Platinum Silver',
-    slug: 'dev-bbs-ci-r-18-platinum-silver',
+    name: 'OZ Racing Ultraleggera 18"',
+    slug: 'dev-oz-racing-ultraleggera-18',
     sku: 'DEV-PFA-WHE-002',
     category: 'Jantes',
-    brand: 'BBS',
-    price: '529.90',
-    stockQuantity: 5,
+    brand: 'OZ Racing',
+    price: '479.90',
+    stockQuantity: 6,
     shippingClass: 'STANDARD',
     image:
-      'https://images.unsplash.com/photo-1606577924006-27d39b132ae2?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Maxton Design Front Splitter V2',
-    slug: 'dev-maxton-front-splitter-v2',
-    sku: 'DEV-PFA-EXT-001',
-    category: 'Exterior',
-    brand: 'Maxton Design',
-    price: '219.90',
-    stockQuantity: 7,
-    shippingClass: 'STANDARD',
-    image:
-      'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Maxton Design Rear Diffuser Street Pro',
-    slug: 'dev-maxton-rear-diffuser-street-pro',
-    sku: 'DEV-PFA-EXT-002',
-    category: 'Exterior',
-    brand: 'Maxton Design',
-    price: '289.90',
-    stockQuantity: 3,
-    shippingClass: 'STANDARD',
-    image:
-      'https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1676222617103-67f8d2eead16?auto=format&fit=crop&w=1000&q=82',
   },
   {
     name: 'KW Variant 3 Coilover Kit',
@@ -154,7 +118,7 @@ const products = [
     stockQuantity: 2,
     shippingClass: 'STANDARD',
     image:
-      'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1760836395716-7dd00b71311a?auto=format&fit=crop&w=1000&q=82',
   },
   {
     name: 'Bilstein B14 PSS Coilover Kit',
@@ -166,79 +130,79 @@ const products = [
     stockQuantity: 4,
     shippingClass: 'STANDARD',
     image:
-      'https://images.unsplash.com/photo-1489824904134-891ab64532f1?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1760836395716-7dd00b71311a?auto=format&fit=crop&w=1000&q=82',
   },
   {
-    name: 'Akrapovič Evolution Line Exhaust',
-    slug: 'dev-akrapovic-evolution-line-exhaust',
-    sku: 'DEV-PFA-PER-001',
-    category: 'Performance',
-    brand: 'Akrapovič',
-    price: '2749.00',
-    stockQuantity: 1,
-    shippingClass: 'STANDARD',
-    image:
-      'https://images.unsplash.com/photo-1494905998402-395d579af36f?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Sparco Performance Intake Kit',
-    slug: 'dev-sparco-performance-intake-kit',
-    sku: 'DEV-PFA-PER-002',
-    category: 'Performance',
-    brand: 'Sparco',
-    price: '349.90',
-    stockQuantity: 6,
-    shippingClass: 'STANDARD',
-    image:
-      'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Osram LEDriving Headlight Set',
-    slug: 'dev-osram-ledriving-headlight-set',
-    sku: 'DEV-PFA-LIG-001',
-    category: 'Iluminação',
-    brand: 'Osram',
-    price: '749.90',
-    stockQuantity: 3,
-    shippingClass: 'SMALL',
-    image:
-      'https://images.unsplash.com/photo-1504215680853-026ed2a45def?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Osram Dynamic Mirror Indicator Set',
-    slug: 'dev-osram-dynamic-mirror-indicators',
-    sku: 'DEV-PFA-LIG-002',
-    category: 'Iluminação',
-    brand: 'Osram',
-    price: '119.90',
-    stockQuantity: 9,
-    shippingClass: 'SMALL',
-    image:
-      'https://images.unsplash.com/photo-1553440569-bcc63803a83d?auto=format&fit=crop&w=1000&q=82',
-  },
-  {
-    name: 'Eibach Pro-Kit Lowering Springs',
-    slug: 'dev-eibach-pro-kit-lowering-springs',
-    sku: 'DEV-PFA-ACC-001',
-    category: 'Acessórios',
-    brand: 'Eibach',
-    price: '279.90',
+    name: 'H&R Sport Springs',
+    slug: 'dev-h-r-sport-springs',
+    sku: 'DEV-PFA-SUS-003',
+    category: 'Suspensão',
+    brand: 'H&R',
+    price: '289.90',
     stockQuantity: 5,
     shippingClass: 'STANDARD',
     image:
-      'https://images.unsplash.com/photo-1542362567-b07e54358753?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1760836395716-7dd00b71311a?auto=format&fit=crop&w=1000&q=82',
+  },
+  {
+    name: 'Maxton Design Front Splitter V2',
+    slug: 'dev-maxton-front-splitter-v2',
+    sku: 'DEV-PFA-EXT-001',
+    category: 'Exterior',
+    brand: 'Maxton Design',
+    price: '219.90',
+    stockQuantity: 7,
+    shippingClass: 'STANDARD',
+    image:
+      'https://images.unsplash.com/photo-1681869893306-de7fa3a289eb?auto=format&fit=crop&w=1000&q=82',
+  },
+  {
+    name: 'Maxton Design Rear Diffuser Street Pro',
+    slug: 'dev-maxton-rear-diffuser-street-pro',
+    sku: 'DEV-PFA-EXT-002',
+    category: 'Exterior',
+    brand: 'Maxton Design',
+    price: '289.90',
+    stockQuantity: 3,
+    shippingClass: 'STANDARD',
+    image:
+      'https://images.unsplash.com/photo-1681869893306-de7fa3a289eb?auto=format&fit=crop&w=1000&q=82',
+  },
+  {
+    name: 'Maxton Design Spoiler Extension',
+    slug: 'dev-maxton-spoiler-extension',
+    sku: 'DEV-PFA-EXT-003',
+    category: 'Exterior',
+    brand: 'Maxton Design',
+    price: '159.90',
+    stockQuantity: 6,
+    shippingClass: 'STANDARD',
+    image:
+      'https://images.unsplash.com/photo-1681869893306-de7fa3a289eb?auto=format&fit=crop&w=1000&q=82',
   },
   {
     name: 'Sparco Aluminium Pedal Set',
     slug: 'dev-sparco-aluminium-pedal-set',
-    sku: 'DEV-PFA-ACC-002',
+    sku: 'DEV-PFA-ACC-001',
     category: 'Acessórios',
     brand: 'Sparco',
     price: '74.90',
     stockQuantity: 12,
     shippingClass: 'SMALL',
     image:
-      'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1556982962-dc0ee0f77f47?auto=format&fit=crop&w=1000&q=82',
+  },
+  {
+    name: 'Eibach Pro-Spacer Kit',
+    slug: 'dev-eibach-pro-spacer-kit',
+    sku: 'DEV-PFA-ACC-002',
+    category: 'Acessórios',
+    brand: 'Eibach',
+    price: '129.90',
+    stockQuantity: 9,
+    shippingClass: 'SMALL',
+    image:
+      'https://images.unsplash.com/photo-1556982962-dc0ee0f77f47?auto=format&fit=crop&w=1000&q=82',
   },
 ]
 
