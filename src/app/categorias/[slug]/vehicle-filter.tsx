@@ -31,10 +31,14 @@ type VehicleGenerationOption = {
   name: string
 }
 
-function uniqueById<T extends { id: string }>(
-  items: T[],
-) {
-  const itemsById = new Map<string, T>()
+const selectClass =
+  'mt-1.5 block h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none disabled:cursor-not-allowed disabled:opacity-35 focus:border-brand/60'
+
+function uniqueById<
+  T extends { id: string },
+>(items: T[]) {
+  const itemsById =
+    new Map<string, T>()
 
   for (const item of items) {
     if (!itemsById.has(item.id)) {
@@ -42,7 +46,9 @@ function uniqueById<T extends { id: string }>(
     }
   }
 
-  return Array.from(itemsById.values())
+  return Array.from(
+    itemsById.values(),
+  )
 }
 
 function formatYears(
@@ -108,7 +114,8 @@ export default function VehicleFilter({
   selectedConfigurationId,
 }: VehicleFilterProps) {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  const searchParams =
+    useSearchParams()
 
   const selectedConfiguration =
     useMemo(
@@ -136,11 +143,13 @@ export default function VehicleFilter({
         .model.id ?? '',
     )
 
-  const [generationId, setGenerationId] =
-    useState(
-      selectedConfiguration?.generation.id ??
-        '',
-    )
+  const [
+    generationId,
+    setGenerationId,
+  ] = useState(
+    selectedConfiguration?.generation.id ??
+      '',
+  )
 
   const [
     configurationId,
@@ -183,7 +192,8 @@ export default function VehicleFilter({
             .filter(
               (configuration) =>
                 configuration.generation.model
-                  .brand.id === brandId,
+                  .brand.id ===
+                brandId,
             )
             .map(
               (configuration) => ({
@@ -298,7 +308,9 @@ export default function VehicleFilter({
   function handleGenerationChange(
     nextGenerationId: string,
   ) {
-    setGenerationId(nextGenerationId)
+    setGenerationId(
+      nextGenerationId,
+    )
     setConfigurationId('')
   }
 
@@ -310,7 +322,8 @@ export default function VehicleFilter({
     )
 
     navigateWithVehicle(
-      nextConfigurationId || undefined,
+      nextConfigurationId ||
+        undefined,
     )
   }
 
@@ -319,7 +332,6 @@ export default function VehicleFilter({
     setModelId('')
     setGenerationId('')
     setConfigurationId('')
-
     navigateWithVehicle()
   }
 
@@ -328,37 +340,32 @@ export default function VehicleFilter({
   }
 
   return (
-    <div className="mt-5 border-t pt-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">
-            Veículo
-          </h3>
-
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-            Escolhe a configuração exata para
-            mostrar apenas peças com
-            compatibilidade registada.
-          </p>
-        </div>
+    <section className="border-t border-white/8 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+          Compatibilidade
+        </h3>
 
         {selectedConfigurationId && (
           <button
             type="button"
             onClick={removeVehicle}
-            className="text-sm font-medium underline underline-offset-4"
+            className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-white"
           >
-            Remover veículo
+            Limpar
           </button>
         )}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block">
-          <span className="text-sm font-medium">
-            Marca do veículo
-          </span>
+      <p className="mt-2 text-xs leading-5 text-white/36">
+        Mostra apenas produtos com
+        compatibilidade registada para o
+        veículo escolhido.
+      </p>
 
+      <div className="mt-4 grid gap-3">
+        <label className="block text-xs font-semibold text-white/52">
+          Marca
           <select
             value={brandId}
             onChange={(event) =>
@@ -366,12 +373,11 @@ export default function VehicleFilter({
                 event.target.value,
               )
             }
-            className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+            className={selectClass}
           >
             <option value="">
               Escolher marca
             </option>
-
             {brands.map((brand) => (
               <option
                 key={brand.id}
@@ -383,11 +389,8 @@ export default function VehicleFilter({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium">
-            Modelo
-          </span>
-
+        <label className="block text-xs font-semibold text-white/52">
+          Modelo
           <select
             value={modelId}
             disabled={!brandId}
@@ -396,12 +399,11 @@ export default function VehicleFilter({
                 event.target.value,
               )
             }
-            className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-2 focus:ring-foreground"
+            className={selectClass}
           >
             <option value="">
               Escolher modelo
             </option>
-
             {models.map((model) => (
               <option
                 key={model.id}
@@ -413,11 +415,8 @@ export default function VehicleFilter({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium">
-            Geração
-          </span>
-
+        <label className="block text-xs font-semibold text-white/52">
+          Geração
           <select
             value={generationId}
             disabled={!modelId}
@@ -426,17 +425,20 @@ export default function VehicleFilter({
                 event.target.value,
               )
             }
-            className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-2 focus:ring-foreground"
+            className={selectClass}
           >
             <option value="">
               Escolher geração
             </option>
-
             {generations.map(
               (generation) => (
                 <option
-                  key={generation.id}
-                  value={generation.id}
+                  key={
+                    generation.id
+                  }
+                  value={
+                    generation.id
+                  }
                 >
                   {generation.name}
                 </option>
@@ -445,11 +447,8 @@ export default function VehicleFilter({
           </select>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium">
-            Configuração
-          </span>
-
+        <label className="block text-xs font-semibold text-white/52">
+          Configuração
           <select
             value={configurationId}
             disabled={!generationId}
@@ -458,17 +457,20 @@ export default function VehicleFilter({
                 event.target.value,
               )
             }
-            className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50 focus:ring-2 focus:ring-foreground"
+            className={selectClass}
           >
             <option value="">
               Escolher configuração
             </option>
-
             {availableConfigurations.map(
               (configuration) => (
                 <option
-                  key={configuration.id}
-                  value={configuration.id}
+                  key={
+                    configuration.id
+                  }
+                  value={
+                    configuration.id
+                  }
                 >
                   {formatConfigurationLabel(
                     configuration,
@@ -481,8 +483,7 @@ export default function VehicleFilter({
       </div>
 
       {selectedConfiguration && (
-        <p className="mt-3 text-sm font-medium">
-          Veículo aplicado:{' '}
+        <p className="mt-3 text-xs font-semibold leading-5 text-white/56">
           {
             selectedConfiguration.generation
               .model.brand.name
@@ -494,10 +495,11 @@ export default function VehicleFilter({
           {
             selectedConfiguration.generation
               .name
-          }{' '}
-          — {selectedConfiguration.name}
+          }
+          {' · '}
+          {selectedConfiguration.name}
         </p>
       )}
-    </div>
+    </section>
   )
 }

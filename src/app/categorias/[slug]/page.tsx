@@ -3,10 +3,20 @@ import {
   notFound,
   redirect,
 } from 'next/navigation'
+import ProductCard from '@/components/storefront/product-card'
+import StorefrontFooter from '@/components/storefront/storefront-footer'
+import {
+  isStorefrontCategoryVisible,
+  sortStorefrontCategories,
+} from '@/lib/storefront-category-media'
 import {
   getCatalogCategoryPageBySlug,
+  listCatalogCategories,
+  type CatalogBrand,
   type CatalogSort,
+  type CatalogVehicleConfiguration,
 } from '@/server/catalog'
+import MobileFilterDrawer from './mobile-filter-drawer'
 import VehicleFilter from './vehicle-filter'
 
 export const dynamic = 'force-dynamic'
@@ -34,21 +44,26 @@ type CategoryFilterState = {
   sort?: CatalogSort
 }
 
-function formatPrice(price: number) {
-  return new Intl.NumberFormat('pt-PT', {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(price)
+type FilterPanelProps = {
+  categorySlug: string
+  brands: CatalogBrand[]
+  vehicleConfigurations:
+    CatalogVehicleConfiguration[]
+  selectedVehicleConfigurationId?:
+    string
+  selectedBrandSlugs: string[]
+  inStockOnly: boolean
+  priceMin?: number
+  priceMax?: number
+  sort?: CatalogSort
 }
 
 function getSearchParamValue(
   value: string | string[] | undefined,
 ) {
-  if (Array.isArray(value)) {
-    return value[0]
-  }
-
-  return value
+  return Array.isArray(value)
+    ? value[0]
+    : value
 }
 
 function getSearchParamValues(
@@ -65,7 +80,7 @@ function getSearchParamValues(
     new Set(
       values
         .map((item) => item.trim())
-        .filter((item) => item.length > 0),
+        .filter(Boolean),
     ),
   )
 }
@@ -80,11 +95,9 @@ function parsePriceParam(
     return undefined
   }
 
-  const normalizedValue =
-    rawValue.replace(',', '.')
-
-  const parsedValue =
-    Number(normalizedValue)
+  const parsedValue = Number(
+    rawValue.replace(',', '.'),
+  )
 
   if (
     !Number.isFinite(parsedValue) ||
@@ -111,16 +124,12 @@ function parseSortParam(
   const rawValue =
     getSearchParamValue(value)?.trim()
 
-  if (rawValue === 'name-desc') {
-    return 'name-desc'
-  }
-
-  if (rawValue === 'price-asc') {
-    return 'price-asc'
-  }
-
-  if (rawValue === 'price-desc') {
-    return 'price-desc'
+  if (
+    rawValue === 'name-desc' ||
+    rawValue === 'price-asc' ||
+    rawValue === 'price-desc'
+  ) {
+    return rawValue
   }
 
   return undefined
@@ -154,9 +163,7 @@ function buildCategoryHref(
     )
   }
 
-  if (
-    filters.vehicleConfigurationId
-  ) {
+  if (filters.vehicleConfigurationId) {
     params.set(
       'vehicle',
       filters.vehicleConfigurationId,
@@ -167,10 +174,7 @@ function buildCategoryHref(
     filters.sort &&
     filters.sort !== 'name-asc'
   ) {
-    params.set(
-      'sort',
-      filters.sort,
-    )
+    params.set('sort', filters.sort)
   }
 
   const query = params.toString()
@@ -178,6 +182,324 @@ function buildCategoryHref(
   return query
     ? `/categorias/${categorySlug}?${query}`
     : `/categorias/${categorySlug}`
+}
+
+function formatPrice(value: number) {
+  return new Intl.NumberFormat(
+    'pt-PT',
+    {
+      style: 'currency',
+      currency: 'EUR',
+      maximumFractionDigits: 2,
+    },
+  ).format(value)
+}
+
+function getCategorySupportCopy(
+  name: string,
+  slug: string,
+) {
+  const value =
+    `${name} ${slug}`.toLocaleLowerCase(
+      'pt-PT',
+    )
+
+  if (
+    value.includes('jante') ||
+    value.includes('wheel') ||
+    value.includes('rim')
+  ) {
+    return 'Encontra a configuração certa para dar outra presença ao teu projeto.'
+  }
+
+  if (
+    value.includes('suspens') ||
+    value.includes('coilover')
+  ) {
+    return 'Afina a postura e o comportamento do teu projeto com a solução certa.'
+  }
+
+  if (
+    value.includes('exterior') ||
+    value.includes('body-kit') ||
+    value.includes('bodykit')
+  ) {
+    return 'Define as linhas do teu projeto com componentes de exterior escolhidos para marcar presença.'
+  }
+
+  return 'Explora os produtos disponíveis e encontra a próxima peça para o teu projeto.'
+}
+
+function getFooterCategories(
+  categories: Awaited<
+    ReturnType<typeof listCatalogCategories>
+  >,
+) {
+  const commercial =
+    sortStorefrontCategories(
+      categories.filter(
+        isStorefrontCategoryVisible,
+      ),
+    )
+
+  const topLevel =
+    commercial.filter(
+      (category) =>
+        category.parentId === null,
+    )
+
+  return (
+    topLevel.length > 0
+      ? topLevel
+      : commercial
+  ).slice(0, 4)
+}
+
+function FilterPanel({
+  categorySlug,
+  brands,
+  vehicleConfigurations,
+  selectedVehicleConfigurationId,
+  selectedBrandSlugs,
+  inStockOnly,
+  priceMin,
+  priceMax,
+  sort,
+}: FilterPanelProps) {
+  const stockHref = buildCategoryHref(
+    categorySlug,
+    {
+      inStockOnly: !inStockOnly,
+      brandSlugs: selectedBrandSlugs,
+      priceMin,
+      priceMax,
+      vehicleConfigurationId:
+        selectedVehicleConfigurationId,
+      sort,
+    },
+  )
+
+  const hasPriceFilter =
+    priceMin !== undefined ||
+    priceMax !== undefined
+
+  const removePriceHref =
+    buildCategoryHref(
+      categorySlug,
+      {
+        inStockOnly,
+        brandSlugs:
+          selectedBrandSlugs,
+        vehicleConfigurationId:
+          selectedVehicleConfigurationId,
+        sort,
+      },
+    )
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+          Disponibilidade
+        </h3>
+
+        <Link
+          href={stockHref}
+          className="mt-3 flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/66 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        >
+          <span>Em stock</span>
+          <span
+            aria-hidden="true"
+            className={`size-2.5 rounded-full border ${inStockOnly
+              ? 'border-brand bg-brand'
+              : 'border-white/24'}`}
+          />
+        </Link>
+      </section>
+
+      {brands.length > 0 && (
+        <section className="border-t border-white/8 pt-5">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+            Marca
+          </h3>
+
+          <div className="mt-3 grid gap-1">
+            {brands.map((brand) => {
+              const isSelected =
+                selectedBrandSlugs.includes(
+                  brand.slug,
+                )
+
+              const nextBrandSlugs =
+                isSelected
+                  ? selectedBrandSlugs.filter(
+                      (slug) =>
+                        slug !==
+                        brand.slug,
+                    )
+                  : [
+                      ...selectedBrandSlugs,
+                      brand.slug,
+                    ]
+
+              const href =
+                buildCategoryHref(
+                  categorySlug,
+                  {
+                    inStockOnly,
+                    brandSlugs:
+                      nextBrandSlugs,
+                    priceMin,
+                    priceMax,
+                    vehicleConfigurationId:
+                      selectedVehicleConfigurationId,
+                    sort,
+                  },
+                )
+
+              return (
+                <Link
+                  key={brand.id}
+                  href={href}
+                  className="flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/62 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  <span>{brand.name}</span>
+                  <span
+                    aria-hidden="true"
+                    className={`size-2.5 rounded-full border ${isSelected
+                      ? 'border-brand bg-brand'
+                      : 'border-white/24'}`}
+                  />
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      <section className="border-t border-white/8 pt-5">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+            Preço
+          </h3>
+
+          {hasPriceFilter && (
+            <Link
+              href={removePriceHref}
+              className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-white"
+            >
+              Limpar
+            </Link>
+          )}
+        </div>
+
+        <form
+          action={`/categorias/${categorySlug}`}
+          method="get"
+          className="mt-3"
+        >
+          {inStockOnly && (
+            <input
+              type="hidden"
+              name="stock"
+              value="available"
+            />
+          )}
+
+          {selectedBrandSlugs.map(
+            (brandSlug) => (
+              <input
+                key={brandSlug}
+                type="hidden"
+                name="brand"
+                value={brandSlug}
+              />
+            ),
+          )}
+
+          {selectedVehicleConfigurationId && (
+            <input
+              type="hidden"
+              name="vehicle"
+              value={
+                selectedVehicleConfigurationId
+              }
+            />
+          )}
+
+          {sort && (
+            <input
+              type="hidden"
+              name="sort"
+              value={sort}
+            />
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <label>
+              <span className="sr-only">
+                Preço mínimo
+              </span>
+              <input
+                type="number"
+                name="priceMin"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                defaultValue={
+                  priceMin ?? ''
+                }
+                placeholder="Mín. €"
+                className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
+              />
+            </label>
+
+            <label>
+              <span className="sr-only">
+                Preço máximo
+              </span>
+              <input
+                type="number"
+                name="priceMax"
+                min="0"
+                step="0.01"
+                inputMode="decimal"
+                defaultValue={
+                  priceMax ?? ''
+                }
+                placeholder="Máx. €"
+                className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
+              />
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            className="mt-2.5 w-full rounded-sm border border-white/12 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/24 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            Aplicar preço
+          </button>
+        </form>
+      </section>
+
+      {vehicleConfigurations.length >
+        0 && (
+        <VehicleFilter
+          key={
+            selectedVehicleConfigurationId ??
+            'no-vehicle'
+          }
+          categorySlug={categorySlug}
+          configurations={
+            vehicleConfigurations
+          }
+          selectedConfigurationId={
+            selectedVehicleConfigurationId
+          }
+        />
+      )}
+    </div>
+  )
 }
 
 export default async function CategoryPage({
@@ -235,20 +557,23 @@ export default async function CategoryPage({
     query.sort !== undefined &&
     sort === undefined
 
-  const result =
-    await getCatalogCategoryPageBySlug(
-      slug,
-      {
-        inStockOnly,
-        brandSlugs:
-          selectedBrandSlugs,
-        priceMin,
-        priceMax,
-        vehicleConfigurationId:
-          requestedVehicleConfigurationId,
-        sort,
-      },
-    )
+  const [result, allCategories] =
+    await Promise.all([
+      getCatalogCategoryPageBySlug(
+        slug,
+        {
+          inStockOnly,
+          brandSlugs:
+            selectedBrandSlugs,
+          priceMin,
+          priceMax,
+          vehicleConfigurationId:
+            requestedVehicleConfigurationId,
+          sort,
+        },
+      ),
+      listCatalogCategories(),
+    ])
 
   if (!result) {
     notFound()
@@ -313,6 +638,12 @@ export default async function CategoryPage({
     hasPriceFilter ||
     hasVehicleFilter
 
+  const activeFilterCount =
+    Number(inStockOnly) +
+    selectedBrandSlugs.length +
+    Number(hasPriceFilter) +
+    Number(hasVehicleFilter)
+
   const clearFiltersHref =
     buildCategoryHref(
       category.slug,
@@ -323,11 +654,11 @@ export default async function CategoryPage({
       },
     )
 
-  const stockFilterHref =
+  const removeStockHref =
     buildCategoryHref(
       category.slug,
       {
-        inStockOnly: !inStockOnly,
+        inStockOnly: false,
         brandSlugs:
           selectedBrandSlugs,
         priceMin,
@@ -351,473 +682,402 @@ export default async function CategoryPage({
       },
     )
 
+  const removeVehicleHref =
+    buildCategoryHref(
+      category.slug,
+      {
+        inStockOnly,
+        brandSlugs:
+          selectedBrandSlugs,
+        priceMin,
+        priceMax,
+        sort,
+      },
+    )
+
+  const supportCopy =
+    category.description?.trim() ||
+    getCategorySupportCopy(
+      category.name,
+      category.slug,
+    )
+
+  const footerCategories =
+    getFooterCategories(allCategories)
+
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <header className="border-b">
-        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-[#0b0d0f] text-white">
+      <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
+        <nav
+          aria-label="Breadcrumb"
+          className="flex items-center gap-2 text-xs font-semibold text-white/38"
+        >
           <Link
             href="/"
-            className="text-sm font-medium underline underline-offset-4"
+            className="transition hover:text-white"
           >
-            Voltar ao catálogo
+            Início
           </Link>
-        </div>
-      </header>
+          <span aria-hidden="true">/</span>
+          <span className="text-white/66">
+            {category.name}
+          </span>
+        </nav>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section aria-labelledby="category-heading">
-          <p className="text-sm font-medium tracking-[0.15em] text-neutral-600 dark:text-neutral-400">
-            CATEGORIA
+        <header className="max-w-3xl pb-9 pt-7 lg:pb-12 lg:pt-9">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+            Catálogo PFAutoParts
           </p>
 
-          <h1
-            id="category-heading"
-            className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl"
-          >
+          <h1 className="mt-2.5 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
             {category.name}
           </h1>
 
-          {category.description && (
-            <p className="mt-4 max-w-3xl text-sm leading-6 text-neutral-700 dark:text-neutral-300">
-              {category.description}
-            </p>
-          )}
-
-          <p className="mt-4 text-sm text-neutral-600 dark:text-neutral-400">
-            {products.length === 1
-              ? '1 produto disponível'
-              : `${products.length} produtos disponíveis`}
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-white/54 sm:text-base">
+            {supportCopy}
           </p>
-        </section>
+        </header>
 
-        <section
-          aria-labelledby="filters-heading"
-          className="mt-8 rounded-lg border p-4"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2
-                id="filters-heading"
-                className="font-semibold"
+        <div className="border-y border-white/8 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white/54">
+              <span className="text-white">
+                {products.length}
+              </span>{' '}
+              {products.length === 1
+                ? 'resultado'
+                : 'resultados'}
+            </p>
+
+            <div className="flex items-center gap-2">
+              <MobileFilterDrawer
+                activeCount={
+                  activeFilterCount
+                }
               >
-                Filtros
-              </h2>
-
-              <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                Refina os produtos desta categoria.
-              </p>
-            </div>
-
-            {hasActiveFilters && (
-              <Link
-                href={clearFiltersHref}
-                className="text-sm font-medium underline underline-offset-4"
-              >
-                Limpar filtros
-              </Link>
-            )}
-          </div>
-
-          <VehicleFilter
-            key={
-              selectedVehicleConfigurationId ??
-              'no-vehicle'
-            }
-            categorySlug={category.slug}
-            configurations={
-              vehicleConfigurations
-            }
-            selectedConfigurationId={
-              selectedVehicleConfigurationId
-            }
-          />
-
-          <div className="mt-5 border-t pt-5">
-            <h3 className="text-sm font-semibold">
-              Disponibilidade
-            </h3>
-
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Link
-                href={stockFilterHref}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
-                  inStockOnly
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'hover:border-neutral-500'
-                }`}
-              >
-                {inStockOnly
-                  ? '✓ Em stock'
-                  : 'Em stock'}
-              </Link>
-            </div>
-          </div>
-
-          {brands.length > 0 && (
-            <div className="mt-5 border-t pt-5">
-              <h3 className="text-sm font-semibold">
-                Marca do produto
-              </h3>
-
-              <div className="mt-2 flex flex-wrap gap-2">
-                {brands.map((brand) => {
-                  const isSelected =
-                    selectedBrandSlugs.includes(
-                      brand.slug,
-                    )
-
-                  const nextBrandSlugs =
-                    isSelected
-                      ? selectedBrandSlugs.filter(
-                          (selectedSlug) =>
-                            selectedSlug !==
-                            brand.slug,
-                        )
-                      : [
-                          ...selectedBrandSlugs,
-                          brand.slug,
-                        ]
-
-                  const href =
-                    buildCategoryHref(
-                      category.slug,
-                      {
-                        inStockOnly,
-                        brandSlugs:
-                          nextBrandSlugs,
-                        priceMin,
-                        priceMax,
-                        vehicleConfigurationId:
-                          selectedVehicleConfigurationId,
-                        sort,
-                      },
-                    )
-
-                  return (
-                    <Link
-                      key={brand.id}
-                      href={href}
-                      className={`rounded-full border px-4 py-2 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2 ${
-                        isSelected
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'hover:border-neutral-500'
-                      }`}
-                    >
-                      {isSelected
-                        ? `✓ ${brand.name}`
-                        : brand.name}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-5 border-t pt-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold">
-                Preço
-              </h3>
-
-              {hasPriceFilter && (
-                <Link
-                  href={removePriceHref}
-                  className="text-sm font-medium underline underline-offset-4"
-                >
-                  Remover preço
-                </Link>
-              )}
-            </div>
-
-            <form
-              action={`/categorias/${category.slug}`}
-              method="get"
-              className="mt-3"
-            >
-              {inStockOnly && (
-                <input
-                  type="hidden"
-                  name="stock"
-                  value="available"
-                />
-              )}
-
-              {selectedBrandSlugs.map(
-                (brandSlug) => (
-                  <input
-                    key={brandSlug}
-                    type="hidden"
-                    name="brand"
-                    value={brandSlug}
-                  />
-                ),
-              )}
-
-              {selectedVehicleConfigurationId && (
-                <input
-                  type="hidden"
-                  name="vehicle"
-                  value={
+                <FilterPanel
+                  categorySlug={
+                    category.slug
+                  }
+                  brands={brands}
+                  vehicleConfigurations={
+                    vehicleConfigurations
+                  }
+                  selectedVehicleConfigurationId={
                     selectedVehicleConfigurationId
                   }
+                  selectedBrandSlugs={
+                    selectedBrandSlugs
+                  }
+                  inStockOnly={
+                    inStockOnly
+                  }
+                  priceMin={priceMin}
+                  priceMax={priceMax}
+                  sort={sort}
                 />
-              )}
+              </MobileFilterDrawer>
 
-              {sort && (
-                <input
-                  type="hidden"
-                  name="sort"
-                  value={sort}
-                />
-              )}
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:max-w-xl">
-                <label className="block">
-                  <span className="text-sm font-medium">
-                    Preço mínimo (€)
-                  </span>
-
+              <form
+                action={`/categorias/${category.slug}`}
+                method="get"
+                className="flex items-center gap-2"
+              >
+                {inStockOnly && (
                   <input
-                    type="number"
+                    type="hidden"
+                    name="stock"
+                    value="available"
+                  />
+                )}
+
+                {selectedBrandSlugs.map(
+                  (brandSlug) => (
+                    <input
+                      key={brandSlug}
+                      type="hidden"
+                      name="brand"
+                      value={brandSlug}
+                    />
+                  ),
+                )}
+
+                {priceMin !==
+                  undefined && (
+                  <input
+                    type="hidden"
                     name="priceMin"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    defaultValue={
-                      priceMin ?? ''
-                    }
-                    placeholder="0,00"
-                    className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+                    value={priceMin}
                   />
-                </label>
+                )}
 
-                <label className="block">
-                  <span className="text-sm font-medium">
-                    Preço máximo (€)
-                  </span>
-
+                {priceMax !==
+                  undefined && (
                   <input
-                    type="number"
-                    name="priceMax"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    defaultValue={
-                      priceMax ?? ''
-                    }
-                    placeholder="Sem limite"
-                    className="mt-1 block w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="mt-3 rounded-md border px-4 py-2 text-sm font-medium transition hover:border-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
-              >
-                Aplicar preço
-              </button>
-            </form>
-          </div>
-
-          <div className="mt-5 border-t pt-5">
-            <h3 className="text-sm font-semibold">
-              Ordenação
-            </h3>
-
-            <form
-              action={`/categorias/${category.slug}`}
-              method="get"
-              className="mt-3 flex flex-wrap items-end gap-3"
-            >
-              {inStockOnly && (
-                <input
-                  type="hidden"
-                  name="stock"
-                  value="available"
-                />
-              )}
-
-              {selectedBrandSlugs.map(
-                (brandSlug) => (
-                  <input
-                    key={brandSlug}
                     type="hidden"
-                    name="brand"
-                    value={brandSlug}
+                    name="priceMax"
+                    value={priceMax}
                   />
-                ),
-              )}
+                )}
 
-              {priceMin !== undefined && (
-                <input
-                  type="hidden"
-                  name="priceMin"
-                  value={priceMin}
-                />
-              )}
+                {selectedVehicleConfigurationId && (
+                  <input
+                    type="hidden"
+                    name="vehicle"
+                    value={
+                      selectedVehicleConfigurationId
+                    }
+                  />
+                )}
 
-              {priceMax !== undefined && (
-                <input
-                  type="hidden"
-                  name="priceMax"
-                  value={priceMax}
-                />
-              )}
-
-              {selectedVehicleConfigurationId && (
-                <input
-                  type="hidden"
-                  name="vehicle"
-                  value={
-                    selectedVehicleConfigurationId
-                  }
-                />
-              )}
-
-              <label className="block">
-                <span className="text-sm font-medium">
-                  Ordenar produtos por
-                </span>
+                <label className="sr-only" htmlFor="category-sort">
+                  Ordenar produtos
+                </label>
 
                 <select
+                  id="category-sort"
                   name="sort"
                   defaultValue={sort ?? ''}
-                  className="mt-1 block min-w-60 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-foreground"
+                  className="h-10 rounded-sm border border-white/10 bg-[#15181b] px-3 text-xs font-bold text-white/72 outline-none focus:border-brand/60"
                 >
                   <option value="">
                     Nome: A–Z
                   </option>
-
                   <option value="name-desc">
                     Nome: Z–A
                   </option>
-
                   <option value="price-asc">
-                    Preço: menor primeiro
+                    Preço: menor para maior
                   </option>
-
                   <option value="price-desc">
-                    Preço: maior primeiro
+                    Preço: maior para menor
                   </option>
                 </select>
-              </label>
 
-              <button
-                type="submit"
-                className="rounded-md border px-4 py-2 text-sm font-medium transition hover:border-neutral-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
-              >
-                Ordenar
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="hidden h-10 rounded-sm border border-white/10 px-3 text-[10px] font-black uppercase tracking-[0.08em] text-white/58 transition hover:border-white/24 hover:text-white sm:inline-flex sm:items-center"
+                >
+                  Ordenar
+                </button>
+              </form>
+            </div>
           </div>
-        </section>
+        </div>
 
-        <section
-          aria-labelledby="products-heading"
-          className="mt-8"
-        >
-          <h2
-            id="products-heading"
-            className="sr-only"
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-white/8 py-4">
+            {inStockOnly && (
+              <Link
+                href={removeStockHref}
+                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                Em stock
+                <span aria-hidden="true">
+                  ×
+                </span>
+              </Link>
+            )}
+
+            {selectedBrandSlugs.map(
+              (brandSlug) => {
+                const brand =
+                  brands.find(
+                    (item) =>
+                      item.slug ===
+                      brandSlug,
+                  )
+
+                if (!brand) {
+                  return null
+                }
+
+                const href =
+                  buildCategoryHref(
+                    category.slug,
+                    {
+                      inStockOnly,
+                      brandSlugs:
+                        selectedBrandSlugs.filter(
+                          (slug) =>
+                            slug !==
+                            brandSlug,
+                        ),
+                      priceMin,
+                      priceMax,
+                      vehicleConfigurationId:
+                        selectedVehicleConfigurationId,
+                      sort,
+                    },
+                  )
+
+                return (
+                  <Link
+                    key={brand.id}
+                    href={href}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                  >
+                    {brand.name}
+                    <span aria-hidden="true">
+                      ×
+                    </span>
+                  </Link>
+                )
+              },
+            )}
+
+            {hasPriceFilter && (
+              <Link
+                href={removePriceHref}
+                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                {priceMin !== undefined &&
+                priceMax !== undefined
+                  ? `${formatPrice(priceMin)} – ${formatPrice(priceMax)}`
+                  : priceMin !== undefined
+                    ? `Desde ${formatPrice(priceMin)}`
+                    : `Até ${formatPrice(priceMax ?? 0)}`}
+                <span aria-hidden="true">
+                  ×
+                </span>
+              </Link>
+            )}
+
+            {selectedVehicleConfiguration && (
+              <Link
+                href={removeVehicleHref}
+                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                {
+                  selectedVehicleConfiguration
+                    .generation.model.brand
+                    .name
+                }{' '}
+                {
+                  selectedVehicleConfiguration
+                    .generation.model.name
+                }
+                <span aria-hidden="true">
+                  ×
+                </span>
+              </Link>
+            )}
+
+            <Link
+              href={clearFiltersHref}
+              className="ml-1 text-[10px] font-black uppercase tracking-[0.09em] text-white/38 transition hover:text-brand"
+            >
+              Limpar filtros
+            </Link>
+          </div>
+        )}
+
+        <div className="mt-8 grid gap-10 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)] xl:gap-12">
+          <aside
+            aria-label="Filtros de produtos"
+            className="hidden lg:block"
           >
-            Produtos
-          </h2>
+            <div className="sticky top-36">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-sm font-black uppercase tracking-[0.12em]">
+                  Filtros
+                </h2>
 
-          {products.length === 0 ? (
-            <div className="rounded-lg border p-6">
-              <p className="font-medium">
-                Nenhum produto corresponde aos
-                filtros selecionados.
-              </p>
+                {hasActiveFilters && (
+                  <Link
+                    href={
+                      clearFiltersHref
+                    }
+                    className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-brand"
+                  >
+                    Limpar
+                  </Link>
+                )}
+              </div>
 
-              <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-                Remove ou altera os filtros para
-                voltares a ver os produtos desta
-                categoria.
-              </p>
-
-              {hasActiveFilters && (
-                <Link
-                  href={clearFiltersHref}
-                  className="mt-4 inline-block text-sm font-medium underline underline-offset-4"
-                >
-                  Limpar filtros
-                </Link>
-              )}
+              <FilterPanel
+                categorySlug={
+                  category.slug
+                }
+                brands={brands}
+                vehicleConfigurations={
+                  vehicleConfigurations
+                }
+                selectedVehicleConfigurationId={
+                  selectedVehicleConfigurationId
+                }
+                selectedBrandSlugs={
+                  selectedBrandSlugs
+                }
+                inStockOnly={
+                  inStockOnly
+                }
+                priceMin={priceMin}
+                priceMax={priceMax}
+                sort={sort}
+              />
             </div>
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {products.map((product) => (
-                <Link
-                  key={product.id}
-                  href={`/produtos/${product.slug}`}
-                  aria-label={`Ver ${product.name}`}
-                  className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground focus-visible:ring-offset-2"
-                >
-                  <article className="flex h-full flex-col overflow-hidden rounded-lg border transition group-hover:border-neutral-500">
-                    <div className="flex aspect-[4/3] items-center justify-center border-b bg-neutral-50 px-4 text-center dark:bg-neutral-950">
-                      {product.images.length > 0 ? (
-                        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                          Imagem associada ao produto
-                        </p>
-                      ) : (
-                        <p className="text-sm text-neutral-500">
-                          Sem imagem
-                        </p>
-                      )}
-                    </div>
+          </aside>
 
-                    <div className="flex flex-1 flex-col p-4">
-                      <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                        <span className="rounded-full border px-2 py-1">
-                          {product.category.name}
-                        </span>
+          <section
+            aria-labelledby="products-heading"
+            className="min-w-0"
+          >
+            <h2
+              id="products-heading"
+              className="sr-only"
+            >
+              Produtos
+            </h2>
 
-                        {product.brand && (
-                          <span className="rounded-full border px-2 py-1">
-                            {product.brand.name}
-                          </span>
-                        )}
-                      </div>
+            {products.length === 0 ? (
+              <div className="border border-white/8 bg-[#111315] px-6 py-12 sm:px-8">
+                <p className="text-xl font-black tracking-tight">
+                  Nenhum produto encontrado
+                </p>
 
-                      <h3 className="font-semibold leading-snug group-hover:underline">
-                        {product.name}
-                      </h3>
+                <p className="mt-2 max-w-lg text-sm leading-6 text-white/46">
+                  Não existem produtos que
+                  correspondam aos filtros
+                  selecionados. Remove um ou
+                  mais filtros para voltares
+                  a ver esta categoria.
+                </p>
 
-                      {product.description && (
-                        <p className="mt-2 line-clamp-3 text-sm text-neutral-600 dark:text-neutral-400">
-                          {product.description}
-                        </p>
-                      )}
-
-                      <div className="mt-auto pt-5">
-                        <p className="text-xl font-bold">
-                          {formatPrice(
-                            product.price,
-                          )}
-                        </p>
-
-                        <p
-                          className={`mt-1 text-sm font-medium ${
-                            product.inStock
-                              ? 'text-green-700 dark:text-green-400'
-                              : 'text-red-700 dark:text-red-400'
-                          }`}
-                        >
-                          {product.inStock
-                            ? 'Em stock'
-                            : 'Sem stock'}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+                {hasActiveFilters && (
+                  <Link
+                    href={clearFiltersHref}
+                    className="mt-6 inline-flex rounded-sm bg-brand px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  >
+                    Remover filtros
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div
+                className={`grid gap-5 sm:grid-cols-2 ${products.length === 1
+                  ? 'max-w-md'
+                  : products.length === 2
+                    ? 'max-w-3xl'
+                    : 'xl:grid-cols-3'}`}
+              >
+                {products.map(
+                  (product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                    />
+                  ),
+                )}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
+
+      <StorefrontFooter
+        categories={footerCategories}
+      />
     </main>
   )
 }
