@@ -21,6 +21,7 @@ type GuestCartVariantRecord = {
   id: string
   productId: string
   sku: string
+  optionKey: string
   price: GuestCartPrice
   stockQuantity: number
   isActive: boolean
@@ -72,6 +73,7 @@ type ProductVariantDelegate = {
       id: true
       productId: true
       sku: true
+      optionKey: true
       price: true
       stockQuantity: true
       isActive: true
@@ -467,10 +469,13 @@ export async function resolveGuestCartItems(
   const defaultsByProductId =
     new Map(
       variants
-        .filter((variant) =>
-          legacyProductIds.includes(
-            variant.productId,
-          ),
+        .filter(
+          (variant) =>
+            variant.optionKey ===
+              'default' &&
+            legacyProductIds.includes(
+              variant.productId,
+            ),
         )
         .map(
           (variant) => [

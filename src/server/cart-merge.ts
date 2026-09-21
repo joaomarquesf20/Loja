@@ -19,6 +19,7 @@ type MergeProductRecord = {
 type MergeVariantRecord = {
   id: string
   productId: string
+  optionKey: string
   stockQuantity: number
   isActive: boolean
   product: {
@@ -105,6 +106,7 @@ type CartMergeTransactionClient = {
       select: {
         id: true
         productId: true
+        optionKey: true
         stockQuantity: true
         isActive: true
         product: {
@@ -543,6 +545,7 @@ export async function mergeGuestCartIntoUserCart(
               select: {
                 id: true,
                 productId: true,
+                optionKey: true,
                 stockQuantity: true,
                 isActive: true,
                 product: {
@@ -568,10 +571,13 @@ export async function mergeGuestCartIntoUserCart(
         const defaultsByProductId =
           new Map(
             variants
-              .filter((variant) =>
-                legacyProductIds.includes(
-                  variant.productId,
-                ),
+              .filter(
+                (variant) =>
+                  variant.optionKey ===
+                    'default' &&
+                  legacyProductIds.includes(
+                    variant.productId,
+                  ),
               )
               .map(
                 (variant) => [
