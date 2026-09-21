@@ -178,9 +178,81 @@ model Product {
   cartItems       CartItem[]
   orderItems      OrderItem[]
   shippingRates   ProductShippingRate[]
+  variants        ProductVariant[]
+  options         ProductOption[]
 
   @@index([categoryId])
   @@index([shippingClass])
+}
+
+model ProductVariant {
+  id             String                          @id @default(cuid())
+  productId      String
+  sku            String                          @unique
+  price          Decimal                         @db.Decimal(10, 2)
+  stockQuantity  Int                             @default(0)
+  isActive       Boolean                         @default(true)
+  images         String[]
+  position       Int                             @default(0)
+  optionKey      String
+  product        Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  selections     ProductVariantOptionSelection[]
+  specifications ProductVariantSpecification[]
+
+  @@unique([productId, optionKey])
+  @@index([productId, position])
+  @@index([productId, isActive, position])
+}
+
+model ProductOption {
+  id        String               @id @default(cuid())
+  productId String
+  name      String
+  code      String
+  position  Int                  @default(0)
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values    ProductOptionValue[]
+
+  @@unique([productId, code])
+  @@index([productId, position])
+}
+
+model ProductOptionValue {
+  id         String                          @id @default(cuid())
+  optionId   String
+  value      String
+  position   Int                             @default(0)
+  option     ProductOption                   @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  selections ProductVariantOptionSelection[]
+
+  @@unique([optionId, value])
+  @@unique([id, optionId])
+  @@index([optionId, position])
+}
+
+model ProductVariantOptionSelection {
+  variantId     String
+  optionId      String
+  optionValueId String
+  variant       ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  optionValue   ProductOptionValue @relation(fields: [optionValueId, optionId], references: [id, optionId], onDelete: Cascade)
+
+  @@id([variantId, optionId])
+  @@index([optionValueId, optionId])
+}
+
+model ProductVariantSpecification {
+  id        String         @id @default(cuid())
+  variantId String
+  key       String
+  label     String
+  value     String
+  unit      String?
+  position  Int            @default(0)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, key])
+  @@index([variantId, position])
 }
 
 model ProductVehicleCompatibility {
