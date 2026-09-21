@@ -6,10 +6,12 @@ import StockBadge from './stock-badge'
 
 type ProductCardProps = {
   product: CatalogProduct
+  variant?: 'default' | 'category'
 }
 
 function ProductImage({
   product,
+  variant = 'default',
 }: ProductCardProps) {
   const image = product.images[0]
 
@@ -28,6 +30,21 @@ function ProductImage({
     )
   }
 
+  if (variant === 'category') {
+    return (
+      <div className="relative aspect-[6/5] overflow-hidden bg-[#171a1d]">
+        <div
+          role="img"
+          aria-label={product.name}
+          className="absolute inset-3 bg-contain bg-center bg-no-repeat transition duration-300 group-hover:scale-[1.015]"
+          style={{
+            backgroundImage: `url("${image}")`,
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       role="img"
@@ -42,6 +59,7 @@ function ProductImage({
 
 export default function ProductCard({
   product,
+  variant = 'default',
 }: ProductCardProps) {
   return (
     <article className="group flex h-full flex-col overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 transition hover:ring-white/12">
@@ -52,6 +70,7 @@ export default function ProductCard({
       >
         <ProductImage
           product={product}
+          variant={variant}
         />
       </Link>
 
@@ -94,7 +113,11 @@ export default function ProductCard({
             <AddToCartButton
               productId={product.id}
               inStock={product.inStock}
-              variant="compact"
+              variant={
+                variant === 'category'
+                  ? 'card'
+                  : 'compact'
+              }
             />
           </div>
         </div>

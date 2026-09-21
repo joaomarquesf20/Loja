@@ -9,7 +9,7 @@ import {
 type AddToCartButtonProps = {
   productId: string
   inStock: boolean
-  variant?: 'default' | 'compact'
+  variant?: 'default' | 'compact' | 'card'
 }
 
 function isErrorResponse(
@@ -136,10 +136,15 @@ export default function AddToCartButton({
   const isCompact =
     variant === 'compact'
 
+  const isCard =
+    variant === 'card'
+
   return (
     <div
       className={
-        isCompact ? '' : 'mt-6'
+        isCompact || isCard
+          ? ''
+          : 'mt-6'
       }
     >
       <button
@@ -149,7 +154,7 @@ export default function AddToCartButton({
         }
         onClick={handleAddToCart}
         aria-label={
-          isCompact
+          isCompact || isCard
             ? !inStock
               ? 'Produto sem stock'
               : isPending
@@ -165,25 +170,51 @@ export default function AddToCartButton({
         className={
           isCompact
             ? 'grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
-            : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
+            : isCard
+              ? 'inline-flex min-h-9 items-center justify-center gap-2 rounded-sm bg-brand px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+              : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
         }
       >
-        {isCompact
-          ? message
-            ? '✓'
-            : '+'
-          : !inStock
-            ? 'Sem stock'
-            : isPending
-              ? 'A adicionar...'
-              : 'Adicionar ao carrinho'}
+        {isCompact ? (
+          message ? '✓' : '+'
+        ) : isCard ? (
+          <>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="size-3.5"
+              fill="none"
+            >
+              <path
+                d="M3.5 5h2l1.7 9h9.9l2-6.5H7M9 19a1 1 0 1 0 0 .01M17 19a1 1 0 1 0 0 .01"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <span>
+              {!inStock
+                ? 'Sem stock'
+                : isPending
+                  ? 'A adicionar…'
+                  : message
+                    ? 'Adicionado'
+                    : 'Adicionar'}
+            </span>
+          </>
+        ) : !inStock
+          ? 'Sem stock'
+          : isPending
+            ? 'A adicionar...'
+            : 'Adicionar ao carrinho'}
       </button>
 
       {message && (
         <p
           role="status"
           className={
-            isCompact
+            isCompact || isCard
               ? 'sr-only'
               : 'mt-3 text-sm font-medium text-green-700 dark:text-green-400'
           }
@@ -196,7 +227,7 @@ export default function AddToCartButton({
         <p
           role="alert"
           className={
-            isCompact
+            isCompact || isCard
               ? 'sr-only'
               : 'mt-3 text-sm font-medium text-red-700 dark:text-red-400'
           }

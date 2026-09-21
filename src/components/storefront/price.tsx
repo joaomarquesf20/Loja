@@ -12,6 +12,9 @@ export default function Price({
     {
       style: 'currency',
       currency: 'EUR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true,
     },
   ).format(value)
 

@@ -191,7 +191,9 @@ function formatPrice(value: number) {
     {
       style: 'currency',
       currency: 'EUR',
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2,
+      useGrouping: true,
     },
   ).format(value)
 }
@@ -311,10 +313,12 @@ function FilterPanel({
           <span>Em stock</span>
           <span
             aria-hidden="true"
-            className={`size-2.5 rounded-full border ${inStockOnly
-              ? 'border-brand bg-brand'
-              : 'border-white/24'}`}
-          />
+            className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${inStockOnly
+              ? 'border-brand bg-brand text-white'
+              : 'border-white/24 text-transparent'}`}
+          >
+            ✓
+          </span>
         </Link>
       </section>
 
@@ -367,10 +371,12 @@ function FilterPanel({
                   <span>{brand.name}</span>
                   <span
                     aria-hidden="true"
-                    className={`size-2.5 rounded-full border ${isSelected
-                      ? 'border-brand bg-brand'
-                      : 'border-white/24'}`}
-                  />
+                    className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${isSelected
+                      ? 'border-brand bg-brand text-white'
+                      : 'border-white/24 text-transparent'}`}
+                  >
+                    ✓
+                  </span>
                 </Link>
               )
             })}
@@ -990,6 +996,7 @@ export default async function CategoryPage({
                     <ProductCard
                       key={product.id}
                       product={product}
+                      variant="category"
                     />
                   ),
                 )}
