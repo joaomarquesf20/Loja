@@ -378,7 +378,8 @@ export async function DELETE(
 
     await removeCartItem(
       userId,
-      productVariantId
+      typeof productVariantId ===
+      'string'
         ? {
             ...(typeof productId ===
             'string'
