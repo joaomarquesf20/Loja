@@ -43,8 +43,6 @@ type CategoryFilterState = {
   priceMax?: number
   vehicleConfigurationId?: string
   sort?: CatalogSort
-  brandCounts: Record<string, number>
-  inStockCount: number
 }
 
 type FilterPanelProps = {
@@ -59,6 +57,8 @@ type FilterPanelProps = {
   priceMin?: number
   priceMax?: number
   sort?: CatalogSort
+  brandCounts: Record<string, number>
+  inStockCount: number
 }
 
 function getSearchParamValue(
