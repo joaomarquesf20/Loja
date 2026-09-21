@@ -160,7 +160,42 @@ async function fetchGuestCart() {
     )
   }
 
-  return parseCartItems(response)
+  const resolvedItems =
+    await parseCartItems(response)
+
+  // Temporary migration path for legacy localStorage entries that only
+  // contain productId. Once the server resolves every line to the explicit
+  // default variant, persist the canonical variant-based guest cart.
+  if (
+    guestItems.length > 0 &&
+    resolvedItems.length ===
+      guestItems.length &&
+    resolvedItems.every(
+      (item) =>
+        typeof item.productVariantId ===
+        'string',
+    )
+  ) {
+    try {
+      writeGuestCart(
+        resolvedItems.map(
+          (item) => ({
+            productId:
+              item.productId,
+            productVariantId:
+              item.productVariantId as string,
+            quantity:
+              item.quantity,
+          }),
+        ),
+      )
+    } catch {
+      // Rendering the resolved cart must not fail only because localStorage
+      // cannot be rewritten. The next request can still resolve productId.
+    }
+  }
+
+  return resolvedItems
 }
 
 function restoreGuestCart(
