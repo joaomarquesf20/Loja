@@ -72,10 +72,10 @@ type CheckoutVariantRecord = {
 type CheckoutCartItemRecord = {
   id: string
   productId: string
-  productVariantId?: string
+  productVariantId: string
   quantity: number
   product: CheckoutProductRecord
-  variant?: CheckoutVariantRecord
+  variant: CheckoutVariantRecord
 }
 
 type CheckoutOrderRecord = {
@@ -322,26 +322,7 @@ type CheckoutTransactionClient =
       }>
     }
 
-    productVariant?: {
-      updateMany(args: {
-        where: {
-          id: string
-          isActive: true
-          stockQuantity: {
-            gte: number
-          }
-        }
-        data: {
-          stockQuantity: {
-            decrement: number
-          }
-        }
-      }): Promise<{
-        count: number
-      }>
-    }
-
-    product: {
+    productVariant: {
       updateMany(args: {
         where: {
           id: string
@@ -423,13 +404,13 @@ type CheckoutTransactionClient =
         data: Array<{
           orderId: string
           productId: string
-          productVariantId?: string
+          productVariantId: string
           productNameAtPurchase: string
           productSkuAtPurchase: string
           priceAtPurchase: string
           quantity: number
           subtotalAtPurchase: string
-          variantOptionsAtPurchase?:
+          variantOptionsAtPurchase:
             CheckoutVariantOptionSnapshot[]
           shippingClassAtPurchase:
             CommercialShippingClass
@@ -458,7 +439,7 @@ export interface CheckoutClient {
 type PreparedCheckoutItem = {
   cartItemId: string
   productId: string
-  productVariantId?: string
+  productVariantId: string
   name: string
   sku: string
   quantity: number
@@ -1177,10 +1158,7 @@ async function prepareCheckout(
     )
   }
 
-  const useVariants =
-    Boolean(tx.productVariant)
-
-  const legacyProductSelect = {
+   const legacyProductSelect = {
     id: true,
     name: true,
     sku: true,
@@ -1208,52 +1186,41 @@ async function prepareCheckout(
       orderBy: {
         id: 'asc',
       },
-      select: useVariants
-        ? {
+      select: {
+        id: true,
+        productId: true,
+        productVariantId: true,
+        quantity: true,
+        product: {
+          select: legacyProductSelect,
+        },
+        variant: {
+          select: {
             id: true,
             productId: true,
-            productVariantId: true,
-            quantity: true,
-            product: {
-              select:
-                legacyProductSelect,
-            },
-            variant: {
+            sku: true,
+            price: true,
+            stockQuantity: true,
+            isActive: true,
+            selections: {
               select: {
-                id: true,
-                productId: true,
-                sku: true,
-                price: true,
-                stockQuantity: true,
-                isActive: true,
-                selections: {
+                optionValue: {
                   select: {
-                    optionValue: {
+                    value: true,
+                    option: {
                       select: {
-                        value: true,
-                        option: {
-                          select: {
-                            code: true,
-                            name: true,
-                            position: true,
-                          },
-                        },
+                        code: true,
+                        name: true,
+                        position: true,
                       },
                     },
                   },
                 },
               },
             },
-          }
-        : {
-            id: true,
-            productId: true,
-            quantity: true,
-            product: {
-              select:
-                legacyProductSelect,
-            },
           },
+        },
+      },
     })
 
   if (
@@ -1281,20 +1248,13 @@ async function prepareCheckout(
       )
     }
 
-    const sellable =
-      item.variant ??
-      null
+    const sellable = item.variant
 
     if (
-      useVariants &&
-      (
-        !item.productVariantId ||
-        !sellable ||
-        sellable.id !==
-          item.productVariantId ||
-        sellable.productId !==
-          item.productId
-      )
+      sellable.id !==
+        item.productVariantId ||
+      sellable.productId !==
+        item.productId
     ) {
       throw new CheckoutCartChangedError(
         'Existe uma variante inválida no carrinho',
@@ -1303,15 +1263,13 @@ async function prepareCheckout(
 
     if (
       !item.product.isActive ||
-      (sellable &&
-        !sellable.isActive)
+      !sellable.isActive
     ) {
       throw new CheckoutProductUnavailableError()
     }
 
     const stockQuantity =
-      sellable?.stockQuantity ??
-      item.product.stockQuantity
+      sellable.stockQuantity
 
     if (
       stockQuantity <
@@ -1321,8 +1279,7 @@ async function prepareCheckout(
     }
 
     const price =
-      sellable?.price ??
-      item.product.price
+      sellable.price
 
     const priceCents =
       priceToCents(price)
@@ -1340,7 +1297,7 @@ async function prepareCheckout(
       )
 
     const variantOptions =
-      (sellable?.selections ?? [])
+      sellable.selections
         .map((selection) => ({
           code:
             selection.optionValue
@@ -1379,16 +1336,10 @@ async function prepareCheckout(
       cartItemId: item.id,
       productId:
         item.productId,
-      ...(item.productVariantId
-        ? {
-            productVariantId:
-              item.productVariantId,
-          }
-        : {}),
+      productVariantId:
+        item.productVariantId,
       name: item.product.name,
-      sku:
-        sellable?.sku ??
-        item.product.sku,
+      sku: sellable.sku,
       quantity: item.quantity,
       price,
       priceCents,
@@ -1525,13 +1476,7 @@ function createCheckoutFingerprint(
       : null
 
   const snapshot = {
-    schemaVersion:
-      preparedItems.every(
-        (item) =>
-          item.productVariantId,
-      )
-        ? 4
-        : 3,
+    schemaVersion: 4,
     userId: user.id,
     shippingEmail,
     fulfillmentMethod:
@@ -1564,12 +1509,10 @@ function createCheckoutFingerprint(
     items: [...preparedItems]
       .sort((first, second) => {
         const firstKey =
-          first.productVariantId ??
-          first.productId
+          first.productVariantId
 
         const secondKey =
-          second.productVariantId ??
-          second.productId
+          second.productVariantId
 
         if (
           firstKey === secondKey
@@ -1593,14 +1536,10 @@ function createCheckoutFingerprint(
 
         return {
           productId: item.productId,
-          ...(item.productVariantId
-            ? {
-                productVariantId:
-                  item.productVariantId,
-                variantOptions:
-                  item.variantOptions,
-              }
-            : {}),
+          productVariantId:
+            item.productVariantId,
+          variantOptions:
+            item.variantOptions,
           name: item.name,
           sku: item.sku,
           quantity: item.quantity,
@@ -1765,44 +1704,10 @@ export async function createCheckoutOrder(
       for (
         const item of preparedItems
       ) {
-        if (
-          item.productVariantId &&
-          tx.productVariant
-        ) {
-          const variantUpdate =
-            await tx.productVariant.updateMany(
-              {
-                where: {
-                  id:
-                    item.productVariantId,
-                  isActive: true,
-                  stockQuantity: {
-                    gte:
-                      item.quantity,
-                  },
-                },
-                data: {
-                  stockQuantity: {
-                    decrement:
-                      item.quantity,
-                  },
-                },
-              },
-            )
-
-          if (
-            variantUpdate.count !== 1
-          ) {
-            throw new CheckoutCartChangedError()
-          }
-
-          continue
-        }
-
-        const productUpdate =
-          await tx.product.updateMany({
+        const variantUpdate =
+          await tx.productVariant.updateMany({
             where: {
-              id: item.productId,
+              id: item.productVariantId,
               isActive: true,
               stockQuantity: {
                 gte: item.quantity,
@@ -1817,7 +1722,7 @@ export async function createCheckoutOrder(
           })
 
         if (
-          productUpdate.count !== 1
+          variantUpdate.count !== 1
         ) {
           throw new CheckoutCartChangedError()
         }
@@ -1948,14 +1853,10 @@ export async function createCheckoutOrder(
             orderId: order.id,
             productId:
               item.productId,
-            ...(item.productVariantId
-              ? {
-                  productVariantId:
-                    item.productVariantId,
-                  variantOptionsAtPurchase:
-                    item.variantOptions,
-                }
-              : {}),
+            productVariantId:
+              item.productVariantId,
+            variantOptionsAtPurchase:
+              item.variantOptions,
             productNameAtPurchase:
               item.name,
             productSkuAtPurchase:
