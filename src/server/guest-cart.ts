@@ -440,6 +440,7 @@ export async function resolveGuestCartItems(
         id: true,
         productId: true,
         sku: true,
+        optionKey: true,
         price: true,
         stockQuantity: true,
         isActive: true,
