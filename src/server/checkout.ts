@@ -1158,7 +1158,7 @@ async function prepareCheckout(
     )
   }
 
-   const legacyProductSelect = {
+  const productSelect = {
     id: true,
     name: true,
     sku: true,
@@ -1192,7 +1192,7 @@ async function prepareCheckout(
         productVariantId: true,
         quantity: true,
         product: {
-          select: legacyProductSelect,
+          select: productSelect,
         },
         variant: {
           select: {
