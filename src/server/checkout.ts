@@ -459,7 +459,6 @@ type PreparedCheckoutItem = {
   cartItemId: string
   productId: string
   productVariantId?: string
-  variantOptionKey?: string
   name: string
   sku: string
   quantity: number
