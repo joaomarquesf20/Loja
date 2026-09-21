@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import {
   Geist,
   Geist_Mono,
@@ -124,7 +125,9 @@ async function getCommercialMessage() {
 
 export default async function RootLayout({
   children,
-}: LayoutProps<'/'>) {
+}: Readonly<{
+  children: ReactNode
+}>) {
   const [
     headerCategories,
     commercialMessage,
