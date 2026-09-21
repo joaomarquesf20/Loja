@@ -19,7 +19,6 @@ const prisma = new PrismaClient({
 })
 
 const DEV_PREFIX = 'DEV-PFA-'
-const DEV_SLUG_PREFIX = 'dev-'
 
 const categories = [
   {
