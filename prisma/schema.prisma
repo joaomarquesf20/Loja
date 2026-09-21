@@ -198,6 +198,8 @@ model ProductVariant {
   product        Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
   selections     ProductVariantOptionSelection[]
   specifications ProductVariantSpecification[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
 
   @@unique([productId, optionKey])
   @@index([productId, position])
@@ -277,14 +279,18 @@ model ProductVehicleCompatibility {
 }
 
 model CartItem {
-  id        String  @id @default(cuid())
-  userId    String
-  productId String
-  quantity  Int     @default(1)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  id               String         @id @default(cuid())
+  userId           String
+  productId        String
+  productVariantId String
+  quantity         Int            @default(1)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product          Product        @relation(fields: [productId], references: [id])
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  @@unique([userId, productId])
+  @@unique([userId, productVariantId])
+  @@index([productId])
+  @@index([productVariantId])
 }
 
 model GuestCartMerge {
@@ -402,20 +408,25 @@ model Order {
 }
 
 model OrderItem {
-  id                      String         @id @default(cuid())
-  orderId                 String
-  productId               String
-  productNameAtPurchase   String
-  productSkuAtPurchase    String
-  priceAtPurchase         Decimal        @db.Decimal(10, 2)
-  quantity                Int
-  subtotalAtPurchase      Decimal        @db.Decimal(10, 2)
-  shippingClassAtPurchase ShippingClass?
-  shippingCostAtPurchase  Decimal?       @db.Decimal(10, 2)
-  order                   Order          @relation(fields: [orderId], references: [id])
-  product                 Product        @relation(fields: [productId], references: [id])
+  id                       String         @id @default(cuid())
+  orderId                  String
+  productId                String
+  productVariantId         String
+  productNameAtPurchase    String
+  productSkuAtPurchase     String
+  priceAtPurchase          Decimal        @db.Decimal(10, 2)
+  quantity                 Int
+  subtotalAtPurchase       Decimal        @db.Decimal(10, 2)
+  variantOptionsAtPurchase Json
+  shippingClassAtPurchase  ShippingClass?
+  shippingCostAtPurchase   Decimal?       @db.Decimal(10, 2)
+  order                    Order          @relation(fields: [orderId], references: [id])
+  product                  Product        @relation(fields: [productId], references: [id])
+  variant                  ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  @@unique([orderId, productId])
+  @@unique([orderId, productVariantId])
+  @@index([productId])
+  @@index([productVariantId])
 }
 
 model OrderEvent {
