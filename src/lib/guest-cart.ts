@@ -488,16 +488,24 @@ export function updateGuestCartItemQuantity(
 
   const items = readGuestCart()
 
-  const existingIndex =
-    items.findIndex(
-      (item) =>
-        normalizedVariantId
-          ? item.productVariantId ===
-            normalizedVariantId
-          : !item.productVariantId &&
-            item.productId ===
-              normalizedProductId,
-    )
+  let existingIndex =
+    normalizedVariantId
+      ? items.findIndex(
+          (item) =>
+            item.productVariantId ===
+            normalizedVariantId,
+        )
+      : -1
+
+  if (existingIndex === -1) {
+    existingIndex =
+      items.findIndex(
+        (item) =>
+          !item.productVariantId &&
+          item.productId ===
+            normalizedProductId,
+      )
+  }
 
   if (existingIndex === -1) {
     throw new GuestCartItemNotFoundError()
@@ -531,25 +539,33 @@ export function removeGuestCartItem(
 
   const items = readGuestCart()
 
-  const matches = (
-    item: GuestCartItem,
-  ) =>
+  let existingIndex =
     normalizedVariantId
-      ? item.productVariantId ===
-        normalizedVariantId
-      : !item.productVariantId &&
-        item.productId ===
-          normalizedProductId
+      ? items.findIndex(
+          (item) =>
+            item.productVariantId ===
+            normalizedVariantId,
+        )
+      : -1
 
-  const exists = items.some(matches)
+  if (existingIndex === -1) {
+    existingIndex =
+      items.findIndex(
+        (item) =>
+          !item.productVariantId &&
+          item.productId ===
+            normalizedProductId,
+      )
+  }
 
-  if (!exists) {
+  if (existingIndex === -1) {
     throw new GuestCartItemNotFoundError()
   }
 
   const nextItems =
     items.filter(
-      (item) => !matches(item),
+      (_item, index) =>
+        index !== existingIndex,
     )
 
   writeGuestCart(nextItems)
