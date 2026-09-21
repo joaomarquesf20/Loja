@@ -415,7 +415,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await POST(
@@ -435,7 +435,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -453,8 +453,8 @@ describe('/api/cart', () => {
                 quantity:
                   '2',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
@@ -762,7 +762,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await PATCH(
@@ -782,7 +782,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -798,8 +798,8 @@ describe('/api/cart', () => {
                 productId:
                   'product-1',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
@@ -1124,7 +1124,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await DELETE(
@@ -1142,7 +1142,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -1163,8 +1163,8 @@ describe('/api/cart', () => {
                 productId:
                   'product-1',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
