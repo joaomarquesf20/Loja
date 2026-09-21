@@ -52,7 +52,11 @@ function createOrder(
   }
 }
 
-function createClient() {
+function createClient(
+  options?: {
+    withVariants?: boolean
+  },
+) {
   const findUnique =
     vi.fn()
 
@@ -60,6 +64,9 @@ function createClient() {
     vi.fn()
 
   const productUpdateMany =
+    vi.fn()
+
+  const variantUpdateMany =
     vi.fn()
 
   const createEvent =
@@ -81,6 +88,14 @@ function createClient() {
             updateMany:
               orderUpdateMany,
           },
+          ...(options?.withVariants
+            ? {
+                productVariant: {
+                  updateMany:
+                    variantUpdateMany,
+                },
+              }
+            : {}),
           product: {
             updateMany:
               productUpdateMany,
@@ -102,6 +117,7 @@ function createClient() {
     findUnique,
     orderUpdateMany,
     productUpdateMany,
+    variantUpdateMany,
     createEvent,
   }
 }
@@ -196,6 +212,87 @@ describe(
               'PENDING',
             toOrderStatus:
               'CANCELLED',
+          },
+        })
+      },
+    )
+
+    test(
+      'repõe stock na variante e espelha a variante default no produto legado',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          productUpdateMany,
+          variantUpdateMany,
+        } = createClient({
+          withVariants: true,
+        })
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            items: [
+              {
+                productId:
+                  'product-1',
+                productVariantId:
+                  'variant-1',
+                quantity: 2,
+                variant: {
+                  optionKey:
+                    'default',
+                },
+              },
+            ],
+          }),
+        )
+
+        orderUpdateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        variantUpdateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        productUpdateMany.mockResolvedValue({
+          count: 1,
+        })
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          variantUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'variant-1',
+          },
+          data: {
+            stockQuantity: {
+              increment: 2,
+            },
+          },
+        })
+
+        expect(
+          productUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'product-1',
+          },
+          data: {
+            stockQuantity: {
+              increment: 2,
+            },
           },
         })
       },

@@ -1006,6 +1006,159 @@ describe(
     )
 
     test(
+      'usa SKU, preço, stock e snapshot da variante no checkout',
+      async () => {
+        const baseTx =
+          createTransactionMock()
+
+        const variantUpdateMany =
+          vi.fn().mockResolvedValue({
+            count: 1,
+          })
+
+        const tx = {
+          ...baseTx,
+          productVariant: {
+            updateMany:
+              variantUpdateMany,
+          },
+        }
+
+        const product =
+          createProduct({
+            sku: 'LEGACY-SKU',
+            price: '999.00',
+            stockQuantity: 50,
+          })
+
+        const variantCartItem = {
+          ...createCartItem({
+            product,
+            quantity: 2,
+          }),
+          productVariantId:
+            'variant-1',
+          variant: {
+            id: 'variant-1',
+            productId:
+              product.id,
+            sku: 'VAR-SKU-19',
+            optionKey:
+              'default',
+            price: '25.50',
+            stockQuantity: 3,
+            isActive: true,
+            selections: [
+              {
+                optionValue: {
+                  value: '19"',
+                  option: {
+                    code:
+                      'diameter',
+                    name:
+                      'Diâmetro',
+                    position: 0,
+                  },
+                },
+              },
+            ],
+          },
+        }
+
+        prepareSuccessfulCheckout(
+          tx,
+          [variantCartItem],
+        )
+
+        const { client } =
+          createClient(tx)
+
+        const fingerprint =
+          await previewFingerprint(
+            tx,
+          )
+
+        const result =
+          await createCheckoutOrder(
+            'user-1',
+            shipping,
+            fingerprint,
+            client,
+          )
+
+        expect(
+          result.subtotal,
+        ).toBe(51)
+
+        expect(
+          variantUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'variant-1',
+            isActive: true,
+            stockQuantity: {
+              gte: 2,
+            },
+          },
+          data: {
+            stockQuantity: {
+              decrement: 2,
+            },
+          },
+        })
+
+        expect(
+          tx.product.updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'product-1',
+            isActive: true,
+            stockQuantity: {
+              gte: 2,
+            },
+          },
+          data: {
+            stockQuantity: {
+              decrement: 2,
+            },
+          },
+        })
+
+        expect(
+          tx.orderItem.createMany,
+        ).toHaveBeenCalledWith({
+          data: [
+            expect.objectContaining({
+              productId:
+                'product-1',
+              productVariantId:
+                'variant-1',
+              productNameAtPurchase:
+                'Produto 1',
+              productSkuAtPurchase:
+                'VAR-SKU-19',
+              priceAtPurchase:
+                '25.50',
+              quantity: 2,
+              subtotalAtPurchase:
+                '51.00',
+              variantOptionsAtPurchase:
+                [
+                  {
+                    code:
+                      'diameter',
+                    name:
+                      'Diâmetro',
+                    value: '19"',
+                  },
+                ],
+            }),
+          ],
+        })
+      },
+    )
+
+    test(
       'grava a tarifa específica por unidade de produto Volumoso',
       async () => {
         const tx =
