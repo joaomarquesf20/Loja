@@ -9,7 +9,7 @@ import {
 type AddToCartButtonProps = {
   productId: string
   inStock: boolean
-  variant?: 'default' | 'compact' | 'card'
+  variant?: 'default' | 'compact' | 'card' | 'product'
 }
 
 function isErrorResponse(
@@ -139,10 +139,15 @@ export default function AddToCartButton({
   const isCard =
     variant === 'card'
 
+  const isProduct =
+    variant === 'product'
+
   return (
     <div
       className={
-        isCompact || isCard
+        isCompact ||
+        isCard ||
+        isProduct
           ? ''
           : 'mt-6'
       }
@@ -154,7 +159,7 @@ export default function AddToCartButton({
         }
         onClick={handleAddToCart}
         aria-label={
-          isCompact || isCard
+          isCompact || isCard || isProduct
             ? !inStock
               ? 'Produto sem stock'
               : isPending
@@ -172,12 +177,14 @@ export default function AddToCartButton({
             ? 'grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
             : isCard
               ? 'inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-sm bg-brand px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
-              : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
+              : isProduct
+                ? 'inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+                : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
         }
       >
         {isCompact ? (
           message ? '✓' : '+'
-        ) : isCard ? (
+        ) : isCard || isProduct ? (
           <>
             <svg
               aria-hidden="true"
@@ -200,7 +207,9 @@ export default function AddToCartButton({
                   ? 'A adicionar…'
                   : message
                     ? 'Adicionado'
-                    : 'Adicionar'}
+                    : isProduct
+                      ? 'Adicionar ao carrinho'
+                      : 'Adicionar'}
             </span>
           </>
         ) : !inStock
@@ -216,6 +225,8 @@ export default function AddToCartButton({
           className={
             isCompact || isCard
               ? 'sr-only'
+              : isProduct
+                ? 'mt-3 text-sm font-semibold text-success'
               : 'mt-3 text-sm font-medium text-green-700 dark:text-green-400'
           }
         >
@@ -229,7 +240,9 @@ export default function AddToCartButton({
           className={
             isCompact || isCard
               ? 'sr-only'
-              : 'mt-3 text-sm font-medium text-red-700 dark:text-red-400'
+              : isProduct
+                ? 'mt-3 text-sm font-semibold text-danger'
+                : 'mt-3 text-sm font-medium text-red-700 dark:text-red-400'
           }
         >
           {error}
