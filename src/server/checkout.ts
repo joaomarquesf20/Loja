@@ -1289,6 +1289,22 @@ async function prepareCheckout(
       null
 
     if (
+      useVariants &&
+      (
+        !item.productVariantId ||
+        !sellable ||
+        sellable.id !==
+          item.productVariantId ||
+        sellable.productId !==
+          item.productId
+      )
+    ) {
+      throw new CheckoutCartChangedError(
+        'Existe uma variante inválida no carrinho',
+      )
+    }
+
+    if (
       !item.product.isActive ||
       (sellable &&
         !sellable.isActive)
