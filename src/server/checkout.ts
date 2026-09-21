@@ -37,7 +37,6 @@ type CheckoutProductRecord = {
   id: string
   name: string
   sku: string
-  optionKey: string
   price: CheckoutPrice
   stockQuantity: number
   isActive: boolean
@@ -55,6 +54,7 @@ type CheckoutVariantRecord = {
   id: string
   productId: string
   sku: string
+  optionKey: string
   price: CheckoutPrice
   stockQuantity: number
   isActive: boolean
