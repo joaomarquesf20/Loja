@@ -348,6 +348,9 @@ export async function DELETE(
     const productId =
       body.productId
 
+    const productVariantId =
+      body.productVariantId
+
     if (
       typeof productId !==
         'string' &&

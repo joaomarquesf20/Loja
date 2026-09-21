@@ -289,8 +289,8 @@ export function CartClient() {
     }
 
     setPendingProductId(
-      item.productId,
-      item.productVariantId,
+      item.productVariantId ??
+        item.productId,
     )
     setError(null)
 
@@ -338,6 +338,7 @@ export function CartClient() {
         updateGuestCartItemQuantity(
           item.productId,
           quantity,
+          item.productVariantId,
         )
 
         const nextItems =
@@ -373,8 +374,8 @@ export function CartClient() {
     }
 
     setPendingProductId(
-      item.productId,
-      item.productVariantId,
+      item.productVariantId ??
+        item.productId,
     )
     setError(null)
 
@@ -420,6 +421,7 @@ export function CartClient() {
       try {
         removeGuestCartItem(
           item.productId,
+          item.productVariantId,
         )
 
         const nextItems =
