@@ -464,6 +464,20 @@ async function cancelOrderAndRestoreStockForOwner(
         )
       }
 
+      const variantQuantities =
+        tx.productVariant
+          ? aggregateVariantRestockQuantities(
+              order.items,
+            )
+          : null
+
+      const legacyQuantities =
+        tx.productVariant
+          ? null
+          : aggregateLegacyRestockQuantities(
+              order.items,
+            )
+
       const updated =
         await tx.order.updateMany({
           where: {
@@ -493,17 +507,15 @@ async function cancelOrderAndRestoreStockForOwner(
         )
       }
 
-      if (tx.productVariant) {
-        const quantities =
-          aggregateVariantRestockQuantities(
-            order.items,
-          )
-
+      if (
+        tx.productVariant &&
+        variantQuantities
+      ) {
         for (
           const [
             productVariantId,
             item,
-          ] of quantities
+          ] of variantQuantities
         ) {
           const restoredVariant =
             await tx.productVariant.updateMany(
@@ -530,17 +542,14 @@ async function cancelOrderAndRestoreStockForOwner(
           }
 
         }
-      } else {
-        const quantities =
-          aggregateLegacyRestockQuantities(
-            order.items,
-          )
-
+      } else if (
+        legacyQuantities
+      ) {
         for (
           const [
             productId,
             quantity,
-          ] of quantities
+          ] of legacyQuantities
         ) {
           const restored =
             await tx.product.updateMany({
