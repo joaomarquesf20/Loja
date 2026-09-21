@@ -111,31 +111,6 @@ function formatCompatibility(
   }
 }
 
-function needsVehicleFitment(
-  categoryName: string,
-  categorySlug: string,
-) {
-  const value =
-    `${categoryName} ${categorySlug}`
-      .toLocaleLowerCase('pt-PT')
-
-  return [
-    'jante',
-    'wheel',
-    'rim',
-    'suspens',
-    'coilover',
-    'exterior',
-    'body-kit',
-    'bodykit',
-    'splitter',
-    'spoiler',
-    'difusor',
-  ].some((keyword) =>
-    value.includes(keyword),
-  )
-}
-
 function getRelatedProducts(
   products: NonNullable<
     Awaited<
@@ -215,28 +190,64 @@ export default async function ProductPage({
         )
       : null
 
-  const showMissingFitmentNotice =
-    compatibilities.length === 0 &&
-    needsVehicleFitment(
-      product.category.name,
-      product.category.slug,
-    )
-
-  const informationItems = [
-    ...(product.description?.trim()
+  const specificationRows = [
+    {
+      label: 'Referência',
+      value: product.sku,
+    },
+    ...(product.brand
       ? [
           {
-            id: 'descricao',
-            title: 'Descrição',
-            content: (
-              <p className="whitespace-pre-line text-sm leading-7 text-white/50">
-                {product.description}
-              </p>
-            ),
-            defaultOpen: true,
+            label: 'Marca',
+            value: product.brand.name,
           },
         ]
       : []),
+    {
+      label: 'Categoria',
+      value: product.category.name,
+    },
+  ]
+
+  const informationItems = [
+    {
+      id: 'descricao',
+      title: 'Descrição',
+      content: product.description?.trim() ? (
+        <p className="whitespace-pre-line text-sm leading-7 text-white/50">
+          {product.description}
+        </p>
+      ) : (
+        <p className="text-sm leading-7 text-white/38">
+          Ainda não existe uma descrição
+          detalhada para este produto.
+        </p>
+      ),
+      defaultOpen: true,
+    },
+    {
+      id: 'especificacoes',
+      title: 'Especificações',
+      content: (
+        <dl className="grid gap-3 sm:grid-cols-2">
+          {specificationRows.map(
+            (row) => (
+              <div
+                key={row.label}
+                className="border-l border-white/10 pl-4"
+              >
+                <dt className="text-[10px] font-black uppercase tracking-[0.12em] text-white/30">
+                  {row.label}
+                </dt>
+                <dd className="mt-1.5 text-sm font-bold text-white/72">
+                  {row.value}
+                </dd>
+              </div>
+            ),
+          )}
+        </dl>
+      ),
+    },
     ...(compatibilities.length > 0
       ? [
           {
@@ -281,6 +292,27 @@ export default async function ProductPage({
           },
         ]
       : []),
+    {
+      id: 'entrega-devolucoes',
+      title: 'Entrega e devoluções',
+      content: (
+        <div className="grid gap-3 text-sm leading-7 text-white/50">
+          <p>
+            As opções e os custos de entrega
+            são apresentados no checkout de
+            acordo com o destino e as regras
+            comerciais em vigor.
+          </p>
+          <p>
+            As condições de devolução não
+            estão parametrizadas no catálogo
+            deste produto, por isso não
+            apresentamos prazos ou condições
+            que não estejam definidos.
+          </p>
+        </div>
+      ),
+    },
   ]
 
   return (
@@ -343,8 +375,13 @@ export default async function ProductPage({
               {product.name}
             </h1>
 
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.08em] text-white/30">
-              Referência {product.sku}
+            <p className="mt-3 text-xs font-semibold tracking-[0.055em]">
+              <span className="uppercase text-white/30">
+                Referência
+              </span>
+              <span className="ml-2 text-white/62">
+                {product.sku}
+              </span>
             </p>
 
             {compatibilityPreview && (
@@ -381,16 +418,8 @@ export default async function ProductPage({
               </div>
             )}
 
-            {showMissingFitmentNotice && (
-              <p className="mt-6 border-l border-white/12 pl-4 text-xs font-semibold leading-5 text-white/36">
-                Aplicações por veículo ainda
-                não registadas no catálogo
-                para este produto.
-              </p>
-            )}
-
-            <div className="mt-8 border-y border-white/8 py-6">
-              <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="mt-7 border-y border-white/8 py-5">
+              <div className="flex flex-wrap items-center gap-4">
                 <Price
                   value={product.price}
                   className="text-3xl font-black tracking-[-0.035em] text-white sm:text-[2rem]"
@@ -403,7 +432,7 @@ export default async function ProductPage({
                 />
               </div>
 
-              <div className="mt-6">
+              <div className="mt-4">
                 <AddToCartButton
                   productId={product.id}
                   inStock={
@@ -413,17 +442,6 @@ export default async function ProductPage({
                 />
               </div>
             </div>
-
-            {informationItems.length >
-              0 && (
-              <div className="pt-4">
-                <ProductInformationAccordion
-                  items={
-                    informationItems
-                  }
-                />
-              </div>
-            )}
 
             <div className="mt-7 border-t border-white/8 pt-6">
               <Link
@@ -437,10 +455,32 @@ export default async function ProductPage({
           </section>
         </article>
 
+        <section
+          aria-labelledby="product-information-heading"
+          className="mt-14 border-t border-white/8 pt-10 lg:mt-18 lg:pt-12"
+        >
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+            Detalhes
+          </p>
+
+          <h2
+            id="product-information-heading"
+            className="mt-2 text-2xl font-black tracking-[-0.03em]"
+          >
+            Informação do produto
+          </h2>
+
+          <div className="mt-5">
+            <ProductInformationAccordion
+              items={informationItems}
+            />
+          </div>
+        </section>
+
         {relatedProducts.length > 0 && (
           <section
             aria-labelledby="related-products-heading"
-            className="mt-16 border-t border-white/8 pt-12 lg:mt-20 lg:pt-16"
+            className="mt-14 border-t border-white/8 pt-10 lg:mt-18 lg:pt-12"
           >
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
               Da mesma categoria

@@ -76,7 +76,7 @@ export default function ProductGallery({
       aria-label="Imagens do produto"
       className="min-w-0"
     >
-      <div className="aspect-[6/5] overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6">
+      <div className="aspect-[6/5] min-h-[20rem] overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 sm:min-h-0">
         {selectedFailed ? (
           <EmptyImage />
         ) : (
@@ -88,13 +88,13 @@ export default function ProductGallery({
                 selectedIndex,
               )
             }
-            className="h-full w-full object-contain p-5 sm:p-7 lg:p-8"
+            className="h-full w-full object-contain p-5 sm:p-7 lg:p-9"
           />
         )}
       </div>
 
       {normalizedImages.length > 1 && (
-        <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-5">
+        <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-5 lg:max-w-2xl">
           {normalizedImages.map(
             (image, index) => {
               const isSelected =

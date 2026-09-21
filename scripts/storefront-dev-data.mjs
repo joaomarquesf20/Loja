@@ -95,8 +95,10 @@ const products = [
     price: '649.90',
     stockQuantity: 8,
     shippingClass: 'STANDARD',
-    image:
+    images: [
       'https://images.unsplash.com/photo-1676222617103-67f8d2eead16?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1749224950304-94f36a9138bc?auto=format&fit=crop&w=1000&q=82',
+    ],
   },
   {
     name: 'OZ Racing Ultraleggera 18"',
@@ -208,7 +210,7 @@ const products = [
     stockQuantity: 12,
     shippingClass: 'SMALL',
     image:
-      'https://images.unsplash.com/photo-1556982962-dc0ee0f77f47?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1674849958212-cd7eb5b2de3d?auto=format&fit=crop&w=1000&q=82',
   },
   {
     name: 'Eibach Pro-Spacer Kit',
@@ -222,7 +224,7 @@ const products = [
     stockQuantity: 9,
     shippingClass: 'SMALL',
     image:
-      'https://images.unsplash.com/photo-1556982962-dc0ee0f77f47?auto=format&fit=crop&w=1000&q=82',
+      'https://images.unsplash.com/photo-1558652862-e6cf47acff59?auto=format&fit=crop&w=1000&q=82',
   },
 ]
 
@@ -343,9 +345,10 @@ async function seed() {
         stockQuantity:
           definition.stockQuantity,
         isActive: true,
-        images: [
-          definition.image,
-        ],
+        images:
+          definition.images ?? [
+            definition.image,
+          ],
         shippingClass:
           definition.shippingClass,
       },
@@ -361,9 +364,10 @@ async function seed() {
         stockQuantity:
           definition.stockQuantity,
         isActive: true,
-        images: [
-          definition.image,
-        ],
+        images:
+          definition.images ?? [
+            definition.image,
+          ],
         shippingClass:
           definition.shippingClass,
       },
@@ -379,20 +383,10 @@ async function clear() {
   const deletedProducts =
     await prisma.product.deleteMany({
       where: {
-        OR: [
-          {
-            sku: {
-              startsWith:
-                DEV_PREFIX,
-            },
-          },
-          {
-            slug: {
-              startsWith:
-                DEV_SLUG_PREFIX,
-            },
-          },
-        ],
+        sku: {
+          startsWith:
+            DEV_PREFIX,
+        },
       },
     })
 
@@ -400,8 +394,9 @@ async function clear() {
     await prisma.productBrand.deleteMany({
       where: {
         slug: {
-          startsWith:
-            DEV_SLUG_PREFIX,
+          in: brands.map(
+            (brand) => brand.slug,
+          ),
         },
         products: {
           none: {},
@@ -413,8 +408,10 @@ async function clear() {
     await prisma.category.deleteMany({
       where: {
         slug: {
-          startsWith:
-            DEV_SLUG_PREFIX,
+          in: categories.map(
+            (category) =>
+              category.slug,
+          ),
         },
         products: {
           none: {},
