@@ -24,6 +24,7 @@ type CartProduct = {
 type CartItem = {
   id?: string
   productId: string
+  productVariantId?: string
   quantity: number
   product: CartProduct | null
   inStock: boolean
@@ -289,6 +290,7 @@ export function CartClient() {
 
     setPendingProductId(
       item.productId,
+      item.productVariantId,
     )
     setError(null)
 
@@ -306,6 +308,12 @@ export function CartClient() {
             body: JSON.stringify({
               productId:
                 item.productId,
+              ...(item.productVariantId
+                ? {
+                    productVariantId:
+                      item.productVariantId,
+                  }
+                : {}),
               quantity,
             }),
           })
@@ -366,6 +374,7 @@ export function CartClient() {
 
     setPendingProductId(
       item.productId,
+      item.productVariantId,
     )
     setError(null)
 
@@ -383,6 +392,12 @@ export function CartClient() {
             body: JSON.stringify({
               productId:
                 item.productId,
+              ...(item.productVariantId
+                ? {
+                    productVariantId:
+                      item.productVariantId,
+                  }
+                : {}),
             }),
           })
 
@@ -527,7 +542,8 @@ export function CartClient() {
 
               const isPending =
                 pendingProductId ===
-                item.productId
+                (item.productVariantId ??
+                  item.productId)
 
               const canDecrease =
                 Boolean(
@@ -540,6 +556,7 @@ export function CartClient() {
               return (
                 <article
                   key={
+                    item.productVariantId ??
                     item.productId
                   }
                   className="rounded-xl border border-gray-200 bg-white p-5"

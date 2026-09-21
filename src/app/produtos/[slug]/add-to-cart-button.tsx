@@ -8,6 +8,7 @@ import {
 
 type AddToCartButtonProps = {
   productId: string
+  productVariantId?: string
   inStock: boolean
   variant?:
     | 'default'
@@ -54,6 +55,7 @@ async function getErrorMessage(
 
 export default function AddToCartButton({
   productId,
+  productVariantId,
   inStock,
   variant = 'default',
 }: AddToCartButtonProps) {
@@ -101,6 +103,9 @@ export default function AddToCartButton({
           },
           body: JSON.stringify({
             productId,
+            ...(productVariantId
+              ? { productVariantId }
+              : {}),
             quantity:
               requestedQuantity,
           }),
@@ -111,6 +116,7 @@ export default function AddToCartButton({
         addGuestCartItem(
           productId,
           requestedQuantity,
+          productVariantId,
         )
 
         setMessage(

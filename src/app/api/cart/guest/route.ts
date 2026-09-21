@@ -59,6 +59,10 @@ function parseItems(
     if (
       typeof item.productId !==
         'string' ||
+      (item.productVariantId !==
+        undefined &&
+        typeof item.productVariantId !==
+          'string') ||
       typeof item.quantity !==
         'number'
     ) {
@@ -68,6 +72,13 @@ function parseItems(
     items.push({
       productId:
         item.productId,
+      ...(typeof item.productVariantId ===
+      'string'
+        ? {
+            productVariantId:
+              item.productVariantId,
+          }
+        : {}),
       quantity:
         item.quantity,
     })

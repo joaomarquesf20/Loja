@@ -175,15 +175,31 @@ export async function POST(
     const productId =
       body.productId
 
+    const productVariantId =
+      body.productVariantId
+
     const quantity =
       body.quantity
 
     if (
       typeof productId !==
-      'string'
+        'string' &&
+      typeof productVariantId !==
+        'string'
     ) {
       return errorResponse(
-        'Produto inválido',
+        'Produto ou variante inválido',
+        400,
+      )
+    }
+
+    if (
+      productVariantId !== undefined &&
+      typeof productVariantId !==
+        'string'
+    ) {
+      return errorResponse(
+        'Variante inválida',
         400,
       )
     }
@@ -202,7 +218,15 @@ export async function POST(
     const item =
       await addCartItem(
         userId,
-        productId,
+        productVariantId
+          ? {
+              ...(typeof productId ===
+              'string'
+                ? { productId }
+                : {}),
+              productVariantId,
+            }
+          : (productId as string),
         quantity === undefined
           ? 1
           : quantity,
@@ -239,15 +263,31 @@ export async function PATCH(
     const productId =
       body.productId
 
+    const productVariantId =
+      body.productVariantId
+
     const quantity =
       body.quantity
 
     if (
       typeof productId !==
-      'string'
+        'string' &&
+      typeof productVariantId !==
+        'string'
     ) {
       return errorResponse(
-        'Produto inválido',
+        'Produto ou variante inválido',
+        400,
+      )
+    }
+
+    if (
+      productVariantId !== undefined &&
+      typeof productVariantId !==
+        'string'
+    ) {
+      return errorResponse(
+        'Variante inválida',
         400,
       )
     }
@@ -265,7 +305,15 @@ export async function PATCH(
     const item =
       await updateCartItemQuantity(
         userId,
-        productId,
+        productVariantId
+          ? {
+              ...(typeof productId ===
+              'string'
+                ? { productId }
+                : {}),
+              productVariantId,
+            }
+          : (productId as string),
         quantity,
       )
 
@@ -302,17 +350,38 @@ export async function DELETE(
 
     if (
       typeof productId !==
-      'string'
+        'string' &&
+      typeof productVariantId !==
+        'string'
     ) {
       return errorResponse(
-        'Produto inválido',
+        'Produto ou variante inválido',
+        400,
+      )
+    }
+
+    if (
+      productVariantId !== undefined &&
+      typeof productVariantId !==
+        'string'
+    ) {
+      return errorResponse(
+        'Variante inválida',
         400,
       )
     }
 
     await removeCartItem(
       userId,
-      productId,
+      productVariantId
+        ? {
+            ...(typeof productId ===
+            'string'
+              ? { productId }
+              : {}),
+            productVariantId,
+          }
+        : (productId as string),
     )
 
     return new Response(null, {
