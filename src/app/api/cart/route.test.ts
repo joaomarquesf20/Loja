@@ -1184,6 +1184,36 @@ describe('/api/cart', () => {
     )
 
     test(
+      'remove item por productVariantId sem exigir productId',
+      async () => {
+        mocks.removeCartItem.mockResolvedValue(
+          undefined,
+        )
+
+        const response = await DELETE(
+          createRequest(
+            'DELETE',
+            JSON.stringify({
+              productVariantId:
+                'variant-1',
+            }),
+          ),
+        )
+
+        expect(response.status).toBe(204)
+        expect(
+          mocks.removeCartItem,
+        ).toHaveBeenCalledWith(
+          'user-1',
+          {
+            productVariantId:
+              'variant-1',
+          },
+        )
+      },
+    )
+
+    test(
       'devolve 400 para erro de validação',
       async () => {
         mocks.removeCartItem
