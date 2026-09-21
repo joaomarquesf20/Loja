@@ -25,13 +25,22 @@ type MoneyValue =
       toString(): string
     }
 
+export type OrderVariantOptionSnapshot = {
+  code: string
+  name: string
+  value: string
+}
+
 export type UserOrderItem = {
   id: string
+  productVariantId: string
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
   quantity: number
   subtotalAtPurchase: string
+  variantOptionsAtPurchase:
+    OrderVariantOptionSnapshot[]
 }
 
 export type UserOrderEvent = {
@@ -79,11 +88,13 @@ export type UserOrder = {
 
 type OrderItemRecord = {
   id: string
+  productVariantId: string
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: MoneyValue
   quantity: number
   subtotalAtPurchase: MoneyValue
+  variantOptionsAtPurchase: unknown
 }
 
 type OrderEventRecord = {
@@ -131,11 +142,13 @@ type OrderRecord = {
 
 type OrderItemSelect = {
   id: true
+  productVariantId: true
   productNameAtPurchase: true
   productSkuAtPurchase: true
   priceAtPurchase: true
   quantity: true
   subtotalAtPurchase: true
+  variantOptionsAtPurchase: true
 }
 
 type OrderEventSelect = {
@@ -202,11 +215,13 @@ export interface OrderClient {
 
 const orderItemSelect: OrderItemSelect = {
   id: true,
+  productVariantId: true,
   productNameAtPurchase: true,
   productSkuAtPurchase: true,
   priceAtPurchase: true,
   quantity: true,
   subtotalAtPurchase: true,
+  variantOptionsAtPurchase: true,
 }
 
 const orderEventSelect: OrderEventSelect = {
@@ -303,11 +318,50 @@ function moneyToString(
   return value.toString()
 }
 
+function normalizeVariantOptions(
+  value: unknown,
+): OrderVariantOptionSnapshot[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      Array.isArray(entry)
+    ) {
+      return []
+    }
+
+    const record =
+      entry as Record<string, unknown>
+
+    if (
+      typeof record.code !== 'string' ||
+      typeof record.name !== 'string' ||
+      typeof record.value !== 'string'
+    ) {
+      return []
+    }
+
+    return [
+      {
+        code: record.code,
+        name: record.name,
+        value: record.value,
+      },
+    ]
+  })
+}
+
 function mapOrderItem(
   item: OrderItemRecord,
 ): UserOrderItem {
   return {
     id: item.id,
+    productVariantId:
+      item.productVariantId,
     productNameAtPurchase:
       item.productNameAtPurchase,
     productSkuAtPurchase:
@@ -320,6 +374,10 @@ function mapOrderItem(
     subtotalAtPurchase:
       moneyToString(
         item.subtotalAtPurchase,
+      ),
+    variantOptionsAtPurchase:
+      normalizeVariantOptions(
+        item.variantOptionsAtPurchase,
       ),
   }
 }

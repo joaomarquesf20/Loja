@@ -70,13 +70,22 @@ export type AdminOrderEvent = {
   createdAt: Date
 }
 
+export type AdminOrderVariantOptionSnapshot = {
+  code: string
+  name: string
+  value: string
+}
+
 export type AdminOrderItem = {
   id: string
+  productVariantId: string
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
   quantity: number
   subtotalAtPurchase: string
+  variantOptionsAtPurchase:
+    AdminOrderVariantOptionSnapshot[]
 }
 
 export type AdminOrder = {
@@ -141,11 +150,13 @@ export type AdminOrderDetail =
 
 type AdminOrderItemRecord = {
   id: string
+  productVariantId: string
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: MoneyValue
   quantity: number
   subtotalAtPurchase: MoneyValue
+  variantOptionsAtPurchase: unknown
 }
 
 type AdminOrderRecord = {
@@ -226,11 +237,13 @@ type AdminOrderDetailRecord =
 
 type AdminOrderItemSelect = {
   id: true
+  productVariantId: true
   productNameAtPurchase: true
   productSkuAtPurchase: true
   priceAtPurchase: true
   quantity: true
   subtotalAtPurchase: true
+  variantOptionsAtPurchase: true
 }
 
 type AdminOrderSelect = {
@@ -350,11 +363,13 @@ export interface AdminOrderClient {
 const adminOrderItemSelect:
   AdminOrderItemSelect = {
   id: true,
+  productVariantId: true,
   productNameAtPurchase: true,
   productSkuAtPurchase: true,
   priceAtPurchase: true,
   quantity: true,
   subtotalAtPurchase: true,
+  variantOptionsAtPurchase: true,
 }
 
 const adminOrderSelect:
@@ -493,11 +508,50 @@ function nullableMoneyToString(
     : moneyToString(value)
 }
 
+function normalizeVariantOptions(
+  value: unknown,
+): AdminOrderVariantOptionSnapshot[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      Array.isArray(entry)
+    ) {
+      return []
+    }
+
+    const record =
+      entry as Record<string, unknown>
+
+    if (
+      typeof record.code !== 'string' ||
+      typeof record.name !== 'string' ||
+      typeof record.value !== 'string'
+    ) {
+      return []
+    }
+
+    return [
+      {
+        code: record.code,
+        name: record.name,
+        value: record.value,
+      },
+    ]
+  })
+}
+
 function mapOrderItem(
   item: AdminOrderItemRecord,
 ): AdminOrderItem {
   return {
     id: item.id,
+    productVariantId:
+      item.productVariantId,
     productNameAtPurchase:
       item.productNameAtPurchase,
     productSkuAtPurchase:
@@ -510,6 +564,10 @@ function mapOrderItem(
     subtotalAtPurchase:
       moneyToString(
         item.subtotalAtPurchase,
+      ),
+    variantOptionsAtPurchase:
+      normalizeVariantOptions(
+        item.variantOptionsAtPurchase,
       ),
   }
 }
