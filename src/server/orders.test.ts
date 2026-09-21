@@ -66,6 +66,8 @@ function createOrderRecord() {
     items: [
       {
         id: 'item-1',
+        productVariantId:
+          'variant-1',
         productNameAtPurchase:
           'Filtro de óleo',
         productSkuAtPurchase:
@@ -75,6 +77,14 @@ function createOrderRecord() {
         quantity: 2,
         subtotalAtPurchase:
           decimal('100.00'),
+        variantOptionsAtPurchase:
+          [
+            {
+              code: 'diameter',
+              name: 'Diâmetro',
+              value: '19"',
+            },
+          ],
       },
     ],
     events: [],
@@ -166,6 +176,8 @@ describe(
               },
               select: {
                 id: true,
+                productVariantId:
+                  true,
                 productNameAtPurchase:
                   true,
                 productSkuAtPurchase:
@@ -174,6 +186,8 @@ describe(
                   true,
                 quantity: true,
                 subtotalAtPurchase:
+                  true,
+                variantOptionsAtPurchase:
                   true,
               },
             },
@@ -264,6 +278,8 @@ describe(
             items: [
               {
                 id: 'item-1',
+                productVariantId:
+                  'variant-1',
                 productNameAtPurchase:
                   'Filtro de óleo',
                 productSkuAtPurchase:
@@ -273,6 +289,14 @@ describe(
                 quantity: 2,
                 subtotalAtPurchase:
                   '100.00',
+                variantOptionsAtPurchase:
+                  [
+                    {
+                      code: 'diameter',
+                      name: 'Diâmetro',
+                      value: '19"',
+                    },
+                  ],
               },
             ],
             events: [],
@@ -421,6 +445,8 @@ describe(
               items: [
                 {
                   id: 'item-1',
+                  productVariantId:
+                    'variant-historical',
                   productNameAtPurchase:
                     'Nome histórico',
                   productSkuAtPurchase:
@@ -430,6 +456,8 @@ describe(
                   quantity: 1,
                   subtotalAtPurchase:
                     '19.99',
+                  variantOptionsAtPurchase:
+                    [],
                 },
               ],
             },
@@ -446,6 +474,8 @@ describe(
           result[0]?.items[0],
         ).toEqual({
           id: 'item-1',
+          productVariantId:
+            'variant-historical',
           productNameAtPurchase:
             'Nome histórico',
           productSkuAtPurchase:
@@ -455,6 +485,8 @@ describe(
           quantity: 1,
           subtotalAtPurchase:
             '19.99',
+          variantOptionsAtPurchase:
+            [],
         })
       },
     )

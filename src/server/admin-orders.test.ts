@@ -89,6 +89,8 @@ function createOrderRecord() {
     items: [
       {
         id: 'item-1',
+        productVariantId:
+          'variant-1',
         productNameAtPurchase:
           'Produto Teste',
         productSkuAtPurchase:
@@ -100,6 +102,14 @@ function createOrderRecord() {
           toString: () =>
             '100.00',
         },
+        variantOptionsAtPurchase:
+          [
+            {
+              code: 'diameter',
+              name: 'Diâmetro',
+              value: '19"',
+            },
+          ],
       },
     ],
   }
@@ -173,6 +183,8 @@ describe(
             items: [
               {
                 id: 'item-1',
+                productVariantId:
+                  'variant-1',
                 productNameAtPurchase:
                   'Produto Teste',
                 productSkuAtPurchase:
@@ -182,6 +194,14 @@ describe(
                 quantity: 1,
                 subtotalAtPurchase:
                   '100.00',
+                variantOptionsAtPurchase:
+                  [
+                    {
+                      code: 'diameter',
+                      name: 'Diâmetro',
+                      value: '19"',
+                    },
+                  ],
               },
             ],
           },
@@ -360,6 +380,8 @@ describe(
                 id: 'item-1',
                 productId:
                   'product-1',
+                productVariantId:
+                  'variant-1',
                 productNameAtPurchase:
                   'Produto Teste',
                 productSkuAtPurchase:
@@ -415,6 +437,10 @@ describe(
                   select:
                     expect.objectContaining({
                       productId:
+                        true,
+                      productVariantId:
+                        true,
+                      variantOptionsAtPurchase:
                         true,
                       priceAtPurchase:
                         true,
