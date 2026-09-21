@@ -243,17 +243,31 @@ function createCartItem(
     overrides?.product ??
     createProduct()
 
+  const productId =
+    overrides?.productId ??
+    product.id
+
   return {
     id:
       overrides?.id ??
       'cart-1',
-    productId:
-      overrides?.productId ??
-      product.id,
+    productId,
+    productVariantId:
+      `variant-${productId}`,
     quantity:
       overrides?.quantity ??
       2,
     product,
+    variant: {
+      id: `variant-${productId}`,
+      productId,
+      sku: product.sku,
+      price: product.price,
+      stockQuantity:
+        product.stockQuantity,
+      isActive: true,
+      selections: [],
+    },
   }
 }
 
@@ -279,6 +293,9 @@ function createTransactionMock() {
     cartItem: {
       findMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    productVariant: {
+      updateMany: vi.fn(),
     },
     product: {
       updateMany: vi.fn(),
@@ -366,7 +383,7 @@ function prepareSuccessfulCheckout(
 
   prepareCommercialSettings(tx)
 
-  tx.product.updateMany.mockResolvedValue(
+  tx.productVariant.updateMany.mockResolvedValue(
     {
       count: 1,
     },
@@ -1537,7 +1554,7 @@ describe(
 
         prepareSuccessfulCheckout(tx)
 
-        tx.product.updateMany.mockResolvedValue(
+        tx.productVariant.updateMany.mockResolvedValue(
           {
             count: 0,
           },
@@ -1946,6 +1963,7 @@ function checkoutScenario(cartItems = [createCartItem()]) {
 }
 
 function expectNoCheckoutWrites(tx: ReturnType<typeof createTransactionMock>) {
+  expect(tx.productVariant.updateMany).not.toHaveBeenCalled()
   expect(tx.product.updateMany).not.toHaveBeenCalled()
   expect(tx.order.create).not.toHaveBeenCalled()
   expect(tx.orderItem.createMany).not.toHaveBeenCalled()
@@ -2092,8 +2110,8 @@ describe('integridade do preview de checkout', () => {
     await expect(createCheckoutOrder(
       'user-1', shipping, accepted.fingerprint, client,
     )).resolves.toMatchObject({ total: accepted.total })
-    expect(orderTx.product.updateMany).toHaveBeenCalledWith({
-      where: { id: 'product-1', isActive: true, stockQuantity: { gte: 2 } },
+    expect(orderTx.productVariant.updateMany).toHaveBeenCalledWith({
+      where: { id: 'variant-product-1', isActive: true, stockQuantity: { gte: 2 } },
       data: { stockQuantity: { decrement: 2 } },
     })
   })
