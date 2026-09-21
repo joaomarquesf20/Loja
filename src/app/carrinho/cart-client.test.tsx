@@ -38,6 +38,7 @@ function jsonResponse(
 function createItem(
   quantity = 1,
   overrides?: Partial<{
+    productVariantId: string
     inStock: boolean
     isAvailable: boolean
     canIncrease: boolean
@@ -46,6 +47,12 @@ function createItem(
   return {
     id: 'cart-item-1',
     productId: 'product-1',
+    ...(overrides?.productVariantId
+      ? {
+          productVariantId:
+            overrides.productVariantId,
+        }
+      : {}),
     quantity,
     product: {
       id: 'product-1',
@@ -440,6 +447,136 @@ describe('CartClient', () => {
       productId:
         'product-1',
       quantity: 2,
+    })
+  })
+
+  test('atualiza a variante correta no carrinho autenticado', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(1, {
+              productVariantId:
+                'variant-1',
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          item: createItem(2, {
+            productVariantId:
+              'variant-1',
+          }),
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(2, {
+              productVariantId:
+                'variant-1',
+            }),
+          ],
+        }),
+      )
+
+    render(<CartClient />)
+
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        {
+          name:
+            'Aumentar quantidade de Produto 1',
+        },
+      ),
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Quantidade: 2',
+        ),
+      ).toBeTruthy()
+    })
+
+    const patchOptions =
+      fetchMock.mock
+        .calls[1]?.[1] as
+        | RequestInit
+        | undefined
+
+    expect(
+      JSON.parse(
+        String(patchOptions?.body),
+      ),
+    ).toEqual({
+      productId: 'product-1',
+      productVariantId:
+        'variant-1',
+      quantity: 2,
+    })
+  })
+
+  test('remove a variante correta no carrinho autenticado', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(1, {
+              productVariantId:
+                'variant-1',
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 204,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [],
+        }),
+      )
+
+    render(<CartClient />)
+
+    fireEvent.click(
+      await screen.findByRole(
+        'button',
+        {
+          name: 'Remover',
+        },
+      ),
+    )
+
+    expect(
+      await screen.findByText(
+        'O carrinho está vazio',
+      ),
+    ).toBeTruthy()
+
+    const deleteOptions =
+      fetchMock.mock
+        .calls[1]?.[1] as
+        | RequestInit
+        | undefined
+
+    expect(deleteOptions).toMatchObject({
+      method: 'DELETE',
+    })
+
+    expect(
+      JSON.parse(
+        String(deleteOptions?.body),
+      ),
+    ).toEqual({
+      productId: 'product-1',
+      productVariantId:
+        'variant-1',
     })
   })
 
