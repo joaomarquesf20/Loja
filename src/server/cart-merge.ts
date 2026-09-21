@@ -16,9 +16,21 @@ type MergeProductRecord = {
   isActive: boolean
 }
 
+type MergeVariantRecord = {
+  id: string
+  productId: string
+  stockQuantity: number
+  isActive: boolean
+  product: {
+    id: string
+    isActive: boolean
+  }
+}
+
 type ExistingCartItemRecord = {
   id: string
   productId: string
+  productVariantId?: string
   quantity: number
 }
 
@@ -30,6 +42,7 @@ type MergeReceiptRecord = {
 
 type PreparedMergeItem = {
   productId: string
+  productVariantId?: string
   quantity: number
   existingItemId: string | null
 }
@@ -86,6 +99,26 @@ type CartMergeTransactionClient = {
     >
   }
 
+  productVariant?: {
+    findMany(args: {
+      where: Record<string, unknown>
+      select: {
+        id: true
+        productId: true
+        stockQuantity: true
+        isActive: true
+        product: {
+          select: {
+            id: true
+            isActive: true
+          }
+        }
+      }
+    }): Promise<
+      MergeVariantRecord[]
+    >
+  }
+
   product: {
     findMany(args: {
       where: {
@@ -105,15 +138,23 @@ type CartMergeTransactionClient = {
 
   cartItem: {
     findMany(args: {
-      where: {
-        userId: string
-        productId: {
-          in: string[]
-        }
-      }
+      where:
+        | {
+            userId: string
+            productId: {
+              in: string[]
+            }
+          }
+        | {
+            userId: string
+            productVariantId: {
+              in: string[]
+            }
+          }
       select: {
         id: true
         productId: true
+        productVariantId?: true
         quantity: true
       }
     }): Promise<
@@ -138,6 +179,7 @@ type CartMergeTransactionClient = {
       data: {
         userId: string
         productId: string
+        productVariantId?: string
         quantity: number
       }
       select: {
@@ -239,15 +281,21 @@ function createPayloadHash(
   const canonicalItems = [
     ...items,
   ].sort((left, right) => {
-    if (
-      left.productId ===
-      right.productId
-    ) {
+    const leftKey =
+      left.productVariantId
+        ? `variant:${left.productVariantId}`
+        : `product:${left.productId}`
+
+    const rightKey =
+      right.productVariantId
+        ? `variant:${right.productVariantId}`
+        : `product:${right.productId}`
+
+    if (leftKey === rightKey) {
       return 0
     }
 
-    return left.productId <
-      right.productId
+    return leftKey < rightKey
       ? -1
       : 1
   })
@@ -438,6 +486,301 @@ export async function mergeGuestCartIntoUserCart(
         return {
           mergedItemCount:
             existingReceipt.mergedItemCount,
+        }
+      }
+
+      if (tx.productVariant) {
+        const explicitVariantIds =
+          normalizedItems.flatMap(
+            (item) =>
+              item.productVariantId
+                ? [
+                    item.productVariantId,
+                  ]
+                : [],
+          )
+
+        const legacyProductIds =
+          normalizedItems
+            .filter(
+              (item) =>
+                !item.productVariantId,
+            )
+            .map(
+              (item) =>
+                item.productId,
+            )
+
+        const variants =
+          await tx.productVariant.findMany(
+            {
+              where: {
+                OR: [
+                  ...(explicitVariantIds.length
+                    ? [
+                        {
+                          id: {
+                            in:
+                              explicitVariantIds,
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(legacyProductIds.length
+                    ? [
+                        {
+                          productId: {
+                            in:
+                              legacyProductIds,
+                          },
+                          optionKey:
+                            'default',
+                        },
+                      ]
+                    : []),
+                ],
+              },
+              select: {
+                id: true,
+                productId: true,
+                stockQuantity: true,
+                isActive: true,
+                product: {
+                  select: {
+                    id: true,
+                    isActive: true,
+                  },
+                },
+              },
+            },
+          )
+
+        const variantsById =
+          new Map(
+            variants.map(
+              (variant) => [
+                variant.id,
+                variant,
+              ],
+            ),
+          )
+
+        const defaultsByProductId =
+          new Map(
+            variants
+              .filter((variant) =>
+                legacyProductIds.includes(
+                  variant.productId,
+                ),
+              )
+              .map(
+                (variant) => [
+                  variant.productId,
+                  variant,
+                ],
+              ),
+          )
+
+        const quantitiesByVariantId =
+          new Map<
+            string,
+            {
+              productId: string
+              productVariantId: string
+              quantity: number
+              stockQuantity: number
+            }
+          >()
+
+        for (const item of normalizedItems) {
+          const variant =
+            item.productVariantId
+              ? variantsById.get(
+                  item.productVariantId,
+                )
+              : defaultsByProductId.get(
+                  item.productId,
+                )
+
+          if (
+            !variant ||
+            variant.productId !==
+              item.productId ||
+            !variant.isActive ||
+            !variant.product.isActive
+          ) {
+            throw new CartProductUnavailableError()
+          }
+
+          const existing =
+            quantitiesByVariantId.get(
+              variant.id,
+            )
+
+          const nextQuantity =
+            (existing?.quantity ?? 0) +
+            item.quantity
+
+          if (
+            !Number.isSafeInteger(
+              nextQuantity,
+            )
+          ) {
+            throw new CartValidationError(
+              'Quantidade inválida',
+            )
+          }
+
+          quantitiesByVariantId.set(
+            variant.id,
+            {
+              productId:
+                variant.productId,
+              productVariantId:
+                variant.id,
+              quantity:
+                nextQuantity,
+              stockQuantity:
+                variant.stockQuantity,
+            },
+          )
+        }
+
+        const resolvedItems =
+          Array.from(
+            quantitiesByVariantId.values(),
+          )
+
+        const variantIds =
+          resolvedItems.map(
+            (item) =>
+              item.productVariantId,
+          )
+
+        const existingItems =
+          await tx.cartItem.findMany({
+            where: {
+              userId: user.id,
+              productVariantId: {
+                in: variantIds,
+              },
+            },
+            select: {
+              id: true,
+              productId: true,
+              productVariantId: true,
+              quantity: true,
+            },
+          })
+
+        const existingByVariantId =
+          new Map(
+            existingItems.map(
+              (item) => [
+                item.productVariantId,
+                item,
+              ],
+            ),
+          )
+
+        const preparedItems:
+          PreparedMergeItem[] = []
+
+        for (const item of resolvedItems) {
+          const existingItem =
+            existingByVariantId.get(
+              item.productVariantId,
+            )
+
+          const existingQuantity =
+            existingItem?.quantity ?? 0
+
+          if (
+            existingItem &&
+            (
+              !Number.isSafeInteger(
+                existingQuantity,
+              ) ||
+              existingQuantity <= 0
+            )
+          ) {
+            throw new CartValidationError(
+              'Quantidade do carrinho inválida',
+            )
+          }
+
+          const nextQuantity =
+            existingQuantity +
+            item.quantity
+
+          if (
+            !Number.isSafeInteger(
+              nextQuantity,
+            )
+          ) {
+            throw new CartValidationError(
+              'Quantidade inválida',
+            )
+          }
+
+          if (
+            nextQuantity >
+            item.stockQuantity
+          ) {
+            throw new CartInsufficientStockError()
+          }
+
+          preparedItems.push({
+            productId:
+              item.productId,
+            productVariantId:
+              item.productVariantId,
+            quantity:
+              nextQuantity,
+            existingItemId:
+              existingItem?.id ??
+              null,
+          })
+        }
+
+        for (const item of preparedItems) {
+          if (item.existingItemId) {
+            await tx.cartItem.update({
+              where: {
+                id:
+                  item.existingItemId,
+              },
+              data: {
+                quantity:
+                  item.quantity,
+              },
+              select: {
+                id: true,
+              },
+            })
+
+            continue
+          }
+
+          await tx.cartItem.create({
+            data: {
+              userId: user.id,
+              productId:
+                item.productId,
+              productVariantId:
+                item.productVariantId,
+              quantity:
+                item.quantity,
+            },
+            select: {
+              id: true,
+            },
+          })
+        }
+
+        return {
+          mergedItemCount:
+            normalizedItems.length,
         }
       }
 

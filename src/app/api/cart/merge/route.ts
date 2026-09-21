@@ -254,6 +254,9 @@ export async function POST(
       const productId =
         rawItem.productId
 
+      const productVariantId =
+        rawItem.productVariantId
+
       const quantity =
         rawItem.quantity
 
@@ -263,6 +266,19 @@ export async function POST(
       ) {
         return errorResponse(
           'Produto inválido',
+          'INVALID_PRODUCT',
+          400,
+        )
+      }
+
+      if (
+        productVariantId !==
+          undefined &&
+        typeof productVariantId !==
+          'string'
+      ) {
+        return errorResponse(
+          'Variante inválida',
           'INVALID_PRODUCT',
           400,
         )
@@ -281,6 +297,10 @@ export async function POST(
 
       items.push({
         productId,
+        ...(typeof productVariantId ===
+        'string'
+          ? { productVariantId }
+          : {}),
         quantity,
       })
     }
