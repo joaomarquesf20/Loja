@@ -36,9 +36,6 @@ type CheckoutProductShippingRateRecord = {
 type CheckoutProductRecord = {
   id: string
   name: string
-  sku: string
-  price: CheckoutPrice
-  stockQuantity: number
   isActive: boolean
   shippingClass: CommercialShippingClass
   shippingRates: CheckoutProductShippingRateRecord[]
@@ -1161,9 +1158,6 @@ async function prepareCheckout(
   const productSelect = {
     id: true,
     name: true,
-    sku: true,
-    price: true,
-    stockQuantity: true,
     isActive: true,
     shippingClass: true,
     shippingRates: {
