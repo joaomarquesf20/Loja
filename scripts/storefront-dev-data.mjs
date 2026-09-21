@@ -329,7 +329,8 @@ async function seed() {
       )
     }
 
-    await prisma.product.upsert({
+    const product =
+      await prisma.product.upsert({
       where: {
         sku: definition.sku,
       },
@@ -369,6 +370,33 @@ async function seed() {
           ],
         shippingClass:
           definition.shippingClass,
+      },
+    })
+
+    await prisma.productVariant.upsert({
+      where: {
+        productId_optionKey: {
+          productId: product.id,
+          optionKey: 'default',
+        },
+      },
+      update: {
+        sku: definition.sku,
+        price: definition.price,
+        stockQuantity:
+          definition.stockQuantity,
+        isActive: true,
+      },
+      create: {
+        productId: product.id,
+        sku: definition.sku,
+        price: definition.price,
+        stockQuantity:
+          definition.stockQuantity,
+        isActive: true,
+        images: [],
+        position: 0,
+        optionKey: 'default',
       },
     })
   }

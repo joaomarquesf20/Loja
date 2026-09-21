@@ -106,6 +106,35 @@ const mainlandShippingInclude = {
 } as const
 
 export interface ProductClient {
+  productVariant?: {
+    upsert(args: {
+      where: {
+        productId_optionKey: {
+          productId: string
+          optionKey: string
+        }
+      }
+      update: {
+        sku: string
+        price: number
+        stockQuantity: number
+        isActive: boolean
+      }
+      create: {
+        productId: string
+        sku: string
+        price: number
+        stockQuantity: number
+        isActive: boolean
+        images: string[]
+        position: number
+        optionKey: string
+      }
+    }): Promise<{
+      id: string
+    }>
+  }
+
   product: {
     findMany(args: {
       orderBy: { name: 'asc' }
@@ -575,6 +604,37 @@ if (
       data: createData,
     })
 
+  if (db.productVariant) {
+    await db.productVariant.upsert({
+      where: {
+        productId_optionKey: {
+          productId: product.id,
+          optionKey: 'default',
+        },
+      },
+      update: {
+        sku: product.sku,
+        price: product.price,
+        stockQuantity:
+          product.stockQuantity,
+        isActive:
+          product.isActive,
+      },
+      create: {
+        productId: product.id,
+        sku: product.sku,
+        price: product.price,
+        stockQuantity:
+          product.stockQuantity,
+        isActive:
+          product.isActive,
+        images: [],
+        position: 0,
+        optionKey: 'default',
+      },
+    })
+  }
+
   return mapProduct(
     product,
     normalizedShippingCost,
@@ -804,6 +864,37 @@ export async function updateProduct(
       where: { id },
       data: updateData,
     })
+
+  if (db.productVariant) {
+    await db.productVariant.upsert({
+      where: {
+        productId_optionKey: {
+          productId: product.id,
+          optionKey: 'default',
+        },
+      },
+      update: {
+        sku: product.sku,
+        price: product.price,
+        stockQuantity:
+          product.stockQuantity,
+        isActive:
+          product.isActive,
+      },
+      create: {
+        productId: product.id,
+        sku: product.sku,
+        price: product.price,
+        stockQuantity:
+          product.stockQuantity,
+        isActive:
+          product.isActive,
+        images: [],
+        position: 0,
+        optionKey: 'default',
+      },
+    })
+  }
 
   return mapProduct(
     product,
