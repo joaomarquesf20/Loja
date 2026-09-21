@@ -567,6 +567,13 @@ describe('Cart', () => {
       const client = createClient()
 
       vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue({
+        id: 'product-1',
+        stockQuantity: 5,
+      })
+
+      vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue(null)
 
@@ -583,7 +590,16 @@ describe('Cart', () => {
 
       expect(
         client.product.findFirst,
-      ).not.toHaveBeenCalled()
+      ).toHaveBeenCalledWith({
+        where: {
+          id: 'product-1',
+          isActive: true,
+        },
+        select: {
+          id: true,
+          stockQuantity: true,
+        },
+      })
 
       expect(
         client.cartItem.update,
@@ -849,6 +865,13 @@ describe('Cart', () => {
       const client = createClient()
 
       vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue({
+        id: 'product-1',
+        stockQuantity: 5,
+      })
+
+      vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue(null)
 
@@ -869,6 +892,13 @@ describe('Cart', () => {
 
     test('procura item pela combinação de utilizador e produto', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue({
+        id: 'product-1',
+        stockQuantity: 5,
+      })
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -905,6 +935,13 @@ describe('Cart', () => {
 
     test('remove o item encontrado', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.product.findFirst,
+      ).mockResolvedValue({
+        id: 'product-1',
+        stockQuantity: 5,
+      })
 
       vi.mocked(
         client.cartItem.findUnique,
