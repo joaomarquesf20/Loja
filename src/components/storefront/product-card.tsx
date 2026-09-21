@@ -13,7 +13,11 @@ function ProductImage({
   product,
   variant = 'default',
 }: ProductCardProps) {
-  const image = product.images[0]
+  const image =
+    product.images.find(
+      (candidate) =>
+        candidate.trim().length > 0,
+    )
 
   if (!image) {
     return (
@@ -102,24 +106,37 @@ export default function ProductCard({
             className="text-xl font-black tracking-tight text-white"
           />
 
-          <div className="mt-4 grid grid-cols-[1fr_auto] items-stretch gap-2.5">
-            <Link
-              href={`/produtos/${product.slug}`}
-              className="inline-flex min-h-9 items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            >
-              Ver produto
-            </Link>
+          {variant === 'category' ? (
+            <div className="mt-4 grid grid-cols-[1fr_auto] items-stretch gap-2.5">
+              <AddToCartButton
+                productId={product.id}
+                inStock={product.inStock}
+                variant="card"
+              />
 
-            <AddToCartButton
-              productId={product.id}
-              inStock={product.inStock}
-              variant={
-                variant === 'category'
-                  ? 'card'
-                  : 'compact'
-              }
-            />
-          </div>
+              <Link
+                href={`/produtos/${product.slug}`}
+                className="inline-flex min-h-9 items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/58 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Ver produto
+              </Link>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-[1fr_auto] items-stretch gap-2.5">
+              <Link
+                href={`/produtos/${product.slug}`}
+                className="inline-flex min-h-9 items-center justify-center rounded-sm border border-white/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                Ver produto
+              </Link>
+
+              <AddToCartButton
+                productId={product.id}
+                inStock={product.inStock}
+                variant="compact"
+              />
+            </div>
+          )}
         </div>
       </div>
     </article>

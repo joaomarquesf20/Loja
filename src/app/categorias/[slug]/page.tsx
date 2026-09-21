@@ -43,6 +43,8 @@ type CategoryFilterState = {
   priceMax?: number
   vehicleConfigurationId?: string
   sort?: CatalogSort
+  brandCounts: Record<string, number>
+  inStockCount: number
 }
 
 type FilterPanelProps = {
@@ -268,6 +270,8 @@ function FilterPanel({
   priceMin,
   priceMax,
   sort,
+  brandCounts,
+  inStockCount,
 }: FilterPanelProps) {
   const stockHref = buildCategoryHref(
     categorySlug,
@@ -311,13 +315,18 @@ function FilterPanel({
           className="mt-3 flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/66 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <span>Em stock</span>
-          <span
-            aria-hidden="true"
-            className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${inStockOnly
-              ? 'border-brand bg-brand text-white'
-              : 'border-white/24 text-transparent'}`}
-          >
-            ✓
+          <span className="flex items-center gap-2">
+            <span className="text-xs font-medium tabular-nums text-white/28">
+              {inStockCount}
+            </span>
+            <span
+              aria-hidden="true"
+              className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${inStockOnly
+                ? 'border-brand bg-brand text-white'
+                : 'border-white/24 text-transparent'}`}
+            >
+              ✓
+            </span>
           </span>
         </Link>
       </section>
@@ -369,13 +378,20 @@ function FilterPanel({
                   className="flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/62 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                 >
                   <span>{brand.name}</span>
-                  <span
-                    aria-hidden="true"
-                    className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${isSelected
-                      ? 'border-brand bg-brand text-white'
-                      : 'border-white/24 text-transparent'}`}
-                  >
-                    ✓
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs font-medium tabular-nums text-white/28">
+                      {brandCounts[
+                        brand.slug
+                      ] ?? 0}
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${isSelected
+                        ? 'border-brand bg-brand text-white'
+                        : 'border-white/24 text-transparent'}`}
+                    >
+                      ✓
+                    </span>
                   </span>
                 </Link>
               )
@@ -564,23 +580,29 @@ export default async function CategoryPage({
     query.sort !== undefined &&
     sort === undefined
 
-  const [result, allCategories] =
-    await Promise.all([
-      getCatalogCategoryPageBySlug(
-        slug,
-        {
-          inStockOnly,
-          brandSlugs:
-            selectedBrandSlugs,
-          priceMin,
-          priceMax,
-          vehicleConfigurationId:
-            requestedVehicleConfigurationId,
-          sort,
-        },
-      ),
-      listCatalogCategories(),
-    ])
+  const [
+    result,
+    unfilteredResult,
+    allCategories,
+  ] = await Promise.all([
+    getCatalogCategoryPageBySlug(
+      slug,
+      {
+        inStockOnly,
+        brandSlugs:
+          selectedBrandSlugs,
+        priceMin,
+        priceMax,
+        vehicleConfigurationId:
+          requestedVehicleConfigurationId,
+        sort,
+      },
+    ),
+    getCatalogCategoryPageBySlug(
+      slug,
+    ),
+    listCatalogCategories(),
+  ])
 
   if (!result) {
     notFound()
@@ -712,6 +734,30 @@ export default async function CategoryPage({
   const footerCategories =
     getFooterCategories(allCategories)
 
+  const countProducts =
+    unfilteredResult?.products ?? []
+
+  const brandCounts =
+    countProducts.reduce<
+      Record<string, number>
+    >((counts, product) => {
+      if (!product.brand) {
+        return counts
+      }
+
+      counts[product.brand.slug] =
+        (counts[
+          product.brand.slug
+        ] ?? 0) + 1
+
+      return counts
+    }, {})
+
+  const inStockCount =
+    countProducts.filter(
+      (product) => product.inStock,
+    ).length
+
   return (
     <main className="min-h-screen bg-[#0b0d0f] text-white">
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
@@ -782,6 +828,12 @@ export default async function CategoryPage({
                   priceMin={priceMin}
                   priceMax={priceMax}
                   sort={sort}
+                  brandCounts={
+                    brandCounts
+                  }
+                  inStockCount={
+                    inStockCount
+                  }
                 />
               </MobileFilterDrawer>
 
@@ -945,6 +997,12 @@ export default async function CategoryPage({
                 priceMin={priceMin}
                 priceMax={priceMax}
                 sort={sort}
+                brandCounts={
+                  brandCounts
+                }
+                inStockCount={
+                  inStockCount
+                }
               />
             </div>
           </aside>
