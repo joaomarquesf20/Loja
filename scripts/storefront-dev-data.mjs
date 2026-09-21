@@ -90,6 +90,8 @@ const products = [
     sku: 'DEV-PFA-WHE-001',
     category: 'Jantes',
     brand: 'BBS',
+    description:
+      'Jante BBS CH-R II de 19 polegadas em acabamento Satin Black, pensada para projetos de styling com uma presença mais marcada.',
     price: '649.90',
     stockQuantity: 8,
     shippingClass: 'STANDARD',
@@ -102,6 +104,8 @@ const products = [
     sku: 'DEV-PFA-WHE-002',
     category: 'Jantes',
     brand: 'OZ Racing',
+    description:
+      'Jante OZ Racing Ultraleggera de 18 polegadas para projetos de personalização automóvel com foco num visual desportivo e limpo.',
     price: '479.90',
     stockQuantity: 6,
     shippingClass: 'STANDARD',
@@ -114,6 +118,8 @@ const products = [
     sku: 'DEV-PFA-SUS-001',
     category: 'Suspensão',
     brand: 'KW',
+    description:
+      'Kit de suspensão coilover KW Variant 3 para projetos que procuram trabalhar a postura e o comportamento do automóvel.',
     price: '1899.00',
     stockQuantity: 2,
     shippingClass: 'STANDARD',
@@ -126,6 +132,8 @@ const products = [
     sku: 'DEV-PFA-SUS-002',
     category: 'Suspensão',
     brand: 'Bilstein',
+    description:
+      'Kit de suspensão Bilstein B14 PSS destinado a projetos de personalização e rebaixamento com componentes dedicados.',
     price: '1099.00',
     stockQuantity: 4,
     shippingClass: 'STANDARD',
@@ -138,6 +146,8 @@ const products = [
     sku: 'DEV-PFA-SUS-003',
     category: 'Suspensão',
     brand: 'H&R',
+    description:
+      'Conjunto de molas H&R Sport para projetos que procuram uma postura mais baixa e uma presença mais dinâmica.',
     price: '289.90',
     stockQuantity: 5,
     shippingClass: 'STANDARD',
@@ -150,6 +160,8 @@ const products = [
     sku: 'DEV-PFA-EXT-001',
     category: 'Exterior',
     brand: 'Maxton Design',
+    description:
+      'Splitter dianteiro Maxton Design V2 para reforçar visualmente a frente do automóvel e completar um projeto de exterior.',
     price: '219.90',
     stockQuantity: 7,
     shippingClass: 'STANDARD',
@@ -162,6 +174,8 @@ const products = [
     sku: 'DEV-PFA-EXT-002',
     category: 'Exterior',
     brand: 'Maxton Design',
+    description:
+      'Difusor traseiro Maxton Design Street Pro para acrescentar definição e presença à traseira do automóvel.',
     price: '289.90',
     stockQuantity: 3,
     shippingClass: 'STANDARD',
@@ -174,6 +188,8 @@ const products = [
     sku: 'DEV-PFA-EXT-003',
     category: 'Exterior',
     brand: 'Maxton Design',
+    description:
+      'Extensão de spoiler Maxton Design para complementar a linha traseira e dar um acabamento mais marcado ao projeto.',
     price: '159.90',
     stockQuantity: 6,
     shippingClass: 'STANDARD',
@@ -186,6 +202,8 @@ const products = [
     sku: 'DEV-PFA-ACC-001',
     category: 'Acessórios',
     brand: 'Sparco',
+    description:
+      'Conjunto de pedais em alumínio Sparco para acrescentar um detalhe de personalização ao interior do automóvel.',
     price: '74.90',
     stockQuantity: 12,
     shippingClass: 'SMALL',
@@ -198,6 +216,8 @@ const products = [
     sku: 'DEV-PFA-ACC-002',
     category: 'Acessórios',
     brand: 'Eibach',
+    description:
+      'Kit Eibach Pro-Spacer para projetos que procuram ajustar visualmente a posição das rodas relativamente à carroçaria.',
     price: '129.90',
     stockQuantity: 9,
     shippingClass: 'SMALL',
@@ -318,7 +338,7 @@ async function seed() {
         name: definition.name,
         slug: definition.slug,
         description:
-          'Dados de desenvolvimento PFAutoParts para validação visual do storefront.',
+          definition.description,
         price: definition.price,
         stockQuantity:
           definition.stockQuantity,
@@ -336,7 +356,7 @@ async function seed() {
         slug: definition.slug,
         sku: definition.sku,
         description:
-          'Dados de desenvolvimento PFAutoParts para validação visual do storefront.',
+          definition.description,
         price: definition.price,
         stockQuantity:
           definition.stockQuantity,
