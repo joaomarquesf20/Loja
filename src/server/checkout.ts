@@ -54,7 +54,6 @@ type CheckoutVariantRecord = {
   id: string
   productId: string
   sku: string
-  optionKey: string
   price: CheckoutPrice
   stockQuantity: number
   isActive: boolean
@@ -1225,7 +1224,6 @@ async function prepareCheckout(
                 id: true,
                 productId: true,
                 sku: true,
-                optionKey: true,
                 price: true,
                 stockQuantity: true,
                 isActive: true,
@@ -1386,8 +1384,6 @@ async function prepareCheckout(
         ? {
             productVariantId:
               item.productVariantId,
-            variantOptionKey:
-              sellable?.optionKey,
           }
         : {}),
       name: item.product.name,
@@ -1799,35 +1795,6 @@ export async function createCheckoutOrder(
             variantUpdate.count !== 1
           ) {
             throw new CheckoutCartChangedError()
-          }
-
-          if (
-            item.variantOptionKey ===
-            'default'
-          ) {
-            const legacyMirror =
-              await tx.product.updateMany({
-                where: {
-                  id: item.productId,
-                  isActive: true,
-                  stockQuantity: {
-                    gte:
-                      item.quantity,
-                  },
-                },
-                data: {
-                  stockQuantity: {
-                    decrement:
-                      item.quantity,
-                  },
-                },
-              })
-
-            if (
-              legacyMirror.count !== 1
-            ) {
-              throw new CheckoutCartChangedError()
-            }
           }
 
           continue

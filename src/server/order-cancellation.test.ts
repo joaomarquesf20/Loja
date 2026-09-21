@@ -218,7 +218,7 @@ describe(
     )
 
     test(
-      'repõe stock na variante e espelha a variante default no produto legado',
+      'repõe stock apenas na variante no fluxo variant-aware',
       async () => {
         const {
           client,
@@ -239,10 +239,6 @@ describe(
                 productVariantId:
                   'variant-1',
                 quantity: 2,
-                variant: {
-                  optionKey:
-                    'default',
-                },
               },
             ],
           }),
@@ -253,10 +249,6 @@ describe(
         })
 
         variantUpdateMany.mockResolvedValue({
-          count: 1,
-        })
-
-        productUpdateMany.mockResolvedValue({
           count: 1,
         })
 
@@ -285,16 +277,7 @@ describe(
 
         expect(
           productUpdateMany,
-        ).toHaveBeenCalledWith({
-          where: {
-            id: 'product-1',
-          },
-          data: {
-            stockQuantity: {
-              increment: 2,
-            },
-          },
-        })
+        ).not.toHaveBeenCalled()
       },
     )
 

@@ -13,9 +13,6 @@ type CancellationOrderItem = {
   productId: string
   productVariantId?: string
   quantity: number
-  variant?: {
-    optionKey: string
-  }
 }
 
 type CancellationOrderRecord = {
@@ -135,11 +132,6 @@ const variantCancellationOrderSelect = {
       productId: true,
       productVariantId: true,
       quantity: true,
-      variant: {
-        select: {
-          optionKey: true,
-        },
-      },
     },
   },
 } as const
@@ -353,7 +345,6 @@ function aggregateVariantRestockQuantities(
       string,
       {
         productId: string
-        optionKey: string
         quantity: number
       }
     >()
@@ -365,13 +356,9 @@ function aggregateVariantRestockQuantities(
     const productVariantId =
       item.productVariantId?.trim()
 
-    const optionKey =
-      item.variant?.optionKey?.trim()
-
     if (
       !productId ||
-      !productVariantId ||
-      !optionKey
+      !productVariantId
     ) {
       throw new OrderLifecycleConflictError(
         'Os artigos da encomenda não permitem repor a variante com segurança',
@@ -389,12 +376,8 @@ function aggregateVariantRestockQuantities(
 
     if (
       current &&
-      (
-        current.productId !==
-          productId ||
-        current.optionKey !==
-          optionKey
-      )
+      current.productId !==
+        productId
     ) {
       throw new OrderLifecycleConflictError(
         'Os artigos da encomenda têm dados de variante inconsistentes',
@@ -405,7 +388,6 @@ function aggregateVariantRestockQuantities(
       productVariantId,
       {
         productId,
-        optionKey,
         quantity: addQuantity(
           current?.quantity ?? 0,
           item.quantity,
@@ -421,9 +403,8 @@ function aggregateVariantRestockQuantities(
  * Cancela uma encomenda e repõe o stock exatamente uma vez.
  *
  * A variante comprada é a unidade de inventário autoritativa.
- * Durante a transição, a variante "default" também repõe o campo
- * Product.stockQuantity para manter o storefront legado coerente até
- * à Fase 4.
+ * Product.stockQuantity permanece apenas como campo legado durante
+ * a migração e não é alterado por este fluxo variant-aware.
  *
  * A alteração do estado e todos os incrementos de stock acontecem na
  * mesma transação. Um segundo cancelamento encontra CANCELLED e devolve
@@ -548,35 +529,6 @@ async function cancelOrderAndRestoreStockForOwner(
             )
           }
 
-          if (
-            item.optionKey ===
-            'default'
-          ) {
-            const restoredLegacyProduct =
-              await tx.product.updateMany(
-                {
-                  where: {
-                    id:
-                      item.productId,
-                  },
-                  data: {
-                    stockQuantity: {
-                      increment:
-                        item.quantity,
-                    },
-                  },
-                },
-              )
-
-            if (
-              restoredLegacyProduct.count !==
-              1
-            ) {
-              throw new OrderLifecycleConflictError(
-                'Não foi possível sincronizar o stock legado da encomenda',
-              )
-            }
-          }
         }
       } else {
         const quantities =

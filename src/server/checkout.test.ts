@@ -1109,20 +1109,7 @@ describe(
 
         expect(
           tx.product.updateMany,
-        ).toHaveBeenCalledWith({
-          where: {
-            id: 'product-1',
-            isActive: true,
-            stockQuantity: {
-              gte: 2,
-            },
-          },
-          data: {
-            stockQuantity: {
-              decrement: 2,
-            },
-          },
-        })
+        ).not.toHaveBeenCalled()
 
         expect(
           tx.orderItem.createMany,
