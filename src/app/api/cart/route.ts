@@ -218,7 +218,8 @@ export async function POST(
     const item =
       await addCartItem(
         userId,
-        productVariantId
+        typeof productVariantId ===
+        'string'
           ? {
               ...(typeof productId ===
               'string'
@@ -305,7 +306,8 @@ export async function PATCH(
     const item =
       await updateCartItemQuantity(
         userId,
-        productVariantId
+        typeof productVariantId ===
+        'string'
           ? {
               ...(typeof productId ===
               'string'
