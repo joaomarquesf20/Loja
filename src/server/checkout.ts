@@ -44,11 +44,38 @@ type CheckoutProductRecord = {
   shippingRates: CheckoutProductShippingRateRecord[]
 }
 
+type CheckoutVariantOptionSnapshot = {
+  code: string
+  name: string
+  value: string
+}
+
+type CheckoutVariantRecord = {
+  id: string
+  productId: string
+  sku: string
+  price: CheckoutPrice
+  stockQuantity: number
+  isActive: boolean
+  selections: Array<{
+    optionValue: {
+      value: string
+      option: {
+        code: string
+        name: string
+        position: number
+      }
+    }
+  }>
+}
+
 type CheckoutCartItemRecord = {
   id: string
   productId: string
+  productVariantId?: string
   quantity: number
   product: CheckoutProductRecord
+  variant?: CheckoutVariantRecord
 }
 
 type CheckoutOrderRecord = {
@@ -278,32 +305,7 @@ type CheckoutTransactionClient =
         orderBy: {
           id: 'asc'
         }
-        select: {
-          id: true
-          productId: true
-          quantity: true
-          product: {
-            select: {
-              id: true
-              name: true
-              sku: true
-              price: true
-              stockQuantity: true
-              isActive: true
-              shippingClass: true
-              shippingRates: {
-                where: {
-                  region:
-                    'PORTUGAL_MAINLAND'
-                }
-                select: {
-                  region: true
-                  shippingCost: true
-                }
-              }
-            }
-          }
-        }
+        select: Record<string, unknown>
       }): Promise<
         CheckoutCartItemRecord[]
       >
@@ -313,6 +315,25 @@ type CheckoutTransactionClient =
           userId: string
           id: {
             in: string[]
+          }
+        }
+      }): Promise<{
+        count: number
+      }>
+    }
+
+    productVariant?: {
+      updateMany(args: {
+        where: {
+          id: string
+          isActive: true
+          stockQuantity: {
+            gte: number
+          }
+        }
+        data: {
+          stockQuantity: {
+            decrement: number
           }
         }
       }): Promise<{
@@ -402,11 +423,14 @@ type CheckoutTransactionClient =
         data: Array<{
           orderId: string
           productId: string
+          productVariantId?: string
           productNameAtPurchase: string
           productSkuAtPurchase: string
           priceAtPurchase: string
           quantity: number
           subtotalAtPurchase: string
+          variantOptionsAtPurchase?:
+            CheckoutVariantOptionSnapshot[]
           shippingClassAtPurchase:
             CommercialShippingClass
           shippingCostAtPurchase:
@@ -434,12 +458,15 @@ export interface CheckoutClient {
 type PreparedCheckoutItem = {
   cartItemId: string
   productId: string
+  productVariantId?: string
   name: string
   sku: string
   quantity: number
   price: CheckoutPrice
   priceCents: number
   subtotalCents: number
+  variantOptions:
+    CheckoutVariantOptionSnapshot[]
   shippingClass:
     CommercialShippingClass
   mainlandShippingCost:
@@ -1150,6 +1177,29 @@ async function prepareCheckout(
     )
   }
 
+  const useVariants =
+    Boolean(tx.productVariant)
+
+  const legacyProductSelect = {
+    id: true,
+    name: true,
+    sku: true,
+    price: true,
+    stockQuantity: true,
+    isActive: true,
+    shippingClass: true,
+    shippingRates: {
+      where: {
+        region:
+          'PORTUGAL_MAINLAND' as const,
+      },
+      select: {
+        region: true,
+        shippingCost: true,
+      },
+    },
+  } as const
+
   const cartItems =
     await tx.cartItem.findMany({
       where: {
@@ -1158,32 +1208,52 @@ async function prepareCheckout(
       orderBy: {
         id: 'asc',
       },
-      select: {
-        id: true,
-        productId: true,
-        quantity: true,
-        product: {
-          select: {
+      select: useVariants
+        ? {
             id: true,
-            name: true,
-            sku: true,
-            price: true,
-            stockQuantity: true,
-            isActive: true,
-            shippingClass: true,
-            shippingRates: {
-              where: {
-                region:
-                  'PORTUGAL_MAINLAND',
-              },
+            productId: true,
+            productVariantId: true,
+            quantity: true,
+            product: {
+              select:
+                legacyProductSelect,
+            },
+            variant: {
               select: {
-                region: true,
-                shippingCost: true,
+                id: true,
+                productId: true,
+                sku: true,
+                price: true,
+                stockQuantity: true,
+                isActive: true,
+                selections: {
+                  select: {
+                    optionValue: {
+                      select: {
+                        value: true,
+                        option: {
+                          select: {
+                            code: true,
+                            name: true,
+                            position: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
+          }
+        : {
+            id: true,
+            productId: true,
+            quantity: true,
+            product: {
+              select:
+                legacyProductSelect,
+            },
           },
-        },
-      },
     })
 
   if (
@@ -1211,23 +1281,35 @@ async function prepareCheckout(
       )
     }
 
+    const sellable =
+      item.variant ??
+      null
+
     if (
-      !item.product.isActive
+      !item.product.isActive ||
+      (sellable &&
+        !sellable.isActive)
     ) {
       throw new CheckoutProductUnavailableError()
     }
 
+    const stockQuantity =
+      sellable?.stockQuantity ??
+      item.product.stockQuantity
+
     if (
-      item.product.stockQuantity <
+      stockQuantity <
       item.quantity
     ) {
       throw new CheckoutInsufficientStockError()
     }
 
+    const price =
+      sellable?.price ??
+      item.product.price
+
     const priceCents =
-      priceToCents(
-        item.product.price,
-      )
+      priceToCents(price)
 
     const itemSubtotalCents =
       multiplyCents(
@@ -1241,17 +1323,62 @@ async function prepareCheckout(
         itemSubtotalCents,
       )
 
+    const variantOptions =
+      (sellable?.selections ?? [])
+        .map((selection) => ({
+          code:
+            selection.optionValue
+              .option.code,
+          name:
+            selection.optionValue
+              .option.name,
+          value:
+            selection.optionValue
+              .value,
+          position:
+            selection.optionValue
+              .option.position,
+        }))
+        .sort(
+          (first, second) =>
+            first.position -
+              second.position ||
+            first.code.localeCompare(
+              second.code,
+            ),
+        )
+        .map(
+          ({
+            code,
+            name,
+            value,
+          }) => ({
+            code,
+            name,
+            value,
+          }),
+        )
+
     preparedItems.push({
       cartItemId: item.id,
       productId:
         item.productId,
+      ...(item.productVariantId
+        ? {
+            productVariantId:
+              item.productVariantId,
+          }
+        : {}),
       name: item.product.name,
-      sku: item.product.sku,
+      sku:
+        sellable?.sku ??
+        item.product.sku,
       quantity: item.quantity,
-      price: item.product.price,
+      price,
       priceCents,
       subtotalCents:
         itemSubtotalCents,
+      variantOptions,
       shippingClass:
         item.product
           .shippingClass,
@@ -1382,7 +1509,13 @@ function createCheckoutFingerprint(
       : null
 
   const snapshot = {
-    schemaVersion: 3,
+    schemaVersion:
+      preparedItems.every(
+        (item) =>
+          item.productVariantId,
+      )
+        ? 4
+        : 3,
     userId: user.id,
     shippingEmail,
     fulfillmentMethod:
@@ -1414,15 +1547,22 @@ function createCheckoutFingerprint(
           },
     items: [...preparedItems]
       .sort((first, second) => {
-        if (
-          first.productId ===
+        const firstKey =
+          first.productVariantId ??
+          first.productId
+
+        const secondKey =
+          second.productVariantId ??
           second.productId
+
+        if (
+          firstKey === secondKey
         ) {
           return 0
         }
 
-        return first.productId <
-          second.productId
+        return firstKey <
+          secondKey
           ? -1
           : 1
       })
@@ -1437,6 +1577,14 @@ function createCheckoutFingerprint(
 
         return {
           productId: item.productId,
+          ...(item.productVariantId
+            ? {
+                productVariantId:
+                  item.productVariantId,
+                variantOptions:
+                  item.variantOptions,
+              }
+            : {}),
           name: item.name,
           sku: item.sku,
           quantity: item.quantity,
@@ -1602,21 +1750,42 @@ export async function createCheckoutOrder(
         const item of preparedItems
       ) {
         const updateResult =
-          await tx.product.updateMany({
-            where: {
-              id: item.productId,
-              isActive: true,
-              stockQuantity: {
-                gte: item.quantity,
-              },
-            },
-            data: {
-              stockQuantity: {
-                decrement:
-                  item.quantity,
-              },
-            },
-          })
+          item.productVariantId &&
+          tx.productVariant
+            ? await tx.productVariant.updateMany(
+                {
+                  where: {
+                    id:
+                      item.productVariantId,
+                    isActive: true,
+                    stockQuantity: {
+                      gte:
+                        item.quantity,
+                    },
+                  },
+                  data: {
+                    stockQuantity: {
+                      decrement:
+                        item.quantity,
+                    },
+                  },
+                },
+              )
+            : await tx.product.updateMany({
+                where: {
+                  id: item.productId,
+                  isActive: true,
+                  stockQuantity: {
+                    gte: item.quantity,
+                  },
+                },
+                data: {
+                  stockQuantity: {
+                    decrement:
+                      item.quantity,
+                  },
+                },
+              })
 
         if (
           updateResult.count !== 1
@@ -1750,6 +1919,14 @@ export async function createCheckoutOrder(
             orderId: order.id,
             productId:
               item.productId,
+            ...(item.productVariantId
+              ? {
+                  productVariantId:
+                    item.productVariantId,
+                  variantOptionsAtPurchase:
+                    item.variantOptions,
+                }
+              : {}),
             productNameAtPurchase:
               item.name,
             productSkuAtPurchase:
