@@ -266,7 +266,16 @@ function createCartItem(
       stockQuantity:
         product.stockQuantity,
       isActive: true,
-      selections: [],
+      selections: [] as Array<{
+        optionValue: {
+          value: string
+          option: {
+            code: string
+            name: string
+            position: number
+          }
+        }
+      }>,
     },
   }
 }
@@ -918,14 +927,12 @@ describe(
           select: {
             id: true,
             productId: true,
+            productVariantId: true,
             quantity: true,
             product: {
               select: {
                 id: true,
                 name: true,
-                sku: true,
-                price: true,
-                stockQuantity: true,
                 isActive: true,
                 shippingClass: true,
                 shippingRates: {
@@ -936,6 +943,32 @@ describe(
                   select: {
                     region: true,
                     shippingCost: true,
+                  },
+                },
+              },
+            },
+            variant: {
+              select: {
+                id: true,
+                productId: true,
+                sku: true,
+                price: true,
+                stockQuantity: true,
+                isActive: true,
+                selections: {
+                  select: {
+                    optionValue: {
+                      select: {
+                        value: true,
+                        option: {
+                          select: {
+                            code: true,
+                            name: true,
+                            position: true,
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
