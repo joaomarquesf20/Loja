@@ -1,6 +1,61 @@
 -- Phase 2: move cart and order lines to ProductVariant.
--- Phase 1 already guarantees one optionKey='default' variant per existing product.
--- This migration deliberately does not create, replace, or resynchronise ProductVariant rows.
+--
+-- Product remained the commercial source of truth between Phase 1 and
+-- this cutover. Reconcile the default variants one last time so edits
+-- made through the legacy admin during that interval are preserved.
+--
+-- Temporarily move existing default SKUs out of the way. This makes SKU
+-- swaps/reuse between products safe while ProductVariant_sku_key remains
+-- enforced throughout the migration.
+UPDATE "ProductVariant"
+SET "sku" =
+  '__PFA_PHASE2_SYNC__' || "id"
+WHERE "optionKey" = 'default';
+
+-- Defensive backfill for a product created after the Phase 1 migration
+-- but before the transitional default-variant bridge was pulled locally.
+INSERT INTO "ProductVariant" (
+    "id",
+    "productId",
+    "sku",
+    "price",
+    "stockQuantity",
+    "isActive",
+    "images",
+    "position",
+    "optionKey"
+)
+SELECT
+    'pv_default_' || product."id",
+    product."id",
+    product."sku",
+    product."price",
+    product."stockQuantity",
+    product."isActive",
+    ARRAY[]::TEXT[],
+    0,
+    'default'
+FROM "Product" AS product
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM "ProductVariant" AS variant
+    WHERE
+      variant."productId" = product."id"
+      AND variant."optionKey" = 'default'
+);
+
+-- At the cutover boundary the legacy Product values are still the
+-- authoritative values for the single/default variant.
+UPDATE "ProductVariant" AS variant
+SET
+    "sku" = product."sku",
+    "price" = product."price",
+    "stockQuantity" = product."stockQuantity",
+    "isActive" = product."isActive"
+FROM "Product" AS product
+WHERE
+    variant."productId" = product."id"
+    AND variant."optionKey" = 'default';
 
 -- Cart items become variant-aware while retaining productId for
 -- catalogue context and transitional compatibility.
