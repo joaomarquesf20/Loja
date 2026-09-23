@@ -43,3 +43,235 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+  cutover-data:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pfautoparts_cutover
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pfautoparts_cutover"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pfautoparts_cutover?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+
+      - name: Apply through Phase 1
+        run: |
+          mv prisma/migrations/20260921143000_move_cart_orders_to_variants /tmp/phase2-migration
+          npx prisma migrate deploy
+
+      - name: Seed legacy cutover state
+        run: |
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client'
+          import { PrismaPg } from '@prisma/adapter-pg'
+
+          const prisma = new PrismaClient({
+            adapter: new PrismaPg({
+              connectionString: process.env.DATABASE_URL,
+            }),
+          })
+
+          await prisma.category.create({
+            data: {
+              id: 'phase2-category',
+              name: 'Phase 2',
+              slug: 'phase2-category',
+            },
+          })
+
+          await prisma.user.create({
+            data: {
+              id: 'phase2-user',
+              email: 'phase2@example.test',
+              passwordHash: 'not-used',
+            },
+          })
+
+          const missing = await prisma.product.create({
+            data: {
+              id: 'phase2-product-missing',
+              categoryId: 'phase2-category',
+              name: 'Missing Default',
+              slug: 'phase2-missing-default',
+              sku: 'PHASE2-MISSING',
+              price: '123.45',
+              stockQuantity: 7,
+              isActive: true,
+              images: [],
+              shippingClass: 'SMALL',
+            },
+          })
+
+          const stale = await prisma.product.create({
+            data: {
+              id: 'phase2-product-stale',
+              categoryId: 'phase2-category',
+              name: 'Stale Default',
+              slug: 'phase2-stale-default',
+              sku: 'PHASE2-CURRENT',
+              price: '222.22',
+              stockQuantity: 9,
+              isActive: true,
+              images: [],
+              shippingClass: 'SMALL',
+            },
+          })
+
+          await prisma.productVariant.create({
+            data: {
+              id: 'phase2-stale-variant',
+              productId: stale.id,
+              sku: 'PHASE2-STALE',
+              price: '1.11',
+              stockQuantity: 1,
+              isActive: false,
+              images: [],
+              position: 0,
+              optionKey: 'default',
+            },
+          })
+
+          const order = await prisma.order.create({
+            data: {
+              id: 'phase2-order',
+              orderNumber: 'PHASE2-ORDER',
+              userId: 'phase2-user',
+              subtotal: '246.90',
+              shippingCost: '0.00',
+              tax: '0.00',
+              total: '246.90',
+              shippingName: 'Phase 2',
+              shippingEmail: 'phase2@example.test',
+              shippingPhone: '000000000',
+              fulfillmentMethod: 'PICKUP',
+            },
+          })
+
+          await prisma.$executeRawUnsafe(
+            'INSERT INTO "CartItem" ("id","userId","productId","quantity") VALUES ($1,$2,$3,$4)',
+            'phase2-cart-item',
+            'phase2-user',
+            missing.id,
+            2,
+          )
+
+          await prisma.$executeRawUnsafe(
+            'INSERT INTO "OrderItem" ("id","orderId","productId","productNameAtPurchase","productSkuAtPurchase","priceAtPurchase","quantity","subtotalAtPurchase") VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+            'phase2-order-item',
+            order.id,
+            missing.id,
+            missing.name,
+            missing.sku,
+            '123.45',
+            2,
+            '246.90',
+          )
+
+          await prisma.$disconnect()
+          NODE
+
+      - name: Apply Phase 2 migration
+        run: |
+          mv /tmp/phase2-migration prisma/migrations/20260921143000_move_cart_orders_to_variants
+          npx prisma migrate deploy
+          npx prisma migrate status
+
+      - name: Verify cutover data
+        run: |
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client'
+          import { PrismaPg } from '@prisma/adapter-pg'
+
+          const prisma = new PrismaClient({
+            adapter: new PrismaPg({
+              connectionString: process.env.DATABASE_URL,
+            }),
+          })
+
+          const missing = await prisma.product.findUniqueOrThrow({
+            where: { id: 'phase2-product-missing' },
+            include: { variants: true },
+          })
+
+          const stale = await prisma.product.findUniqueOrThrow({
+            where: { id: 'phase2-product-stale' },
+            include: { variants: true },
+          })
+
+          const missingDefault = missing.variants.find(
+            (variant) => variant.optionKey === 'default',
+          )
+
+          const staleDefault = stale.variants.find(
+            (variant) => variant.optionKey === 'default',
+          )
+
+          if (
+            !missingDefault ||
+            missingDefault.sku !== missing.sku ||
+            missingDefault.price.toString() !== missing.price.toString() ||
+            missingDefault.stockQuantity !== missing.stockQuantity ||
+            missingDefault.isActive !== missing.isActive
+          ) {
+            throw new Error('Missing default variant was not backfilled correctly')
+          }
+
+          if (
+            !staleDefault ||
+            staleDefault.sku !== stale.sku ||
+            staleDefault.price.toString() !== stale.price.toString() ||
+            staleDefault.stockQuantity !== stale.stockQuantity ||
+            staleDefault.isActive !== stale.isActive
+          ) {
+            throw new Error('Existing default variant was not reconciled correctly')
+          }
+
+          const cartItem = await prisma.cartItem.findUniqueOrThrow({
+            where: { id: 'phase2-cart-item' },
+          })
+
+          if (cartItem.productVariantId !== missingDefault.id) {
+            throw new Error('Legacy CartItem was not linked to the default variant')
+          }
+
+          const orderItem = await prisma.orderItem.findUniqueOrThrow({
+            where: { id: 'phase2-order-item' },
+          })
+
+          if (
+            orderItem.productVariantId !== missingDefault.id ||
+            !Array.isArray(orderItem.variantOptionsAtPurchase) ||
+            orderItem.variantOptionsAtPurchase.length !== 0
+          ) {
+            throw new Error('Legacy OrderItem was not migrated with an empty option snapshot')
+          }
+
+          console.log({
+            missingDefault: missingDefault.id,
+            staleDefault: staleDefault.id,
+            cartVariant: cartItem.productVariantId,
+            orderVariant: orderItem.productVariantId,
+            snapshot: orderItem.variantOptionsAtPurchase,
+          })
+
+          await prisma.$disconnect()
+          NODE
