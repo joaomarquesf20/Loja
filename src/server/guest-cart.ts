@@ -486,87 +486,123 @@ export async function resolveGuestCartItems(
         ),
     )
 
-  return normalizedItems.map(
-    (item) => {
-      const variant =
-        item.productVariantId
-          ? variantsById.get(
-              item.productVariantId,
-            )
-          : defaultsByProductId.get(
-              item.productId,
-            )
+  const resolvedItems: ResolvedGuestCartItem[] = []
+  const resolvedByVariantId = new Map<
+    string,
+    ResolvedGuestCartItem
+  >()
 
-      if (
-        !variant ||
-        variant.productId !==
-          item.productId
-      ) {
-        return {
-          productId:
+  for (const item of normalizedItems) {
+    const variant =
+      item.productVariantId
+        ? variantsById.get(
+            item.productVariantId,
+          )
+        : defaultsByProductId.get(
             item.productId,
-          ...(item.productVariantId
-            ? {
-                productVariantId:
-                  item.productVariantId,
-              }
-            : {}),
-          quantity:
-            item.quantity,
-          product: null,
-          inStock: false,
-          isAvailable: false,
-          canIncrease: false,
-        }
-      }
+          )
 
-      const active =
-        variant.product.isActive &&
-        variant.isActive
-
-      const inStock =
-        active &&
-        variant.stockQuantity > 0
-
-      const isAvailable =
-        active &&
-        variant.stockQuantity >=
-          item.quantity
-
-      const canIncrease =
-        active &&
-        variant.stockQuantity >
-          item.quantity
-
-      return {
+    if (
+      !variant ||
+      variant.productId !==
+        item.productId
+    ) {
+      resolvedItems.push({
         productId:
-          variant.productId,
-        productVariantId:
-          variant.id,
+          item.productId,
+        ...(item.productVariantId
+          ? {
+              productVariantId:
+                item.productVariantId,
+            }
+          : {}),
         quantity:
           item.quantity,
-        product: {
-          id: variant.product.id,
-          name:
-            variant.product.name,
-          slug:
-            variant.product.slug,
-          price: Number(
-            variant.price.toString(),
-          ),
-          images:
-            variant.images.length > 0
-              ? variant.images
-              : variant.product.images,
-        },
-        variant: {
-          id: variant.id,
-          sku: variant.sku,
-        },
-        inStock,
-        isAvailable,
-        canIncrease,
+        product: null,
+        inStock: false,
+        isAvailable: false,
+        canIncrease: false,
+      })
+      continue
+    }
+
+    const existing =
+      resolvedByVariantId.get(variant.id)
+
+    if (existing) {
+      const quantity =
+        existing.quantity + item.quantity
+
+      if (!Number.isSafeInteger(quantity)) {
+        throw new GuestCartServerValidationError(
+          'Quantidade inválida',
+        )
       }
-    },
-  )
+
+      existing.quantity = quantity
+      existing.isAvailable =
+        existing.inStock &&
+        variant.stockQuantity >= quantity
+      existing.canIncrease =
+        existing.inStock &&
+        variant.stockQuantity > quantity
+      continue
+    }
+
+    const active =
+      variant.product.isActive &&
+      variant.isActive
+
+    const inStock =
+      active &&
+      variant.stockQuantity > 0
+
+    const isAvailable =
+      active &&
+      variant.stockQuantity >=
+        item.quantity
+
+    const canIncrease =
+      active &&
+      variant.stockQuantity >
+        item.quantity
+
+    const resolvedItem: ResolvedGuestCartItem = {
+      productId:
+        variant.productId,
+      productVariantId:
+        variant.id,
+      quantity:
+        item.quantity,
+      product: {
+        id: variant.product.id,
+        name:
+          variant.product.name,
+        slug:
+          variant.product.slug,
+        price: Number(
+          variant.price.toString(),
+        ),
+        images:
+          variant.images.length > 0
+            ? variant.images
+            : variant.product.images,
+      },
+      variant: {
+        id: variant.id,
+        sku: variant.sku,
+      },
+      inStock,
+      isAvailable,
+      canIncrease,
+    }
+
+    resolvedItems.push(resolvedItem)
+    resolvedByVariantId.set(
+      variant.id,
+      resolvedItem,
+    )
+  }
+
+  return resolvedItems
 }

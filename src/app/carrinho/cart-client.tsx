@@ -168,8 +168,14 @@ async function fetchGuestCart() {
   // default variant, persist the canonical variant-based guest cart.
   if (
     guestItems.length > 0 &&
-    resolvedItems.length ===
-      guestItems.length &&
+    resolvedItems.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    ) ===
+      guestItems.reduce(
+        (total, item) => total + item.quantity,
+        0,
+      ) &&
     resolvedItems.every(
       (item) =>
         typeof item.productVariantId ===

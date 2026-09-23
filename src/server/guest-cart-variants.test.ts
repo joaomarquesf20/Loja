@@ -132,6 +132,35 @@ describe('variant-aware guest cart', () => {
     ])
   })
 
+  test('agrupa item legado e variante default e avalia o stock total', async () => {
+    const { client, variantFindMany } = createClient()
+
+    variantFindMany.mockResolvedValue([
+      defaultVariant(),
+    ])
+
+    const items = await resolveGuestCartItems(
+      [
+        { productId: 'product-1', quantity: 2 },
+        {
+          productId: 'product-1',
+          productVariantId: 'variant-1',
+          quantity: 2,
+        },
+      ],
+      client,
+    )
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      productVariantId: 'variant-1',
+      quantity: 4,
+      inStock: true,
+      isAvailable: false,
+      canIncrease: false,
+    })
+  })
+
   test('mantém a linha indisponível quando a variante explícita não pertence ao produto', async () => {
     const {
       client,

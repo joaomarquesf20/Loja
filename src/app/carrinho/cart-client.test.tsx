@@ -388,6 +388,54 @@ describe('CartClient', () => {
     ])
   })
 
+  test('grava uma só linha quando item legado e variante default coincidem', async () => {
+    window.localStorage.setItem(
+      GUEST_CART_STORAGE_KEY,
+      JSON.stringify([
+        { productId: 'product-1', quantity: 1 },
+        {
+          productId: 'product-1',
+          productVariantId: 'variant-1',
+          quantity: 2,
+        },
+      ]),
+    )
+
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({ error: 'Não autenticado' }, 401),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          items: [
+            createItem(3, {
+              productVariantId: 'variant-1',
+            }),
+          ],
+        }),
+      )
+
+    render(<CartClient />)
+
+    expect(
+      await screen.findByText('Quantidade: 3'),
+    ).toBeTruthy()
+
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          GUEST_CART_STORAGE_KEY,
+        ) ?? 'null',
+      ),
+    ).toEqual([
+      {
+        productId: 'product-1',
+        productVariantId: 'variant-1',
+        quantity: 3,
+      },
+    ])
+  })
+
   test('não transforma erro da API autenticada em carrinho convidado', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(
