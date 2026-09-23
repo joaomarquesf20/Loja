@@ -154,6 +154,32 @@ describe('products service', () => {
 })
 
   describe('listProducts', () => {
+    test('mostra preço, SKU e stock da variante default', async () => {
+      client.productVariant = {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            productId: product.id,
+            sku: 'SKU-VARIANTE',
+            price: '24.50',
+            stockQuantity: 3,
+          },
+        ]),
+        upsert: vi.fn(),
+      }
+
+      vi.mocked(client.product.findMany).mockResolvedValue([
+        product,
+      ])
+
+      const [result] = await listProducts(client)
+
+      expect(result).toMatchObject({
+        sku: 'SKU-VARIANTE',
+        price: 24.5,
+        stockQuantity: 3,
+      })
+    })
+
     test('ordena produtos e inclui os portes do Continente', async () => {
       vi.mocked(
         client.product.findMany,
@@ -1115,6 +1141,64 @@ describe('products service', () => {
 
       expect(result.name).toBe(
         'Produto Atualizado',
+      )
+    })
+
+    test('editar o nome não repõe o stock legado na variante default', async () => {
+      client.productVariant = {
+        upsert: vi.fn(),
+      }
+
+      vi.mocked(client.product.findUnique).mockResolvedValue(product)
+      vi.mocked(client.product.update).mockResolvedValue({
+        ...product,
+        name: 'Produto Atualizado',
+      })
+
+      await updateProduct(
+        'product-test',
+        { name: 'Produto Atualizado' },
+        client,
+      )
+
+      expect(client.productVariant.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: {},
+        }),
+      )
+    })
+
+    test('sincroniza apenas os campos comerciais alterados explicitamente', async () => {
+      client.productVariant = {
+        upsert: vi.fn(),
+      }
+
+      vi.mocked(client.product.findUnique).mockResolvedValue(product)
+      vi.mocked(client.product.update).mockResolvedValue({
+        ...product,
+        price: 24.5,
+        stockQuantity: 0,
+        isActive: false,
+      })
+
+      await updateProduct(
+        'product-test',
+        {
+          price: 24.5,
+          stockQuantity: 0,
+          isActive: false,
+        },
+        client,
+      )
+
+      expect(client.productVariant.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: {
+            price: 24.5,
+            stockQuantity: 0,
+            isActive: false,
+          },
+        }),
       )
     })
 

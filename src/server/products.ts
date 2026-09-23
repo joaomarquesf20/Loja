@@ -44,6 +44,13 @@ type ProductRecord = {
   shippingRates?: ProductShippingRateRecord[]
 }
 
+type DefaultVariantCommerce = {
+  productId: string
+  sku: string
+  price: DecimalValue
+  stockQuantity: number
+}
+
 export type ProductResponse = Omit<
   ProductRecord,
   'shippingRates'
@@ -107,6 +114,18 @@ const mainlandShippingInclude = {
 
 export interface ProductClient {
   productVariant?: {
+    findMany?(args: {
+      where: {
+        productId: { in: string[] }
+        optionKey: 'default'
+      }
+      select: {
+        productId: true
+        sku: true
+        price: true
+        stockQuantity: true
+      }
+    }): Promise<DefaultVariantCommerce[]>
     upsert(args: {
       where: {
         productId_optionKey: {
@@ -115,10 +134,10 @@ export interface ProductClient {
         }
       }
       update: {
-        sku: string
-        price: number
-        stockQuantity: number
-        isActive: boolean
+        sku?: string
+        price?: number
+        stockQuantity?: number
+        isActive?: boolean
       }
       create: {
         productId: string
@@ -330,6 +349,7 @@ function mapProduct(
   mainlandShippingCostOverride?:
     | string
     | null,
+  defaultVariant?: DefaultVariantCommerce,
 ): ProductResponse {
   const {
     shippingRates,
@@ -358,11 +378,53 @@ function mapProduct(
 
   return {
     ...productData,
+    ...(defaultVariant
+      ? {
+          sku: defaultVariant.sku,
+          price: Number(
+            defaultVariant.price.toString(),
+          ),
+          stockQuantity:
+            defaultVariant.stockQuantity,
+        }
+      : {}),
     shippingClass:
       product.shippingClass ??
       'UNASSIGNED',
     mainlandShippingCost,
   }
+}
+
+async function findDefaultVariants(
+  db: ProductClient,
+  productIds: string[],
+) {
+  if (
+    productIds.length === 0 ||
+    !db.productVariant?.findMany
+  ) {
+    return new Map<string, DefaultVariantCommerce>()
+  }
+
+  const variants = await db.productVariant.findMany({
+    where: {
+      productId: { in: productIds },
+      optionKey: 'default',
+    },
+    select: {
+      productId: true,
+      sku: true,
+      price: true,
+      stockQuantity: true,
+    },
+  })
+
+  return new Map(
+    variants.map((variant) => [
+      variant.productId,
+      variant,
+    ]),
+  )
 }
 
 async function getBulkyShippingBounds() {
@@ -460,8 +522,17 @@ export async function listProducts(
         mainlandShippingInclude,
     })
 
+  const defaults = await findDefaultVariants(
+    db,
+    products.map((product) => product.id),
+  )
+
   return products.map((product) =>
-    mapProduct(product),
+    mapProduct(
+      product,
+      undefined,
+      defaults.get(product.id),
+    ),
   )
 }
 
@@ -486,7 +557,16 @@ export async function getProductById(
     )
   }
 
-  return mapProduct(product)
+  const defaults = await findDefaultVariants(
+    db,
+    [product.id],
+  )
+
+  return mapProduct(
+    product,
+    undefined,
+    defaults.get(product.id),
+  )
 }
 
 export async function createProduct(
@@ -874,12 +954,21 @@ export async function updateProduct(
         },
       },
       update: {
-        sku: product.sku,
-        price: product.price,
-        stockQuantity:
-          product.stockQuantity,
-        isActive:
-          product.isActive,
+        ...(data.sku !== undefined
+          ? { sku: product.sku }
+          : {}),
+        ...(data.price !== undefined
+          ? { price: product.price }
+          : {}),
+        ...(data.stockQuantity !== undefined
+          ? {
+              stockQuantity:
+                product.stockQuantity,
+            }
+          : {}),
+        ...(data.isActive !== undefined
+          ? { isActive: product.isActive }
+          : {}),
       },
       create: {
         productId: product.id,

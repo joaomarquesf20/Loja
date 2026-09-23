@@ -310,6 +310,92 @@ describe(
       vi.unstubAllGlobals()
     })
 
+    test('editar outro campo não reenviará stock, preço ou SKU', async () => {
+      installApiMock([standardProduct])
+      render(<ProductsClient />)
+      await waitForLoad()
+
+      const row = screen
+        .getByText('Produto Normal')
+        .closest('tr')
+
+      fireEvent.click(
+        within(row as HTMLTableRowElement).getByRole(
+          'button',
+          { name: 'Editar' },
+        ),
+      )
+
+      fireEvent.change(screen.getByLabelText('Nome'), {
+        target: { value: 'Produto Renomeado' },
+      })
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Guardar alterações',
+        }),
+      )
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([, init]) => init?.method === 'PATCH',
+          ),
+        ).toBe(true)
+      })
+
+      expect(findRequestBody('PATCH')).toMatchObject({
+        name: 'Produto Renomeado',
+      })
+      expect(findRequestBody('PATCH')).not.toHaveProperty(
+        'stockQuantity',
+      )
+      expect(findRequestBody('PATCH')).not.toHaveProperty(
+        'price',
+      )
+      expect(findRequestBody('PATCH')).not.toHaveProperty(
+        'sku',
+      )
+    })
+
+    test('envia stock quando é alterado no formulário', async () => {
+      installApiMock([standardProduct])
+      render(<ProductsClient />)
+      await waitForLoad()
+
+      const row = screen
+        .getByText('Produto Normal')
+        .closest('tr')
+
+      fireEvent.click(
+        within(row as HTMLTableRowElement).getByRole(
+          'button',
+          { name: 'Editar' },
+        ),
+      )
+
+      fireEvent.change(screen.getByLabelText('Stock'), {
+        target: { value: '5' },
+      })
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Guardar alterações',
+        }),
+      )
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([, init]) => init?.method === 'PATCH',
+          ),
+        ).toBe(true)
+      })
+
+      expect(findRequestBody('PATCH')).toHaveProperty(
+        'stockQuantity',
+        5,
+      )
+    })
+
     test(
       'mostra classe e tarifa específica de produto volumoso',
       async () => {

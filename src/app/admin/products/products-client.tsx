@@ -225,6 +225,9 @@ export default function ProductsClient() {
   const [editingId, setEditingId] =
     useState<string | null>(null)
 
+  const [editingProduct, setEditingProduct] =
+    useState<Product | null>(null)
+
   const [
     compatibilityProductId,
     setCompatibilityProductId,
@@ -340,12 +343,14 @@ export default function ProductsClient() {
   function resetForm() {
     setForm(emptyForm)
     setEditingId(null)
+    setEditingProduct(null)
   }
 
   function startEditing(
     product: Product,
   ) {
     setEditingId(product.id)
+    setEditingProduct(product)
 
     setForm({
       name: product.name,
@@ -500,6 +505,38 @@ export default function ProductsClient() {
       mainlandShippingCost,
     }
 
+    const requestPayload =
+      editingId && editingProduct
+        ? {
+            name: payload.name,
+            slug: payload.slug,
+            description: payload.description,
+            categoryId: payload.categoryId,
+            productBrandId: payload.productBrandId,
+            shippingClass: payload.shippingClass,
+            mainlandShippingCost:
+              payload.mainlandShippingCost,
+            ...(payload.sku !== editingProduct.sku
+              ? { sku: payload.sku }
+              : {}),
+            ...(payload.price !==
+            Number(editingProduct.price)
+              ? { price: payload.price }
+              : {}),
+            ...(payload.stockQuantity !==
+            editingProduct.stockQuantity
+              ? {
+                  stockQuantity:
+                    payload.stockQuantity,
+                }
+              : {}),
+            ...(payload.isActive !==
+            editingProduct.isActive
+              ? { isActive: payload.isActive }
+              : {}),
+          }
+        : payload
+
     try {
       setSubmitting(true)
       setError(null)
@@ -517,7 +554,7 @@ export default function ProductsClient() {
               'application/json',
           },
           body: JSON.stringify(
-            payload,
+            requestPayload,
           ),
         },
       )
