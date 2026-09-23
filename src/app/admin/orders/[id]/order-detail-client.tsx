@@ -78,6 +78,11 @@ type AdminOrderAction =
 type OrderDetailItem = {
   id: string
   productId: string
+  variantOptionsAtPurchase?: Array<{
+    code: string
+    name: string
+    value: string
+  }>
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
@@ -1065,6 +1070,16 @@ export default function OrderDetailClient({
                           item.productId
                         }
                       </p>
+                      {!!item.variantOptionsAtPurchase?.length && (
+                        <p className="text-xs text-gray-500">
+                          Opções:{' '}
+                          {item.variantOptionsAtPurchase
+                            .map((option) =>
+                              `${option.name}: ${option.value}`,
+                            )
+                            .join(' · ')}
+                        </p>
+                      )}
                     </td>
 
                     <td className="py-3 pr-4">

@@ -11,6 +11,11 @@ type FulfillmentMethod =
 
 type OrderItem = {
   id: string
+  variantOptionsAtPurchase?: Array<{
+    code: string
+    name: string
+    value: string
+  }>
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
@@ -105,6 +110,15 @@ function isOrderItem(
       'string' &&
     typeof value.productSkuAtPurchase ===
       'string' &&
+    (value.variantOptionsAtPurchase === undefined ||
+      (Array.isArray(value.variantOptionsAtPurchase) &&
+        value.variantOptionsAtPurchase.every(
+          (option) =>
+            isRecord(option) &&
+            typeof option.code === 'string' &&
+            typeof option.name === 'string' &&
+            typeof option.value === 'string',
+        ))) &&
     isMoney(
       value.priceAtPurchase,
     ) &&
@@ -1089,6 +1103,17 @@ export function OrdersClient() {
                                   item.productSkuAtPurchase
                                 }
                               </p>
+
+                              {!!item.variantOptionsAtPurchase?.length && (
+                                <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                  Opções:{' '}
+                                  {item.variantOptionsAtPurchase
+                                    .map((option) =>
+                                      `${option.name}: ${option.value}`,
+                                    )
+                                    .join(' · ')}
+                                </p>
+                              )}
 
                               <p className="mt-1 text-neutral-600 dark:text-neutral-400">
                                 Quantidade:{' '}

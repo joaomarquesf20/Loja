@@ -60,6 +60,13 @@ function createOrder(
           'Filtro de óleo',
         productSkuAtPurchase:
           'FLT-001',
+        variantOptionsAtPurchase: [
+          {
+            code: 'cor',
+            name: 'Cor',
+            value: 'Preto',
+          },
+        ],
         priceAtPurchase:
           '50.00',
         quantity: 2,
@@ -220,6 +227,10 @@ describe(
           screen.getByText(
             'SKU: FLT-001',
           ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(/Cor: Preto/),
         ).toBeInTheDocument()
 
         expect(
