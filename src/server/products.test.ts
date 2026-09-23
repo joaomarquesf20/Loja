@@ -278,6 +278,50 @@ describe('products service', () => {
   })
 
   describe('createProduct', () => {
+    test('grava produto e variante default na mesma transação', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue(null)
+      vi.mocked(client.category.findUnique).mockResolvedValue({
+        id: 'category-test',
+      })
+
+      const txCreate = vi.fn().mockResolvedValue(product)
+      const txUpsert = vi.fn().mockRejectedValue(
+        new Error('Falha na variante'),
+      )
+
+      client.$transaction = vi.fn(async (callback) =>
+        callback({
+          ...client,
+          product: {
+            ...client.product,
+            create: txCreate,
+          },
+          productVariant: {
+            upsert: txUpsert,
+          },
+        }),
+      )
+
+      await expect(
+        createProduct(
+          {
+            name: 'Produto Teste',
+            slug: 'produto-teste',
+            sku: 'SKU-TESTE-001',
+            price: 19.99,
+            stockQuantity: 10,
+            categoryId: 'category-test',
+            shippingClass: 'STANDARD',
+          },
+          client,
+        ),
+      ).rejects.toThrow('Falha na variante')
+
+      expect(client.$transaction).toHaveBeenCalledOnce()
+      expect(txCreate).toHaveBeenCalledOnce()
+      expect(txUpsert).toHaveBeenCalledOnce()
+      expect(client.product.create).not.toHaveBeenCalled()
+    })
     test('rejeita input inválido', async () => {
       await expect(
         createProduct(

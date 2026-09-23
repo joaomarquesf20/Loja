@@ -113,6 +113,10 @@ const mainlandShippingInclude = {
 } as const
 
 export interface ProductClient {
+  $transaction?<T>(
+    callback: (tx: ProductClient) => Promise<T>,
+  ): Promise<T>
+
   productVariant?: {
     findMany?(args: {
       where: {
@@ -235,6 +239,15 @@ function getClient(
     client ??
     (prisma as unknown as ProductClient)
   )
+}
+
+async function writeProductAndVariant<T>(
+  db: ProductClient,
+  callback: (tx: ProductClient) => Promise<T>,
+): Promise<T> {
+  return db.$transaction
+    ? db.$transaction(callback)
+    : callback(db)
 }
 
 function validateId(id: string) {
@@ -679,41 +692,45 @@ if (
     }
   }
 
-  const product =
-    await db.product.create({
-      data: createData,
-    })
+  const product = await writeProductAndVariant(
+    db,
+    async (tx) => {
+      const created = await tx.product.create({
+        data: createData,
+      })
 
-  if (db.productVariant) {
-    await db.productVariant.upsert({
-      where: {
-        productId_optionKey: {
-          productId: product.id,
-          optionKey: 'default',
-        },
-      },
-      update: {
-        sku: product.sku,
-        price: product.price,
-        stockQuantity:
-          product.stockQuantity,
-        isActive:
-          product.isActive,
-      },
-      create: {
-        productId: product.id,
-        sku: product.sku,
-        price: product.price,
-        stockQuantity:
-          product.stockQuantity,
-        isActive:
-          product.isActive,
-        images: [],
-        position: 0,
-        optionKey: 'default',
-      },
-    })
-  }
+      if (tx.productVariant) {
+        await tx.productVariant.upsert({
+          where: {
+            productId_optionKey: {
+              productId: created.id,
+              optionKey: 'default',
+            },
+          },
+          update: {
+            sku: created.sku,
+            price: created.price,
+            stockQuantity:
+              created.stockQuantity,
+            isActive: created.isActive,
+          },
+          create: {
+            productId: created.id,
+            sku: created.sku,
+            price: created.price,
+            stockQuantity:
+              created.stockQuantity,
+            isActive: created.isActive,
+            images: [],
+            position: 0,
+            optionKey: 'default',
+          },
+        })
+      }
+
+      return created
+    },
+  )
 
   return mapProduct(
     product,
@@ -939,51 +956,56 @@ export async function updateProduct(
       shippingRates
   }
 
-  const product =
-    await db.product.update({
-      where: { id },
-      data: updateData,
-    })
+  const product = await writeProductAndVariant(
+    db,
+    async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: updateData,
+      })
 
-  if (db.productVariant) {
-    await db.productVariant.upsert({
-      where: {
-        productId_optionKey: {
-          productId: product.id,
-          optionKey: 'default',
-        },
-      },
-      update: {
-        ...(data.sku !== undefined
-          ? { sku: product.sku }
-          : {}),
-        ...(data.price !== undefined
-          ? { price: product.price }
-          : {}),
-        ...(data.stockQuantity !== undefined
-          ? {
-              stockQuantity:
-                product.stockQuantity,
-            }
-          : {}),
-        ...(data.isActive !== undefined
-          ? { isActive: product.isActive }
-          : {}),
-      },
-      create: {
-        productId: product.id,
-        sku: product.sku,
-        price: product.price,
-        stockQuantity:
-          product.stockQuantity,
-        isActive:
-          product.isActive,
-        images: [],
-        position: 0,
-        optionKey: 'default',
-      },
-    })
-  }
+      if (tx.productVariant) {
+        await tx.productVariant.upsert({
+          where: {
+            productId_optionKey: {
+              productId: updated.id,
+              optionKey: 'default',
+            },
+          },
+          update: {
+            ...(data.sku !== undefined
+              ? { sku: updated.sku }
+              : {}),
+            ...(data.price !== undefined
+              ? { price: updated.price }
+              : {}),
+            ...(data.stockQuantity !== undefined
+              ? {
+                  stockQuantity:
+                    updated.stockQuantity,
+                }
+              : {}),
+            ...(data.isActive !== undefined
+              ? { isActive: updated.isActive }
+              : {}),
+          },
+          create: {
+            productId: updated.id,
+            sku: updated.sku,
+            price: updated.price,
+            stockQuantity:
+              updated.stockQuantity,
+            isActive: updated.isActive,
+            images: [],
+            position: 0,
+            optionKey: 'default',
+          },
+        })
+      }
+
+      return updated
+    },
+  )
 
   return mapProduct(
     product,
