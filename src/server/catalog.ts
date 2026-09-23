@@ -32,6 +32,15 @@ type CatalogProductDetailRecord =
     sku: string
   }
 
+type CatalogDefaultVariant = {
+  productId: string
+  sku: string
+  price: CatalogPrice
+  stockQuantity: number
+  isActive: boolean
+  images: string[]
+}
+
 type CatalogCategoryRecord = {
   id: string
   parentId: string | null
@@ -223,6 +232,23 @@ type CatalogProductFindManyArgs = {
 }
 
 export interface CatalogClient {
+  productVariant?: {
+    findMany(args: {
+      where: {
+        productId: { in: string[] }
+        optionKey: 'default'
+      }
+      select: {
+        productId: true
+        sku: true
+        price: true
+        stockQuantity: true
+        isActive: true
+        images: true
+      }
+    }): Promise<CatalogDefaultVariant[]>
+  }
+
   product: {
     findMany(
       args: CatalogProductFindManyArgs,
@@ -386,18 +412,55 @@ function isCatalogClient(
 
 function toCatalogProduct(
   product: CatalogProductRecord,
+  variant?: CatalogDefaultVariant,
 ): CatalogProduct {
   return {
     id: product.id,
     name: product.name,
     slug: product.slug,
     description: product.description,
-    price: Number(product.price),
-    inStock: product.stockQuantity > 0,
-    images: product.images,
+    price: Number(variant?.price ?? product.price),
+    inStock: variant
+      ? variant.isActive && variant.stockQuantity > 0
+      : product.stockQuantity > 0,
+    images:
+      variant && variant.images.length > 0
+        ? variant.images
+        : product.images,
     category: product.category,
     brand: product.brand,
   }
+}
+
+async function findDefaultVariants(
+  db: CatalogClient,
+  productIds: string[],
+) {
+  if (!db.productVariant || productIds.length === 0) {
+    return new Map<string, CatalogDefaultVariant>()
+  }
+
+  const variants = await db.productVariant.findMany({
+    where: {
+      productId: { in: productIds },
+      optionKey: 'default',
+    },
+    select: {
+      productId: true,
+      sku: true,
+      price: true,
+      stockQuantity: true,
+      isActive: true,
+      images: true,
+    },
+  })
+
+  return new Map(
+    variants.map((variant) => [
+      variant.productId,
+      variant,
+    ]),
+  )
 }
 
 function toCatalogCategory(
@@ -805,7 +868,17 @@ export async function listCatalogProducts(
     },
   })
 
-  return products.map(toCatalogProduct)
+  const defaults = await findDefaultVariants(
+    db,
+    products.map((product) => product.id),
+  )
+
+  return products.map((product) =>
+    toCatalogProduct(
+      product,
+      defaults.get(product.id),
+    ),
+  )
 }
 
 export async function getCatalogProductBySlug(
@@ -856,9 +929,16 @@ export async function getCatalogProductBySlug(
     return null
   }
 
+  const defaults = await findDefaultVariants(
+    db,
+    [product.id],
+  )
+
+  const defaultVariant = defaults.get(product.id)
+
   return {
-    ...toCatalogProduct(product),
-    sku: product.sku,
+    ...toCatalogProduct(product, defaultVariant),
+    sku: defaultVariant?.sku ?? product.sku,
   }
 }
 
@@ -986,7 +1066,7 @@ export async function getCatalogCategoryPageBySlug(
       },
     }
 
-  if (filters.inStockOnly) {
+  if (filters.inStockOnly && !db.productVariant) {
     where.stockQuantity = {
       gt: 0,
     }
@@ -1003,7 +1083,7 @@ export async function getCatalogCategoryPageBySlug(
     filters.priceMax,
   )
 
-  if (priceFilter) {
+  if (priceFilter && !db.productVariant) {
     where.price = priceFilter
   }
 
@@ -1021,7 +1101,11 @@ export async function getCatalogCategoryPageBySlug(
       where,
       orderBy:
         getCatalogProductOrderBy(
-          filters.sort,
+          db.productVariant &&
+          (filters.sort === 'price-asc' ||
+            filters.sort === 'price-desc')
+            ? 'name-asc'
+            : filters.sort,
         ),
       select: {
         id: true,
@@ -1055,14 +1139,66 @@ export async function getCatalogCategoryPageBySlug(
     return null
   }
 
+  const defaults = await findDefaultVariants(
+    db,
+    products.map((product) => product.id),
+  )
+
+  const mappedProducts = products
+    .map((product) =>
+      toCatalogProduct(
+        product,
+        defaults.get(product.id),
+      ),
+    )
+    .filter((product) => {
+      if (!db.productVariant) {
+        return true
+      }
+
+      if (filters.inStockOnly && !product.inStock) {
+        return false
+      }
+
+      if (
+        priceFilter?.gte !== undefined &&
+        product.price < priceFilter.gte
+      ) {
+        return false
+      }
+
+      if (
+        priceFilter?.lte !== undefined &&
+        product.price > priceFilter.lte
+      ) {
+        return false
+      }
+
+      return true
+    })
+
+  if (
+    db.productVariant &&
+    (filters.sort === 'price-asc' ||
+      filters.sort === 'price-desc')
+  ) {
+    const direction =
+      filters.sort === 'price-asc' ? 1 : -1
+
+    mappedProducts.sort(
+      (first, second) =>
+        direction * (first.price - second.price) ||
+        first.name.localeCompare(second.name),
+    )
+  }
+
   return {
     category:
       toCatalogCategory(category),
     brands:
       brands.map(toCatalogBrand),
     vehicleConfigurations,
-    products:
-      products.map(toCatalogProduct),
+    products: mappedProducts,
   }
 }
 
