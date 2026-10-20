@@ -10,15 +10,44 @@ import {
   sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
 import {
+  getCatalogCategoryFacetsBySlug,
   getCatalogCategoryPageBySlug,
   listCatalogCategories,
-  type CatalogBrand,
-  type CatalogSort,
-  type CatalogVehicleConfiguration,
+  type CatalogBrandFacet,
+  type CatalogCategoryFacets,
+  type CatalogVehicleMakeFacet,
 } from '@/server/catalog'
 import CategorySortControl from './category-sort-control'
+import {
+  getBrandFilterLabel,
+  getCategoryFilterProfile,
+  getVisibleVariantFacets,
+  shouldShowVehicleFilter,
+  shouldShowVehicleGenerations,
+} from '@/lib/storefront-category-profile'
+import {
+  buildCategoryHref,
+  getSearchParamValue,
+  getSearchParamValues,
+  getSelectedVariantValues,
+  getVisibleVehicleGenerations,
+  getVisibleVehicleModels,
+  hasSameVehicleSelections,
+  normalizeBrandSlugs,
+  normalizeVehicleSelections,
+  parsePriceParam,
+  parseSortParam,
+  parseVariantSelections,
+  removeVariantValue,
+  VARIANT_FILTER_PREFIX,
+  toggleId,
+  toggleVariantSelection,
+  type CategoryFilterState,
+} from './category-filter-query'
+import FilterGroup, {
+  type FilterGroupOption,
+} from './filter-group'
 import MobileFilterDrawer from './mobile-filter-drawer'
-import VehicleFilter from './vehicle-filter'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,160 +60,12 @@ type CategoryPageProps = {
     brand?: string | string[]
     priceMin?: string | string[]
     priceMax?: string | string[]
-    vehicle?: string | string[]
+    make?: string | string[]
+    model?: string | string[]
+    generation?: string | string[]
     sort?: string | string[]
+    [key: string]: string | string[] | undefined
   }>
-}
-
-type CategoryFilterState = {
-  inStockOnly: boolean
-  brandSlugs: string[]
-  priceMin?: number
-  priceMax?: number
-  vehicleConfigurationId?: string
-  sort?: CatalogSort
-}
-
-type FilterPanelProps = {
-  categorySlug: string
-  brands: CatalogBrand[]
-  vehicleConfigurations:
-    CatalogVehicleConfiguration[]
-  selectedVehicleConfigurationId?:
-    string
-  selectedBrandSlugs: string[]
-  inStockOnly: boolean
-  priceMin?: number
-  priceMax?: number
-  sort?: CatalogSort
-  brandCounts: Record<string, number>
-  inStockCount: number
-}
-
-function getSearchParamValue(
-  value: string | string[] | undefined,
-) {
-  return Array.isArray(value)
-    ? value[0]
-    : value
-}
-
-function getSearchParamValues(
-  value: string | string[] | undefined,
-) {
-  const values =
-    value === undefined
-      ? []
-      : Array.isArray(value)
-        ? value
-        : [value]
-
-  return Array.from(
-    new Set(
-      values
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  )
-}
-
-function parsePriceParam(
-  value: string | string[] | undefined,
-) {
-  const rawValue =
-    getSearchParamValue(value)?.trim()
-
-  if (!rawValue) {
-    return undefined
-  }
-
-  const parsedValue = Number(
-    rawValue.replace(',', '.'),
-  )
-
-  if (
-    !Number.isFinite(parsedValue) ||
-    parsedValue < 0
-  ) {
-    return undefined
-  }
-
-  return parsedValue
-}
-
-function parseVehicleParam(
-  value: string | string[] | undefined,
-) {
-  const rawValue =
-    getSearchParamValue(value)?.trim()
-
-  return rawValue || undefined
-}
-
-function parseSortParam(
-  value: string | string[] | undefined,
-): CatalogSort | undefined {
-  const rawValue =
-    getSearchParamValue(value)?.trim()
-
-  if (
-    rawValue === 'name-desc' ||
-    rawValue === 'price-asc' ||
-    rawValue === 'price-desc'
-  ) {
-    return rawValue
-  }
-
-  return undefined
-}
-
-function buildCategoryHref(
-  categorySlug: string,
-  filters: CategoryFilterState,
-) {
-  const params = new URLSearchParams()
-
-  if (filters.inStockOnly) {
-    params.set('stock', 'available')
-  }
-
-  for (const brandSlug of filters.brandSlugs) {
-    params.append('brand', brandSlug)
-  }
-
-  if (filters.priceMin !== undefined) {
-    params.set(
-      'priceMin',
-      String(filters.priceMin),
-    )
-  }
-
-  if (filters.priceMax !== undefined) {
-    params.set(
-      'priceMax',
-      String(filters.priceMax),
-    )
-  }
-
-  if (filters.vehicleConfigurationId) {
-    params.set(
-      'vehicle',
-      filters.vehicleConfigurationId,
-    )
-  }
-
-  if (
-    filters.sort &&
-    filters.sort !== 'name-asc'
-  ) {
-    params.set('sort', filters.sort)
-  }
-
-  const query = params.toString()
-
-  return query
-    ? `/categorias/${categorySlug}?${query}`
-    : `/categorias/${categorySlug}`
 }
 
 function formatPrice(value: number) {
@@ -260,155 +141,439 @@ function getFooterCategories(
   ).slice(0, 4)
 }
 
-function FilterPanel({
-  categorySlug,
+function buildBrandOptions({
   brands,
-  vehicleConfigurations,
-  selectedVehicleConfigurationId,
-  selectedBrandSlugs,
-  inStockOnly,
-  priceMin,
-  priceMax,
-  sort,
-  brandCounts,
-  inStockCount,
-}: FilterPanelProps) {
-  const stockHref = buildCategoryHref(
-    categorySlug,
-    {
-      inStockOnly: !inStockOnly,
-      brandSlugs: selectedBrandSlugs,
-      priceMin,
-      priceMax,
-      vehicleConfigurationId:
-        selectedVehicleConfigurationId,
-      sort,
-    },
+  filters,
+  categorySlug,
+}: {
+  brands: CatalogBrandFacet[]
+  filters: CategoryFilterState
+  categorySlug: string
+}): FilterGroupOption[] {
+  return brands.map((brand) => {
+    const selected =
+      filters.brandSlugs.includes(brand.slug)
+
+    return {
+      key: brand.id,
+      label: brand.name,
+      productCount: brand.productCount,
+      selected,
+      href: buildCategoryHref(
+        categorySlug,
+        filters,
+        {
+          brandSlugs: toggleId(
+            filters.brandSlugs,
+            brand.slug,
+          ),
+        },
+      ),
+    }
+  })
+}
+
+function buildVehicleOptions({
+  makes,
+  models,
+  generations,
+  filters,
+  categorySlug,
+  showModels,
+  showGenerations,
+}: {
+  makes: CatalogVehicleMakeFacet[]
+  models: Array<{
+    id: string
+    name: string
+    makeId: string
+    makeName: string
+    productCount: number
+    generations: Array<{
+      id: string
+      name: string
+    }>
+  }>
+  generations: Array<{
+    id: string
+    name: string
+    modelId: string
+    modelName: string
+    makeName: string
+    productCount: number
+  }>
+  filters: CategoryFilterState
+  categorySlug: string
+  showModels: boolean
+  showGenerations: boolean
+}) {
+  const visibleMakeNames = new Set(
+    models.map((model) => model.makeName),
   )
 
-  const hasPriceFilter =
-    priceMin !== undefined ||
-    priceMax !== undefined
+  const visibleModelNames = new Set(
+    generations.map(
+      (generation) => generation.modelName,
+    ),
+  )
 
-  const removePriceHref =
-    buildCategoryHref(
-      categorySlug,
-      {
-        inStockOnly,
-        brandSlugs:
-          selectedBrandSlugs,
-        vehicleConfigurationId:
-          selectedVehicleConfigurationId,
-        sort,
-      },
+  const makeOptions: FilterGroupOption[] =
+    makes.map((make) => ({
+      key: make.id,
+      label: make.name,
+      productCount: make.productCount,
+      selected:
+        filters.vehicleMakeIds.includes(
+          make.id,
+        ),
+      href: buildCategoryHref(
+        categorySlug,
+        filters,
+        {
+          vehicleMakeIds: toggleId(
+            filters.vehicleMakeIds,
+            make.id,
+          ),
+        },
+      ),
+    }))
+
+  const modelOptions: FilterGroupOption[] =
+    showModels
+      ? models.map((model) => ({
+          key: model.id,
+          label:
+            visibleMakeNames.size > 1
+              ? `${model.makeName} ${model.name}`
+              : model.name,
+          productCount: model.productCount,
+          selected:
+            filters.vehicleModelIds.includes(
+              model.id,
+            ),
+          href: buildCategoryHref(
+            categorySlug,
+            filters,
+            {
+              vehicleModelIds: toggleId(
+                filters.vehicleModelIds,
+                model.id,
+              ),
+            },
+          ),
+        }))
+      : []
+
+  const generationOptions: FilterGroupOption[] =
+    showGenerations
+      ? generations.map((generation) => ({
+          key: generation.id,
+          label:
+            visibleModelNames.size > 1
+              ? `${generation.modelName} ${generation.name}`
+              : generation.name,
+          productCount:
+            generation.productCount,
+          selected:
+            filters.vehicleGenerationIds.includes(
+              generation.id,
+            ),
+          href: buildCategoryHref(
+            categorySlug,
+            filters,
+            {
+              vehicleGenerationIds: toggleId(
+                filters.vehicleGenerationIds,
+                generation.id,
+              ),
+            },
+          ),
+        }))
+      : []
+
+  return {
+    makeOptions,
+    modelOptions,
+    generationOptions,
+  }
+}
+
+function buildVariantFacetOptions({
+  facets,
+  filters,
+  categorySlug,
+}: {
+  facets: ReturnType<typeof getVisibleVariantFacets>
+  filters: CategoryFilterState
+  categorySlug: string
+}): Array<{
+  code: string
+  name: string
+  options: FilterGroupOption[]
+  clearHref: string
+}> {
+  return facets.map((facet) => {
+    const selectedValues =
+      getSelectedVariantValues(
+        filters.variantSelections,
+        facet.code,
+      )
+
+    return {
+      code: facet.code,
+      name: facet.name,
+      clearHref: buildCategoryHref(
+        categorySlug,
+        filters,
+        {
+          variantSelections:
+            filters.variantSelections.filter(
+              (selection) =>
+                selection.code !==
+                facet.code,
+            ),
+        },
+      ),
+      options: facet.values.map(
+        (facetValue) => {
+          const selected =
+            selectedValues.includes(
+              facetValue.value,
+            )
+
+          return {
+            key: `${facet.code}:${facetValue.value}`,
+            label: facetValue.value,
+            productCount:
+              facetValue.productCount,
+            selected,
+            href: buildCategoryHref(
+              categorySlug,
+              filters,
+              {
+                variantSelections:
+                  toggleVariantSelection(
+                    filters.variantSelections,
+                    facet.code,
+                    facetValue.value,
+                  ),
+              },
+            ),
+          }
+        },
+      ),
+    }
+  })
+}
+
+function FilterPanel({
+  categorySlug,
+  filters,
+  facets,
+  profile,
+}: {
+  categorySlug: string
+  filters: CategoryFilterState
+  facets: CatalogCategoryFacets
+  profile: ReturnType<
+    typeof getCategoryFilterProfile
+  >
+}) {
+  const visibleVariantFacets =
+    getVisibleVariantFacets(
+      profile,
+      facets.variantFacets,
     )
+
+  const showVehicle =
+    shouldShowVehicleFilter(profile)
+
+  const visibleModels =
+    getVisibleVehicleModels(
+      facets.vehicleMakes,
+      filters.vehicleMakeIds,
+    )
+
+  const showGenerations =
+    shouldShowVehicleGenerations(
+      profile,
+      visibleModels,
+    )
+
+  const visibleGenerations =
+    getVisibleVehicleGenerations(
+      visibleModels,
+      filters.vehicleModelIds,
+    )
+
+  const vehicleOptions = buildVehicleOptions({
+    makes: facets.vehicleMakes,
+    models: visibleModels,
+    generations: visibleGenerations,
+    filters,
+    categorySlug,
+    showModels: showVehicle,
+    showGenerations:
+      showVehicle && showGenerations,
+  })
+
+  const variantGroups =
+    buildVariantFacetOptions({
+      facets: visibleVariantFacets,
+      filters,
+      categorySlug,
+    })
+
+  const hasPriceFilter =
+    filters.priceMin !== undefined ||
+    filters.priceMax !== undefined
 
   return (
     <div className="space-y-6">
-      <section>
-        <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
-          Disponibilidade
-        </h3>
+      <FilterGroup
+        title="Disponibilidade"
+        options={[
+          {
+            key: 'stock',
+            label: 'Em stock',
+            productCount: facets.inStockCount,
+            selected: filters.inStockOnly,
+            href: buildCategoryHref(
+              categorySlug,
+              filters,
+              {
+                inStockOnly:
+                  !filters.inStockOnly,
+              },
+            ),
+          },
+        ]}
+      />
 
-        <Link
-          href={stockHref}
-          className="mt-3 flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/66 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-        >
-          <span>Em stock</span>
-          <span className="flex items-center gap-2">
-            <span className="text-xs font-medium tabular-nums text-white/28">
-              {inStockCount}
-            </span>
-            <span
-              aria-hidden="true"
-              className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${inStockOnly
-                ? 'border-brand bg-brand text-white'
-                : 'border-white/24 text-transparent'}`}
-            >
-              ✓
-            </span>
-          </span>
-        </Link>
-      </section>
-
-      {brands.length > 0 && (
-        <section className="border-t border-white/8 pt-5">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
-            Marca
-          </h3>
-
-          <div className="mt-3 grid gap-1">
-            {brands.map((brand) => {
-              const isSelected =
-                selectedBrandSlugs.includes(
-                  brand.slug,
-                )
-
-              const nextBrandSlugs =
-                isSelected
-                  ? selectedBrandSlugs.filter(
-                      (slug) =>
-                        slug !==
-                        brand.slug,
-                    )
-                  : [
-                      ...selectedBrandSlugs,
-                      brand.slug,
-                    ]
-
-              const href =
-                buildCategoryHref(
-                  categorySlug,
-                  {
-                    inStockOnly,
-                    brandSlugs:
-                      nextBrandSlugs,
-                    priceMin,
-                    priceMax,
-                    vehicleConfigurationId:
-                      selectedVehicleConfigurationId,
-                    sort,
-                  },
-                )
-
-              return (
-                <Link
-                  key={brand.id}
-                  href={href}
-                  className="flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold text-white/62 transition hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                >
-                  <span>{brand.name}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs font-medium tabular-nums text-white/28">
-                      {brandCounts[
-                        brand.slug
-                      ] ?? 0}
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${isSelected
-                        ? 'border-brand bg-brand text-white'
-                        : 'border-white/24 text-transparent'}`}
-                    >
-                      ✓
-                    </span>
-                  </span>
-                </Link>
+      <FilterGroup
+        title={getBrandFilterLabel(profile)}
+        options={buildBrandOptions({
+          brands: facets.brands,
+          filters,
+          categorySlug,
+        })}
+        clearHref={
+          filters.brandSlugs.length > 0
+            ? buildCategoryHref(
+                categorySlug,
+                filters,
+                {
+                  brandSlugs: [],
+                },
               )
-            })}
-          </div>
-        </section>
+            : undefined
+        }
+      />
+
+      {showVehicle && (
+        <>
+          <FilterGroup
+            title="Marca do veículo"
+            options={vehicleOptions.makeOptions}
+            clearHref={
+              filters.vehicleMakeIds.length > 0
+                ? buildCategoryHref(
+                    categorySlug,
+                    filters,
+                    {
+                      vehicleMakeIds: [],
+                    },
+                  )
+                : undefined
+            }
+            emptyHint="Produtos com compatibilidade registada para o veículo escolhido."
+          />
+
+          <FilterGroup
+            title="Modelo"
+            options={
+              vehicleOptions.modelOptions
+            }
+            clearHref={
+              filters.vehicleModelIds.length >
+              0
+                ? buildCategoryHref(
+                    categorySlug,
+                    filters,
+                    {
+                      vehicleModelIds: [],
+                      vehicleGenerationIds: [],
+                    },
+                  )
+                : undefined
+            }
+          />
+
+          <FilterGroup
+            title="Geração"
+            options={
+              vehicleOptions.generationOptions
+            }
+            clearHref={
+              filters.vehicleGenerationIds
+                .length > 0
+                ? buildCategoryHref(
+                    categorySlug,
+                    filters,
+                    {
+                      vehicleGenerationIds: [],
+                    },
+                  )
+                : undefined
+            }
+          />
+        </>
       )}
+
+      {variantGroups.map((group) => (
+        <FilterGroup
+          key={group.code}
+          title={group.name}
+          options={group.options}
+          clearHref={
+            getSelectedVariantValues(
+              filters.variantSelections,
+              group.code,
+            ).length > 0
+              ? group.clearHref
+              : undefined
+          }
+          /**
+           * Nas jantes as secções ficam compactas como nos
+           * catálogos de referência: colapsadas, exceto quando
+           * já têm valores escolhidos.
+           */
+          defaultOpen={
+            profile !== 'wheels' ||
+            getSelectedVariantValues(
+              filters.variantSelections,
+              group.code,
+            ).length > 0
+          }
+        />
+      ))}
 
       <section className="border-t border-white/8 pt-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/55">
             Preço
           </h3>
 
           {hasPriceFilter && (
             <Link
-              href={removePriceHref}
+              href={buildCategoryHref(
+                categorySlug,
+                filters,
+                {
+                  priceMin: undefined,
+                  priceMax: undefined,
+                },
+              )}
               className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-white"
             >
               Limpar
@@ -421,7 +586,7 @@ function FilterPanel({
           method="get"
           className="mt-3"
         >
-          {inStockOnly && (
+          {filters.inStockOnly && (
             <input
               type="hidden"
               name="stock"
@@ -429,32 +594,65 @@ function FilterPanel({
             />
           )}
 
-          {selectedBrandSlugs.map(
-            (brandSlug) => (
+          {filters.brandSlugs.map((brandSlug) => (
+            <input
+              key={brandSlug}
+              type="hidden"
+              name="brand"
+              value={brandSlug}
+            />
+          ))}
+
+          {filters.vehicleMakeIds.map(
+            (makeId) => (
               <input
-                key={brandSlug}
+                key={makeId}
                 type="hidden"
-                name="brand"
-                value={brandSlug}
+                name="make"
+                value={makeId}
               />
             ),
           )}
 
-          {selectedVehicleConfigurationId && (
-            <input
-              type="hidden"
-              name="vehicle"
-              value={
-                selectedVehicleConfigurationId
-              }
-            />
+          {filters.vehicleModelIds.map(
+            (modelId) => (
+              <input
+                key={modelId}
+                type="hidden"
+                name="model"
+                value={modelId}
+              />
+            ),
           )}
 
-          {sort && (
+          {filters.vehicleGenerationIds.map(
+            (generationId) => (
+              <input
+                key={generationId}
+                type="hidden"
+                name="generation"
+                value={generationId}
+              />
+            ),
+          )}
+
+          {filters.variantSelections.flatMap(
+            (selection) =>
+              selection.values.map((value) => (
+                <input
+                  key={`${selection.code}:${value}`}
+                  type="hidden"
+                  name={`v_${selection.code}`}
+                  value={value}
+                />
+              )),
+          )}
+
+          {filters.sort && (
             <input
               type="hidden"
               name="sort"
-              value={sort}
+              value={filters.sort}
             />
           )}
 
@@ -470,7 +668,7 @@ function FilterPanel({
                 step="0.01"
                 inputMode="decimal"
                 defaultValue={
-                  priceMin ?? ''
+                  filters.priceMin ?? ''
                 }
                 placeholder="Mín. €"
                 className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
@@ -488,7 +686,7 @@ function FilterPanel({
                 step="0.01"
                 inputMode="decimal"
                 defaultValue={
-                  priceMax ?? ''
+                  filters.priceMax ?? ''
                 }
                 placeholder="Máx. €"
                 className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
@@ -504,23 +702,6 @@ function FilterPanel({
           </button>
         </form>
       </section>
-
-      {vehicleConfigurations.length >
-        0 && (
-        <VehicleFilter
-          key={
-            selectedVehicleConfigurationId ??
-            'no-vehicle'
-          }
-          categorySlug={categorySlug}
-          configurations={
-            vehicleConfigurations
-          }
-          selectedConfigurationId={
-            selectedVehicleConfigurationId
-          }
-        />
-      )}
     </div>
   )
 }
@@ -535,11 +716,11 @@ export default async function CategoryPage({
       searchParams,
     ])
 
-  const inStockOnly =
+  const requestedInStockOnly =
     getSearchParamValue(query.stock) ===
     'available'
 
-  const selectedBrandSlugs =
+  const requestedBrandSlugs =
     getSearchParamValues(query.brand)
 
   const parsedPriceMin =
@@ -563,10 +744,16 @@ export default async function CategoryPage({
       ? undefined
       : parsedPriceMax
 
-  const requestedVehicleConfigurationId =
-    parseVehicleParam(query.vehicle)
+  const requestedMakeIds =
+    getSearchParamValues(query.make)
 
-  const sort =
+  const requestedModelIds =
+    getSearchParamValues(query.model)
+
+  const requestedGenerationIds =
+    getSearchParamValues(query.generation)
+
+  const requestedSort =
     parseSortParam(query.sort)
 
   const hasInvalidPriceParams =
@@ -578,149 +765,194 @@ export default async function CategoryPage({
 
   const shouldCanonicalizeSort =
     query.sort !== undefined &&
-    sort === undefined
+    requestedSort === undefined
 
-  const [
-    result,
-    unfilteredResult,
-    allCategories,
-  ] = await Promise.all([
-    getCatalogCategoryPageBySlug(
-      slug,
-      {
-        inStockOnly,
-        brandSlugs:
-          selectedBrandSlugs,
-        priceMin,
-        priceMax,
-        vehicleConfigurationId:
-          requestedVehicleConfigurationId,
-        sort,
-      },
-    ),
-    getCatalogCategoryPageBySlug(
-      slug,
-    ),
-    listCatalogCategories(),
-  ])
+  // Valores crus de v_<código> na URL. Ainda sem validar
+  // contra as facetas (isso acontece depois do fetch); a
+  // query de produtos aplica-os à mesma — se algum valor
+  // for inválido, a página redireciona para a URL limpa.
+  const rawVariantSelections = Object.entries(
+    query,
+  )
+    .filter(([key]) =>
+      key.startsWith(VARIANT_FILTER_PREFIX),
+    )
+    .map(([key, rawValue]) => ({
+      code: key.slice(VARIANT_FILTER_PREFIX.length),
+      values: getSearchParamValues(rawValue),
+    }))
+    .filter(
+      (selection) =>
+        selection.code.length > 0 &&
+        selection.values.length > 0,
+    )
 
-  if (!result) {
+  const requestedVehicle = {
+    vehicleMakeIds: requestedMakeIds,
+    vehicleModelIds: requestedModelIds,
+    vehicleGenerationIds:
+      requestedGenerationIds,
+  }
+
+  const rawFilters: CategoryFilterState = {
+    inStockOnly: requestedInStockOnly,
+    brandSlugs: requestedBrandSlugs,
+    priceMin,
+    priceMax,
+    vehicleMakeIds: requestedMakeIds,
+    vehicleModelIds: requestedModelIds,
+    vehicleGenerationIds:
+      requestedGenerationIds,
+    variantSelections: [],
+    sort: requestedSort ?? 'newest',
+  }
+
+  // A marca, o modelo e a geração são níveis
+  // alternativos da mesma seleção de veículo: qualquer
+  // compatibilidade de um deles devolve o produto.
+  const requestedCatalogFilters = {
+    inStockOnly: requestedInStockOnly,
+    brandSlugs: requestedBrandSlugs,
+    priceMin,
+    priceMax,
+    vehicleMakeIds: requestedMakeIds,
+    vehicleModelIds: requestedModelIds,
+    vehicleGenerationIds:
+      requestedGenerationIds,
+    variantSelections: rawVariantSelections,
+    sort: requestedSort ?? 'newest',
+  } as const
+
+  const [result, facets, allCategories] =
+    await Promise.all([
+      getCatalogCategoryPageBySlug(
+        slug,
+        requestedCatalogFilters,
+      ),
+      getCatalogCategoryFacetsBySlug(
+        slug,
+        requestedCatalogFilters,
+      ),
+      listCatalogCategories(),
+    ])
+
+  if (!result || !facets) {
     notFound()
   }
 
   const {
     category,
     brands,
-    vehicleConfigurations,
     products,
   } = result
 
-  const selectedVehicleConfiguration =
-    requestedVehicleConfigurationId
-      ? vehicleConfigurations.find(
-          (configuration) =>
-            configuration.id ===
-            requestedVehicleConfigurationId,
-        )
-      : undefined
+  const { vehicleMakes: vehicles } = facets
 
-  const hasInvalidVehicleParam =
-    query.vehicle !== undefined &&
-    !selectedVehicleConfiguration
+  const normalizedBrands =
+    normalizeBrandSlugs(
+      requestedBrandSlugs,
+      facets.brands.map(
+        (brand) => brand.slug,
+      ),
+    )
 
-  const selectedVehicleConfigurationId =
-    selectedVehicleConfiguration?.id
+  const normalizedVehicle =
+    normalizeVehicleSelections({
+      makeIds: requestedMakeIds,
+      modelIds: requestedModelIds,
+      generationIds: requestedGenerationIds,
+      makes: vehicles,
+    })
+
+  const parsedVariantSelections =
+    parseVariantSelections(
+      query,
+      facets.variantFacets,
+    )
+
+  const filters: CategoryFilterState = {
+    ...rawFilters,
+    brandSlugs: normalizedBrands.brandSlugs,
+    vehicleMakeIds:
+      normalizedVehicle.vehicleMakeIds,
+    vehicleModelIds:
+      normalizedVehicle.vehicleModelIds,
+    vehicleGenerationIds:
+      normalizedVehicle.vehicleGenerationIds,
+    variantSelections:
+      parsedVariantSelections.selections,
+  }
 
   if (
     hasInvalidPriceParams ||
-    hasInvalidVehicleParam ||
-    shouldCanonicalizeSort
+    shouldCanonicalizeSort ||
+    normalizedBrands.hasInvalid ||
+    normalizedVehicle.hasInvalid ||
+    parsedVariantSelections.hasInvalidValues ||
+    !hasSameVehicleSelections(
+      requestedVehicle,
+      filters,
+    )
   ) {
     redirect(
       buildCategoryHref(
         category.slug,
-        {
-          inStockOnly,
-          brandSlugs:
-            selectedBrandSlugs,
-          priceMin,
-          priceMax,
-          vehicleConfigurationId:
-            selectedVehicleConfigurationId,
-          sort,
-        },
+        filters,
       ),
     )
   }
+
+  const resultForSelection = products
+
+  const profile = getCategoryFilterProfile(
+    category,
+  )
 
   const hasPriceFilter =
     priceMin !== undefined ||
     priceMax !== undefined
 
+  const selectedVariantValueCount =
+    filters.variantSelections.reduce(
+      (total, selection) =>
+        total + selection.values.length,
+      0,
+    )
+
   const hasVehicleFilter =
-    selectedVehicleConfigurationId !==
-    undefined
+    filters.vehicleMakeIds.length > 0 ||
+    filters.vehicleModelIds.length > 0 ||
+    filters.vehicleGenerationIds.length > 0
 
   const hasActiveFilters =
-    inStockOnly ||
-    selectedBrandSlugs.length > 0 ||
+    filters.inStockOnly ||
+    filters.brandSlugs.length > 0 ||
     hasPriceFilter ||
-    hasVehicleFilter
+    hasVehicleFilter ||
+    selectedVariantValueCount > 0
 
   const activeFilterCount =
-    Number(inStockOnly) +
-    selectedBrandSlugs.length +
+    Number(filters.inStockOnly) +
+    filters.brandSlugs.length +
     Number(hasPriceFilter) +
-    Number(hasVehicleFilter)
+    filters.vehicleMakeIds.length +
+    filters.vehicleModelIds.length +
+    filters.vehicleGenerationIds.length +
+    selectedVariantValueCount
 
   const clearFiltersHref =
     buildCategoryHref(
       category.slug,
+      filters,
       {
         inStockOnly: false,
         brandSlugs: [],
-        sort,
-      },
-    )
-
-  const removeStockHref =
-    buildCategoryHref(
-      category.slug,
-      {
-        inStockOnly: false,
-        brandSlugs:
-          selectedBrandSlugs,
-        priceMin,
-        priceMax,
-        vehicleConfigurationId:
-          selectedVehicleConfigurationId,
-        sort,
-      },
-    )
-
-  const removePriceHref =
-    buildCategoryHref(
-      category.slug,
-      {
-        inStockOnly,
-        brandSlugs:
-          selectedBrandSlugs,
-        vehicleConfigurationId:
-          selectedVehicleConfigurationId,
-        sort,
-      },
-    )
-
-  const removeVehicleHref =
-    buildCategoryHref(
-      category.slug,
-      {
-        inStockOnly,
-        brandSlugs:
-          selectedBrandSlugs,
-        priceMin,
-        priceMax,
-        sort,
+        priceMin: undefined,
+        priceMax: undefined,
+        vehicleMakeIds: [],
+        vehicleModelIds: [],
+        vehicleGenerationIds: [],
+        variantSelections: [],
       },
     )
 
@@ -734,36 +966,38 @@ export default async function CategoryPage({
   const footerCategories =
     getFooterCategories(allCategories)
 
-  const countProducts =
-    unfilteredResult?.products ?? []
+  const visibleModels =
+    getVisibleVehicleModels(
+      vehicles,
+      filters.vehicleMakeIds,
+    )
 
-  const brandCounts =
-    countProducts.reduce<
-      Record<string, number>
-    >((counts, product) => {
-      if (!product.brand) {
-        return counts
-      }
+  const visibleGenerations =
+    getVisibleVehicleGenerations(
+      visibleModels,
+      filters.vehicleModelIds,
+    )
 
-      counts[product.brand.slug] =
-        (counts[
-          product.brand.slug
-        ] ?? 0) + 1
+  const brandById = new Map(
+    brands.map((brand) => [
+      brand.slug,
+      brand,
+    ]),
+  )
 
-      return counts
-    }, {})
-
-  const inStockCount =
-    countProducts.filter(
-      (product) => product.inStock,
-    ).length
+  const makeById = new Map(
+    vehicles.map((make) => [
+      make.id,
+      make,
+    ]),
+  )
 
   return (
     <main className="min-h-screen bg-[#0b0d0f] text-white">
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
         <nav
           aria-label="Breadcrumb"
-          className="flex items-center gap-2 text-xs font-semibold text-white/38"
+          className="flex items-center gap-2 text-xs font-semibold text-white/55"
         >
           <Link
             href="/"
@@ -795,53 +1029,28 @@ export default async function CategoryPage({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-white/54">
               <span className="text-white">
-                {products.length}
+                {resultForSelection.length}
               </span>{' '}
-              {products.length === 1
+              {resultForSelection.length === 1
                 ? 'resultado'
                 : 'resultados'}
             </p>
 
             <div className="flex items-center gap-2">
               <MobileFilterDrawer
-                activeCount={
-                  activeFilterCount
-                }
+                activeCount={activeFilterCount}
               >
                 <FilterPanel
-                  categorySlug={
-                    category.slug
-                  }
-                  brands={brands}
-                  vehicleConfigurations={
-                    vehicleConfigurations
-                  }
-                  selectedVehicleConfigurationId={
-                    selectedVehicleConfigurationId
-                  }
-                  selectedBrandSlugs={
-                    selectedBrandSlugs
-                  }
-                  inStockOnly={
-                    inStockOnly
-                  }
-                  priceMin={priceMin}
-                  priceMax={priceMax}
-                  sort={sort}
-                  brandCounts={
-                    brandCounts
-                  }
-                  inStockCount={
-                    inStockCount
-                  }
+                  categorySlug={category.slug}
+                  filters={filters}
+                  facets={facets}
+                  profile={profile}
                 />
               </MobileFilterDrawer>
 
               <CategorySortControl
-                categorySlug={
-                  category.slug
-                }
-                value={sort}
+                categorySlug={category.slug}
+                value={filters.sort}
               />
             </div>
           </div>
@@ -849,9 +1058,15 @@ export default async function CategoryPage({
 
         {hasActiveFilters && (
           <div className="flex flex-wrap items-center gap-2 border-b border-white/8 py-4">
-            {inStockOnly && (
+            {filters.inStockOnly && (
               <Link
-                href={removeStockHref}
+                href={buildCategoryHref(
+                  category.slug,
+                  filters,
+                  {
+                    inStockOnly: false,
+                  },
+                )}
                 className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
               >
                 Em stock
@@ -861,42 +1076,28 @@ export default async function CategoryPage({
               </Link>
             )}
 
-            {selectedBrandSlugs.map(
+            {filters.brandSlugs.map(
               (brandSlug) => {
                 const brand =
-                  brands.find(
-                    (item) =>
-                      item.slug ===
-                      brandSlug,
-                  )
+                  brandById.get(brandSlug)
 
                 if (!brand) {
                   return null
                 }
 
-                const href =
-                  buildCategoryHref(
-                    category.slug,
-                    {
-                      inStockOnly,
-                      brandSlugs:
-                        selectedBrandSlugs.filter(
-                          (slug) =>
-                            slug !==
-                            brandSlug,
-                        ),
-                      priceMin,
-                      priceMax,
-                      vehicleConfigurationId:
-                        selectedVehicleConfigurationId,
-                      sort,
-                    },
-                  )
-
                 return (
                   <Link
                     key={brand.id}
-                    href={href}
+                    href={buildCategoryHref(
+                      category.slug,
+                      filters,
+                      {
+                        brandSlugs: toggleId(
+                          filters.brandSlugs,
+                          brandSlug,
+                        ),
+                      },
+                    )}
                     className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
                   >
                     {brand.name}
@@ -908,9 +1109,123 @@ export default async function CategoryPage({
               },
             )}
 
+            {filters.vehicleMakeIds.map(
+              (makeId) => {
+                const make =
+                  makeById.get(makeId)
+
+                if (!make) {
+                  return null
+                }
+
+                return (
+                  <Link
+                    key={make.id}
+                    href={buildCategoryHref(
+                      category.slug,
+                      filters,
+                      {
+                        vehicleMakeIds: toggleId(
+                          filters.vehicleMakeIds,
+                          makeId,
+                        ),
+                      },
+                    )}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                  >
+                    {make.name}
+                    <span aria-hidden="true">
+                      ×
+                    </span>
+                  </Link>
+                )
+              },
+            )}
+
+            {filters.vehicleModelIds.map(
+              (modelId) => {
+                const model =
+                  visibleModels.find(
+                    (item) =>
+                      item.id === modelId,
+                  )
+
+                if (!model) {
+                  return null
+                }
+
+                return (
+                  <Link
+                    key={model.id}
+                    href={buildCategoryHref(
+                      category.slug,
+                      filters,
+                      {
+                        vehicleModelIds: toggleId(
+                          filters.vehicleModelIds,
+                          modelId,
+                        ),
+                      },
+                    )}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                  >
+                    {model.name}
+                    <span aria-hidden="true">
+                      ×
+                    </span>
+                  </Link>
+                )
+              },
+            )}
+
+            {filters.vehicleGenerationIds.map(
+              (generationId) => {
+                const generation =
+                  visibleGenerations.find(
+                    (item) =>
+                      item.id ===
+                      generationId,
+                  )
+
+                if (!generation) {
+                  return null
+                }
+
+                return (
+                  <Link
+                    key={generation.id}
+                    href={buildCategoryHref(
+                      category.slug,
+                      filters,
+                      {
+                        vehicleGenerationIds:
+                          toggleId(
+                            filters.vehicleGenerationIds,
+                            generationId,
+                          ),
+                      },
+                    )}
+                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                  >
+                    {generation.name}
+                    <span aria-hidden="true">
+                      ×
+                    </span>
+                  </Link>
+                )
+              },
+            )}
+
             {hasPriceFilter && (
               <Link
-                href={removePriceHref}
+                href={buildCategoryHref(
+                  category.slug,
+                  filters,
+                  {
+                    priceMin: undefined,
+                    priceMax: undefined,
+                  },
+                )}
                 className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
               >
                 {priceMin !== undefined &&
@@ -925,29 +1240,48 @@ export default async function CategoryPage({
               </Link>
             )}
 
-            {selectedVehicleConfiguration && (
-              <Link
-                href={removeVehicleHref}
-                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
-              >
-                {
-                  selectedVehicleConfiguration
-                    .generation.model.brand
-                    .name
-                }{' '}
-                {
-                  selectedVehicleConfiguration
-                    .generation.model.name
-                }
-                <span aria-hidden="true">
-                  ×
-                </span>
-              </Link>
+            {filters.variantSelections.flatMap(
+              (selection) => {
+                const facet =
+                  facets.variantFacets.find(
+                    (item) =>
+                      item.code ===
+                      selection.code,
+                  )
+
+                return selection.values.map(
+                  (value) => (
+                    <Link
+                      key={`${selection.code}:${value}`}
+                      href={buildCategoryHref(
+                        category.slug,
+                        filters,
+                        {
+                          variantSelections:
+                            removeVariantValue(
+                              filters.variantSelections,
+                              selection.code,
+                              value,
+                            ),
+                        },
+                      )}
+                      className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                    >
+                      {facet
+                        ? `${facet.name}: ${value}`
+                        : value}
+                      <span aria-hidden="true">
+                        ×
+                      </span>
+                    </Link>
+                  ),
+                )
+              },
             )}
 
             <Link
               href={clearFiltersHref}
-              className="ml-1 text-[10px] font-black uppercase tracking-[0.09em] text-white/38 transition hover:text-brand"
+              className="ml-1 text-[10px] font-black uppercase tracking-[0.09em] text-white/55 transition hover:text-brand"
             >
               Limpar filtros
             </Link>
@@ -967,9 +1301,7 @@ export default async function CategoryPage({
 
                 {hasActiveFilters && (
                   <Link
-                    href={
-                      clearFiltersHref
-                    }
+                    href={clearFiltersHref}
                     className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-brand"
                   >
                     Limpar
@@ -978,31 +1310,10 @@ export default async function CategoryPage({
               </div>
 
               <FilterPanel
-                categorySlug={
-                  category.slug
-                }
-                brands={brands}
-                vehicleConfigurations={
-                  vehicleConfigurations
-                }
-                selectedVehicleConfigurationId={
-                  selectedVehicleConfigurationId
-                }
-                selectedBrandSlugs={
-                  selectedBrandSlugs
-                }
-                inStockOnly={
-                  inStockOnly
-                }
-                priceMin={priceMin}
-                priceMax={priceMax}
-                sort={sort}
-                brandCounts={
-                  brandCounts
-                }
-                inStockCount={
-                  inStockCount
-                }
+                categorySlug={category.slug}
+                filters={filters}
+                facets={facets}
+                profile={profile}
               />
             </div>
           </aside>
@@ -1018,7 +1329,7 @@ export default async function CategoryPage({
               Produtos
             </h2>
 
-            {products.length === 0 ? (
+            {resultForSelection.length === 0 ? (
               <div className="border border-white/8 bg-[#111315] px-6 py-12 sm:px-8">
                 <p className="text-xl font-black tracking-tight">
                   Nenhum produto encontrado
@@ -1043,13 +1354,16 @@ export default async function CategoryPage({
               </div>
             ) : (
               <div
-                className={`grid gap-5 sm:grid-cols-2 ${products.length === 1
-                  ? 'max-w-md'
-                  : products.length === 2
-                    ? 'max-w-3xl'
-                    : 'xl:grid-cols-3'}`}
+                className={`grid gap-5 sm:grid-cols-2 ${
+                  resultForSelection.length === 1
+                    ? 'max-w-md'
+                    : resultForSelection.length ===
+                        2
+                      ? 'max-w-3xl'
+                      : 'xl:grid-cols-3'
+                }`}
               >
-                {products.map(
+                {resultForSelection.map(
                   (product) => (
                     <ProductCard
                       key={product.id}

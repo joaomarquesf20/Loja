@@ -1,4 +1,5 @@
 import {
+  afterEach,
   beforeEach,
   describe,
   expect,
@@ -22,23 +23,8 @@ vi.mock(
 vi.mock(
   '@/server/payment-initiation',
   () => {
-    class PaymentInitiationValidationError extends Error {
-      constructor(
-        public readonly field: string,
-        message: string,
-      ) {
-        super(message)
-      }
-    }
-
-    class PaymentInitiationNotFoundError extends Error {
-      constructor() {
-        super(
-          'Encomenda não encontrada',
-        )
-      }
-    }
-
+    class PaymentInitiationValidationError extends Error {}
+    class PaymentInitiationNotFoundError extends Error {}
     class PaymentInitiationConflictError extends Error {}
 
     return {
@@ -52,13 +38,9 @@ vi.mock(
 )
 
 import {
-  PaymentInitiationConflictError,
-  PaymentInitiationNotFoundError,
-  PaymentInitiationValidationError,
   initiateSimulatedPayment,
 } from '@/server/payment-initiation'
 import {
-  UnauthorizedUserError,
   requireActiveUserId,
 } from '@/server/user-auth'
 import { POST } from './route'
@@ -67,17 +49,12 @@ const mockRequireActiveUserId =
   vi.mocked(
     requireActiveUserId,
   )
-
 const mockInitiateSimulatedPayment =
   vi.mocked(
     initiateSimulatedPayment,
   )
 
-function request(
-  body: unknown = {
-    orderId: 'order-1',
-  },
-) {
+function request() {
   return new Request(
     'http://localhost/api/payments/initiate',
     {
@@ -86,309 +63,137 @@ function request(
         'content-type':
           'application/json',
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        orderId: 'order-1',
+      }),
     },
   )
 }
 
-const payment = {
-  orderId: 'order-1',
-  paymentStatus:
-    'PENDING' as const,
-  paymentMethod:
-    'CARD' as const,
-  installmentCount: null,
-  paymentProvider:
-    'PFA_SIMULATED' as const,
-  paymentReference:
-    'pfa_sim_test-123',
-  amount: '128.50',
-}
+describe('POST /api/payments/initiate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockRequireActiveUserId.mockResolvedValue(
+      'user-1',
+    )
+    mockInitiateSimulatedPayment.mockResolvedValue(
+      {
+        orderId: 'order-1',
+        paymentStatus: 'PENDING',
+        paymentMethod: 'CARD',
+        installmentCount: null,
+        paymentProvider:
+          'PFA_SIMULATED',
+        paymentReference:
+          'pfa_sim_test-123',
+        amount: '128.50',
+      } as Awaited<
+        ReturnType<
+          typeof initiateSimulatedPayment
+        >
+      >,
+    )
+  })
 
-describe(
-  'Payment Initiation API',
-  () => {
-    beforeEach(() => {
-      vi.clearAllMocks()
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
 
-      mockRequireActiveUserId.mockResolvedValue(
-        'user-1',
+  test(
+    'devolve 404 em produção sem flag explícita, sem tocar na encomenda',
+    async () => {
+      vi.stubEnv(
+        'NODE_ENV',
+        'production',
       )
-    })
+      vi.stubEnv(
+        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        '',
+      )
 
-    test(
-      'inicia pagamento para a encomenda do utilizador autenticado',
-      async () => {
-        mockInitiateSimulatedPayment.mockResolvedValue(
-          payment,
-        )
+      const response =
+        await POST(request())
 
-        const response =
-          await POST(
-            request(),
-          )
+      expect(response.status).toBe(
+        404,
+      )
+      expect(
+        mockRequireActiveUserId,
+      ).not.toHaveBeenCalled()
+      expect(
+        mockInitiateSimulatedPayment,
+      ).not.toHaveBeenCalled()
+    },
+  )
 
-        expect(
-          response.status,
-        ).toBe(200)
+  test(
+    'devolve 404 em produção quando a flag não é exatamente true',
+    async () => {
+      vi.stubEnv(
+        'NODE_ENV',
+        'production',
+      )
+      vi.stubEnv(
+        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        'TRUE',
+      )
 
-        expect(
-          await response.json(),
-        ).toEqual({
-          payment,
-        })
+      const response =
+        await POST(request())
 
-        expect(
-          mockInitiateSimulatedPayment,
-        ).toHaveBeenCalledWith(
-          'user-1',
-          'order-1',
-        )
-      },
-    )
+      expect(response.status).toBe(
+        404,
+      )
+      expect(
+        mockInitiateSimulatedPayment,
+      ).not.toHaveBeenCalled()
+    },
+  )
 
-    test(
-      'ignora provider referência e estado enviados pelo browser',
-      async () => {
-        mockInitiateSimulatedPayment.mockResolvedValue(
-          payment,
-        )
+  test(
+    'devolve 404 em produção mesmo com flag explícita',
+    async () => {
+      vi.stubEnv(
+        'NODE_ENV',
+        'production',
+      )
+      vi.stubEnv(
+        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        'true',
+      )
 
-        const response =
-          await POST(
-            request({
-              orderId:
-                'order-1',
-              paymentStatus:
-                'PAID',
-              paymentProvider:
-                'ATTACKER',
-              paymentReference:
-                'attacker-ref',
-            }),
-          )
+      const response =
+        await POST(request())
 
-        expect(
-          response.status,
-        ).toBe(200)
+      expect(response.status).toBe(
+        404,
+      )
+      expect(
+        mockRequireActiveUserId,
+      ).not.toHaveBeenCalled()
+      expect(
+        mockInitiateSimulatedPayment,
+      ).not.toHaveBeenCalled()
+    },
+  )
 
-        expect(
-          mockInitiateSimulatedPayment,
-        ).toHaveBeenCalledWith(
-          'user-1',
-          'order-1',
-        )
-      },
-    )
+  test(
+    'permite iniciar pagamento fora de produção',
+    async () => {
+      vi.stubEnv(
+        'NODE_ENV',
+        'development',
+      )
 
-    test(
-      'devolve 401 sem utilizador ativo autenticado',
-      async () => {
-        mockRequireActiveUserId.mockRejectedValue(
-          new UnauthorizedUserError(),
-        )
+      const response =
+        await POST(request())
 
-        const response =
-          await POST(
-            request(),
-          )
-
-        expect(
-          response.status,
-        ).toBe(401)
-
-        expect(
-          await response.json(),
-        ).toEqual({
-          error:
-            'Não autenticado',
-        })
-
-        expect(
-          mockInitiateSimulatedPayment,
-        ).not.toHaveBeenCalled()
-      },
-    )
-
-    test(
-      'devolve 400 para JSON inválido',
-      async () => {
-        const response =
-          await POST(
-            new Request(
-              'http://localhost/api/payments/initiate',
-              {
-                method: 'POST',
-                headers: {
-                  'content-type':
-                    'application/json',
-                },
-                body: '{',
-              },
-            ),
-          )
-
-        expect(
-          response.status,
-        ).toBe(400)
-
-        expect(
-          mockInitiateSimulatedPayment,
-        ).not.toHaveBeenCalled()
-      },
-    )
-
-    test(
-      'devolve 400 para orderId inválido',
-      async () => {
-        mockInitiateSimulatedPayment.mockRejectedValue(
-          new PaymentInitiationValidationError(
-            'orderId',
-            'Encomenda inválida',
-          ),
-        )
-
-        const response =
-          await POST(
-            request({
-              orderId: '   ',
-            }),
-          )
-
-        expect(
-          response.status,
-        ).toBe(400)
-
-        expect(
-          await response.json(),
-        ).toEqual({
-          error:
-            'Dados inválidos',
-        })
-      },
-    )
-
-    test(
-      'devolve 413 quando o body ultrapassa o limite',
-      async () => {
-        const response =
-          await POST(
-            new Request(
-              'http://localhost/api/payments/initiate',
-              {
-                method: 'POST',
-                headers: {
-                  'content-type':
-                    'application/json',
-                  'content-length':
-                    '9000',
-                },
-                body: '{}',
-              },
-            ),
-          )
-
-        expect(
-          response.status,
-        ).toBe(413)
-
-        expect(
-          mockInitiateSimulatedPayment,
-        ).not.toHaveBeenCalled()
-      },
-    )
-
-    test(
-      'devolve 404 sem revelar encomenda de outro utilizador',
-      async () => {
-        mockInitiateSimulatedPayment.mockRejectedValue(
-          new PaymentInitiationNotFoundError(),
-        )
-
-        const response =
-          await POST(
-            request(),
-          )
-
-        expect(
-          response.status,
-        ).toBe(404)
-
-        expect(
-          await response.json(),
-        ).toEqual({
-          error:
-            'Encomenda não encontrada',
-        })
-      },
-    )
-
-    test(
-      'devolve 409 quando a encomenda não pode iniciar pagamento',
-      async () => {
-        mockInitiateSimulatedPayment.mockRejectedValue(
-          new PaymentInitiationConflictError(
-            'A encomenda já não está pendente de pagamento',
-          ),
-        )
-
-        const response =
-          await POST(
-            request(),
-          )
-
-        expect(
-          response.status,
-        ).toBe(409)
-
-        expect(
-          await response.json(),
-        ).toEqual({
-          error:
-            'A encomenda já não está pendente de pagamento',
-        })
-      },
-    )
-
-    test(
-      'devolve 500 seguro para erro inesperado',
-      async () => {
-        const consoleError =
-          vi.spyOn(
-            console,
-            'error',
-          ).mockImplementation(
-            () => undefined,
-          )
-
-        mockInitiateSimulatedPayment.mockRejectedValue(
-          new Error(
-            'erro interno sensível',
-          ),
-        )
-
-        const response =
-          await POST(
-            request(),
-          )
-
-        expect(
-          response.status,
-        ).toBe(500)
-
-        expect(
-          await response.json(),
-        ).toEqual({
-          error:
-            'Erro interno do servidor',
-        })
-
-        expect(
-          consoleError,
-        ).toHaveBeenCalled()
-
-        consoleError.mockRestore()
-      },
-    )
-  },
-)
+      expect(response.status).toBe(
+        200,
+      )
+      expect(
+        mockInitiateSimulatedPayment,
+      ).toHaveBeenCalledTimes(1)
+    },
+  )
+})

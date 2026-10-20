@@ -2,6 +2,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { CatalogCategory } from '@/server/catalog'
 
+import FooterSessionLink from './footer-session-link'
+
 type StorefrontFooterProps = {
   categories: CatalogCategory[]
 }
@@ -83,12 +85,7 @@ export default function StorefrontFooter({
               Carrinho
             </Link>
 
-            <Link
-              href="/login"
-              className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
-            >
-              Entrar
-            </Link>
+            <FooterSessionLink />
           </nav>
         </div>
       </div>

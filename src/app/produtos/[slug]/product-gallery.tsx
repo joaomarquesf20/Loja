@@ -2,11 +2,23 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useMemo, useState } from 'react'
+import {
+  useMemo,
+  useState,
+} from 'react'
+import {
+  getProductGalleryImages,
+  type ProductImageMetadata,
+} from '@/lib/product-images'
+import {
+  useProductImageSelection,
+} from './product-image-selection'
 
 type ProductGalleryProps = {
   name: string
   images: string[]
+  imageMetadata?: ProductImageMetadata[]
+  finish?: string | null
 }
 
 function EmptyImage() {
@@ -27,48 +39,83 @@ function EmptyImage() {
 export default function ProductGallery({
   name,
   images,
+  imageMetadata,
+  finish,
 }: ProductGalleryProps) {
-  const normalizedImages = useMemo(
+  const { selectedFinish } =
+    useProductImageSelection()
+  const activeFinish =
+    finish !== undefined
+      ? finish
+      : selectedFinish
+
+  const galleryImages = useMemo(
     () =>
-      Array.from(
-        new Set(
-          images
-            .map((image) =>
-              image.trim(),
-            )
-            .filter(Boolean),
-        ),
+      getProductGalleryImages(
+        {
+          images,
+          imageMetadata,
+        },
+        activeFinish,
       ),
-    [images],
+    [
+      images,
+      imageMetadata,
+      activeFinish,
+    ],
   )
 
-  const [
-    selectedIndex,
-    setSelectedIndex,
-  ] = useState(0)
-
-  const [failedImages, setFailedImages] =
-    useState<Set<number>>(
-      () => new Set(),
-    )
-
+  const galleryKey = galleryImages
+    .map((image) => image.id)
+    .join('|')
+  const [viewState, setViewState] =
+    useState<{
+      galleryKey: string
+      selectedIndex: number
+      failedImages: Set<string>
+    }>({
+      galleryKey: '',
+      selectedIndex: 0,
+      failedImages: new Set(),
+    })
+  const isCurrentGallery =
+    viewState.galleryKey === galleryKey
+  const safeSelectedIndex = Math.min(
+    isCurrentGallery
+      ? viewState.selectedIndex
+      : 0,
+    Math.max(
+      galleryImages.length - 1,
+      0,
+    ),
+  )
+  const failedImages =
+    isCurrentGallery
+      ? viewState.failedImages
+      : new Set<string>()
   const selectedImage =
-    normalizedImages[selectedIndex]
-
+    galleryImages[safeSelectedIndex]
   const selectedFailed =
-    selectedImage === undefined ||
-    failedImages.has(selectedIndex)
+    !selectedImage ||
+    failedImages.has(selectedImage.id)
 
   function markImageAsFailed(
-    index: number,
+    imageId: string,
   ) {
-    setFailedImages(
-      (current) => {
-        const next = new Set(current)
-        next.add(index)
-        return next
-      },
-    )
+    setViewState((current) => {
+      const next = new Set(
+        isCurrentGallery
+          ? current.failedImages
+          : new Set<string>(),
+      )
+      next.add(imageId)
+      return {
+        galleryKey,
+        selectedIndex:
+          current.selectedIndex,
+        failedImages: next,
+      }
+    })
   }
 
   return (
@@ -76,16 +123,19 @@ export default function ProductGallery({
       aria-label="Imagens do produto"
       className="min-w-0"
     >
-      <div className="aspect-[6/5] min-h-[20rem] overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 sm:min-h-0">
+      <div className="aspect-[6/5] min-h-[20rem] w-full overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 sm:min-h-0">
         {selectedFailed ? (
           <EmptyImage />
         ) : (
           <img
-            src={selectedImage}
-            alt={name}
+            src={selectedImage.url}
+            alt={
+              selectedImage.altText ||
+              name
+            }
             onError={() =>
               markImageAsFailed(
-                selectedIndex,
+                selectedImage.id,
               )
             }
             className="h-full w-full object-contain p-5 sm:p-7 lg:p-9"
@@ -93,28 +143,27 @@ export default function ProductGallery({
         )}
       </div>
 
-      {normalizedImages.length > 1 && (
+      {galleryImages.length > 1 && (
         <div className="mt-3 grid grid-cols-4 gap-3 sm:grid-cols-5 lg:max-w-2xl">
-          {normalizedImages.map(
+          {galleryImages.map(
             (image, index) => {
               const isSelected =
-                index === selectedIndex
-
+                index === safeSelectedIndex
               const hasFailed =
-                failedImages.has(index)
+                failedImages.has(image.id)
 
               return (
                 <button
-                  key={`${image}-${index}`}
+                  key={image.id}
                   type="button"
                   aria-label={`Ver imagem ${index + 1} de ${name}`}
-                  aria-pressed={
-                    isSelected
-                  }
+                  aria-pressed={isSelected}
                   onClick={() =>
-                    setSelectedIndex(
-                      index,
-                    )
+                    setViewState({
+                      galleryKey,
+                      selectedIndex: index,
+                      failedImages,
+                    })
                   }
                   className={`aspect-square overflow-hidden rounded-sm bg-[#111315] p-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${isSelected
                     ? 'ring-1 ring-brand/70'
@@ -126,11 +175,11 @@ export default function ProductGallery({
                     </span>
                   ) : (
                     <img
-                      src={image}
+                      src={image.url}
                       alt=""
                       onError={() =>
                         markImageAsFailed(
-                          index,
+                          image.id,
                         )
                       }
                       className="h-full w-full object-contain"

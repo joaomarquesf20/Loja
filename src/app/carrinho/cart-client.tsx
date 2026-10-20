@@ -743,7 +743,7 @@ export function CartClient() {
             })}
           </div>
 
-          <aside className="h-fit rounded-xl border border-gray-200 bg-white p-5">
+          <aside aria-live="polite" className="h-fit rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="text-lg font-semibold text-gray-950">
               Resumo
             </h2>

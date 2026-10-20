@@ -19,19 +19,39 @@ const PAYMENT_WEBHOOK_SECRET_MIN_LENGTH =
 const signaturePattern =
   /^sha256=([a-f0-9]{64})$/i
 
-export type PaymentWebhookEvent = {
-  type:
-    | 'PAYMENT_PAID'
-    | 'PAYMENT_FAILED'
+const paymentAmountPattern =
+  /^\d{1,8}(?:\.\d{1,2})?$/
+
+const currencyPattern =
+  /^[A-Z]{3}$/
+
+type PaymentWebhookEventBase = {
   orderId: string
   paymentProvider: string
   paymentReference: string
 }
 
+/**
+ * `amount` é uma string decimal (ex.: "129.90") para evitar erros de
+ * arredondamento de números de vírgula flutuante. `currency` é o código
+ * ISO 4217 em maiúsculas. A coerência com a encomenda é validada no serviço
+ * de encomendas.
+ */
 export type PaymentPaidWebhookEvent =
-  PaymentWebhookEvent & {
+  PaymentWebhookEventBase & {
     type: 'PAYMENT_PAID'
+    amount: string
+    currency: string
   }
+
+export type PaymentFailedWebhookEvent =
+  PaymentWebhookEventBase & {
+    type: 'PAYMENT_FAILED'
+  }
+
+export type PaymentWebhookEvent =
+  | PaymentPaidWebhookEvent
+  | PaymentFailedWebhookEvent
 
 export class PaymentWebhookAuthenticationError extends Error {
   constructor(
@@ -369,6 +389,24 @@ function normalizeRequiredString(
   return normalized
 }
 
+function normalizePattern(
+  value: unknown,
+  pattern: RegExp,
+) {
+  if (typeof value !== 'string') {
+    throw new PaymentWebhookValidationError()
+  }
+
+  const normalized =
+    value.trim()
+
+  if (!pattern.test(normalized)) {
+    throw new PaymentWebhookValidationError()
+  }
+
+  return normalized
+}
+
 function parseEvent(
   value: unknown,
 ): PaymentWebhookEvent {
@@ -387,8 +425,7 @@ function parseEvent(
     )
   }
 
-  return {
-    type: value.type,
+  const base: PaymentWebhookEventBase = {
     orderId:
       normalizeRequiredString(
         value.orderId,
@@ -404,6 +441,26 @@ function parseEvent(
         value.paymentReference,
         191,
       ),
+  }
+
+  if (value.type === 'PAYMENT_FAILED') {
+    return {
+      ...base,
+      type: 'PAYMENT_FAILED',
+    }
+  }
+
+  return {
+    ...base,
+    type: 'PAYMENT_PAID',
+    amount: normalizePattern(
+      value.amount,
+      paymentAmountPattern,
+    ),
+    currency: normalizePattern(
+      value.currency,
+      currencyPattern,
+    ),
   }
 }
 

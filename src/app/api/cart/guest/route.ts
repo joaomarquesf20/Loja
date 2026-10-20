@@ -160,7 +160,7 @@ export async function POST(
     )
 
     return errorResponse(
-      'Erro interno do servidor',
+      'O carrinho convidado não está disponível neste momento. Tenta novamente.',
       500,
     )
   }

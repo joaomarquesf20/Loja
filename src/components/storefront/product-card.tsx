@@ -1,4 +1,7 @@
 import Link from 'next/link'
+import {
+  getPrimaryProductImage,
+} from '@/lib/product-images'
 import type { CatalogProduct } from '@/server/catalog'
 import AddToCartButton from '@/app/produtos/[slug]/add-to-cart-button'
 import Price from './price'
@@ -14,10 +17,7 @@ function ProductImage({
   variant = 'default',
 }: ProductCardProps) {
   const image =
-    product.images.find(
-      (candidate) =>
-        candidate.trim().length > 0,
-    )
+    getPrimaryProductImage(product)?.url
 
   if (!image) {
     return (
@@ -27,7 +27,7 @@ function ProductImage({
           className="size-28 rounded-full border-[16px] border-white/8"
         />
 
-        <span className="absolute bottom-4 text-[10px] font-bold uppercase tracking-[0.12em] text-white/24">
+        <span className="absolute bottom-4 text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">
           Imagem em breve
         </span>
       </div>
@@ -81,7 +81,7 @@ export default function ProductCard({
       <div className="flex flex-1 flex-col px-5 pb-5 pt-4">
         <div className="flex min-h-4 items-center justify-between gap-3 text-[10px] font-black uppercase tracking-[0.09em]">
           {product.brand ? (
-            <span className="truncate text-white/42">
+            <span className="truncate text-white/55">
               {product.brand.name}
             </span>
           ) : (
@@ -108,11 +108,23 @@ export default function ProductCard({
 
           {variant === 'category' ? (
             <div className="mt-4 grid grid-cols-[1fr_auto] items-stretch gap-2.5">
-              <AddToCartButton
-                productId={product.id}
-                inStock={product.inStock}
-                variant="card"
-              />
+              {product.variants.length > 1 ? (
+                <Link
+                  href={`/produtos/${product.slug}`}
+                  className="inline-flex min-h-9 items-center justify-center rounded-sm bg-brand px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  Selecionar opções
+                </Link>
+              ) : (
+                <AddToCartButton
+                  productId={product.id}
+                  productVariantId={
+                    product.variants[0]?.id
+                  }
+                  inStock={product.inStock}
+                  variant="card"
+                />
+              )}
 
               <Link
                 href={`/produtos/${product.slug}`}
@@ -130,11 +142,25 @@ export default function ProductCard({
                 Ver produto
               </Link>
 
-              <AddToCartButton
-                productId={product.id}
-                inStock={product.inStock}
-                variant="compact"
-              />
+              {product.variants.length > 1 ? (
+                <Link
+                  href={`/produtos/${product.slug}`}
+                  aria-label={`Selecionar opções de ${product.name}`}
+                  title="Selecionar opções"
+                  className="grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                >
+                  ⚙
+                </Link>
+              ) : (
+                <AddToCartButton
+                  productId={product.id}
+                  productVariantId={
+                    product.variants[0]?.id
+                  }
+                  inStock={product.inStock}
+                  variant="compact"
+                />
+              )}
             </div>
           )}
         </div>

@@ -17,6 +17,12 @@ import {
 const PAYMENT_INITIATION_JSON_LIMIT_BYTES =
   8 * 1024
 
+// Os pagamentos simulados nunca são servidos em produção, independentemente
+// de flags de ambiente.
+function isSimulatedPaymentEnabled() {
+  return process.env.NODE_ENV !== 'production'
+}
+
 function isRecord(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -124,6 +130,16 @@ function handleError(
 export async function POST(
   request: Request,
 ) {
+  if (!isSimulatedPaymentEnabled()) {
+    return Response.json(
+      {
+        error:
+          'Não encontrado',
+      },
+      { status: 404 },
+    )
+  }
+
   try {
     const userId =
       await requireActiveUserId()

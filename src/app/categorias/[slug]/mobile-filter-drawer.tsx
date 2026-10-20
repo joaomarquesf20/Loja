@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -11,29 +12,90 @@ type MobileFilterDrawerProps = {
   activeCount: number
 }
 
+const drawerFocusableSelector =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function getDrawerFocusables(
+  drawer: HTMLElement | null,
+) {
+  if (!drawer) {
+    return []
+  }
+
+  return Array.from(
+    drawer.querySelectorAll<HTMLElement>(
+      drawerFocusableSelector,
+    ),
+  )
+}
+
 export default function MobileFilterDrawer({
   children,
   activeCount,
 }: MobileFilterDrawerProps) {
-  const [isOpen, setIsOpen] =
-    useState(false)
+  const [isOpen, setIsOpen] = useState(false)
+  const drawerRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (!isOpen) {
       return
     }
 
+    // Guarda o gatilho para restaurar o foco ao fechar.
+    const trigger =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    const drawer = drawerRef.current
     const previousOverflow =
       document.body.style.overflow
 
-    document.body.style.overflow =
-      'hidden'
+    document.body.style.overflow = 'hidden'
+
+    getDrawerFocusables(drawer)[0]?.focus()
 
     function handleKeyDown(
       event: KeyboardEvent,
     ) {
       if (event.key === 'Escape') {
         setIsOpen(false)
+
+        return
+      }
+
+      if (
+        event.key !== 'Tab' ||
+        !drawerRef.current
+      ) {
+        return
+      }
+
+      // Fecha o ciclo de foco no conteúdo do modal.
+      const focusables =
+        getDrawerFocusables(
+          drawerRef.current,
+        )
+      const first = focusables[0]
+      const last = focusables[focusables.length - 1]
+
+      if (
+        event.shiftKey &&
+        document.activeElement === first
+      ) {
+        event.preventDefault()
+
+        last?.focus()
+
+        return
+      }
+
+      if (
+        !event.shiftKey &&
+        document.activeElement === last
+      ) {
+        event.preventDefault()
+
+        first?.focus()
       }
     }
 
@@ -49,6 +111,7 @@ export default function MobileFilterDrawer({
         'keydown',
         handleKeyDown,
       )
+      trigger?.focus()
     }
   }, [isOpen])
 
@@ -57,11 +120,12 @@ export default function MobileFilterDrawer({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
+        aria-label="Abrir filtros"
         className="inline-flex h-10 items-center gap-2 rounded-sm border border-white/10 px-3 text-xs font-black uppercase tracking-[0.08em] text-white/68 transition hover:border-white/24 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand lg:hidden"
       >
         Filtros
         {activeCount > 0 && (
-          <span className="grid size-5 place-items-center rounded-full bg-brand text-[10px] text-white">
+          <span className="grid size-5 place-items-center rounded-full bg-brand text-[10px] font-black text-white">
             {activeCount}
           </span>
         )}
@@ -72,13 +136,12 @@ export default function MobileFilterDrawer({
           <button
             type="button"
             aria-label="Fechar filtros"
-            onClick={() =>
-              setIsOpen(false)
-            }
+            onClick={() => setIsOpen(false)}
             className="absolute inset-0 bg-black/72 backdrop-blur-[2px]"
           />
 
           <section
+            ref={drawerRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-filters-heading"
@@ -99,11 +162,9 @@ export default function MobileFilterDrawer({
 
               <button
                 type="button"
-                onClick={() =>
-                  setIsOpen(false)
-                }
+                onClick={() => setIsOpen(false)}
                 aria-label="Fechar"
-                className="grid size-9 place-items-center rounded-sm text-xl text-white/54 transition hover:bg-white/6 hover:text-white"
+                className="grid size-9 place-items-center rounded-sm text-xl text-white/54 transition hover:bg-white/6 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 ×
               </button>

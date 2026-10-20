@@ -159,6 +159,7 @@ function createCartItem() {
   return {
     id: 'cart-1',
     productId: 'product-1',
+    productVariantId: 'variant-product-1',
     quantity: 2,
     product: {
       id: 'product-1',
@@ -170,6 +171,15 @@ function createCartItem() {
       shippingClass:
         'SMALL' as const,
       shippingRates: [],
+    },
+    variant: {
+      id: 'variant-product-1',
+      productId: 'product-1',
+      sku: 'SKU-1',
+      price: '19.99',
+      stockQuantity: 10,
+      isActive: true,
+      selections: [],
     },
   }
 }
@@ -196,6 +206,9 @@ function createTransactionMock() {
     cartItem: {
       findMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    productVariant: {
+      updateMany: vi.fn(),
     },
     product: {
       updateMany: vi.fn(),
@@ -266,7 +279,7 @@ function prepareSuccessfulCheckout(
     createShippingRules(),
   )
 
-  tx.product.updateMany.mockResolvedValue({
+  tx.productVariant.updateMany.mockResolvedValue({
     count: 1,
   })
 
@@ -394,6 +407,9 @@ describe('checkout payment terms', () => {
       CheckoutPreviewChangedError,
     )
 
+    expect(
+      orderTx.productVariant.updateMany,
+    ).not.toHaveBeenCalled()
     expect(
       orderTx.product.updateMany,
     ).not.toHaveBeenCalled()

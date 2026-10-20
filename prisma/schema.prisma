@@ -170,7 +170,8 @@ model Product {
   price           Decimal                       @db.Decimal(10, 2)
   stockQuantity   Int                           @default(0)
   isActive        Boolean                       @default(true)
-  images          String[]
+  images          String[]                      @default([])
+  defaultFinish   String?
   shippingClass   ShippingClass                 @default(UNASSIGNED)
   category        Category                      @relation(fields: [categoryId], references: [id])
   brand           ProductBrand?                 @relation(fields: [productBrandId], references: [id])
@@ -180,16 +181,21 @@ model Product {
   shippingRates   ProductShippingRate[]
   variants        ProductVariant[]
   options         ProductOption[]
+  imageMetadata   ProductImage[]
+  createdAt       DateTime                       @default(now())
 
   @@index([categoryId])
   @@index([shippingClass])
+  @@index([createdAt])
 }
 
 model ProductVariant {
   id             String                          @id @default(cuid())
   productId      String
   sku            String                          @unique
+  supplierSku    String?
   price          Decimal                         @db.Decimal(10, 2)
+  priceSet       Decimal?                        @db.Decimal(10, 2)
   stockQuantity  Int                             @default(0)
   isActive       Boolean                         @default(true)
   images         String[]
@@ -226,10 +232,26 @@ model ProductOptionValue {
   position   Int                             @default(0)
   option     ProductOption                   @relation(fields: [optionId], references: [id], onDelete: Cascade)
   selections ProductVariantOptionSelection[]
+  productImages ProductImage[]                 @relation("ProductImageFinishValue")
 
   @@unique([optionId, value])
   @@unique([id, optionId])
   @@index([optionId, position])
+}
+
+model ProductImage {
+  id            String               @id @default(cuid())
+  productId     String
+  url           String
+  altText       String?
+  sortOrder     Int                  @default(0)
+  isPrimary     Boolean              @default(false)
+  finishValueId String?
+  product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  finishValue   ProductOptionValue?  @relation("ProductImageFinishValue", fields: [finishValueId], references: [id], onDelete: SetNull)
+
+  @@index([productId, sortOrder])
+  @@index([finishValueId])
 }
 
 model ProductVariantOptionSelection {
@@ -441,4 +463,29 @@ model OrderEvent {
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+model ProductImport {
+  id               String    @id @default(cuid())
+  fileName         String
+  mode             String
+  failureMode      String    @default("abort")
+  status           String
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  createdBy        String?
+  createdProducts  Int       @default(0)
+  updatedProducts  Int       @default(0)
+  createdVariants  Int       @default(0)
+  updatedVariants  Int       @default(0)
+  /** Imagens novas criadas pelo import. */
+  createdImages    Int       @default(0)
+  /** Imagens já existentes e reutilizadas (dedupe por produto+finish+URL). */
+  matchedImages    Int       @default(0)
+  errorCount       Int       @default(0)
+  errors           Json      @default("[]")
+  warnings         Json      @default("[]")
+  changes          Json      @default("[]")
+
+  @@index([startedAt])
 }

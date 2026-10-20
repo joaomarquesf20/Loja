@@ -33,6 +33,8 @@ export type OrderLifecycleField =
   | 'orderId'
   | 'paymentProvider'
   | 'paymentReference'
+  | 'amount'
+  | 'currency'
   | 'action'
 
 export class OrderLifecycleValidationError extends Error {
@@ -75,6 +77,7 @@ type OrderLifecycleSelect = {
   fulfillmentMethod: true
   paymentProvider: true
   paymentReference: true
+  total?: true
 }
 
 type FindUniqueArgs = {
@@ -176,7 +179,7 @@ export interface OrderLifecycleClient {
   order: {
     findUnique(
       args: FindUniqueArgs,
-    ): Promise<OrderLifecycleState | null>
+    ): Promise<OrderLifecycleRecord | null>
     findFirst(
       args: FindFirstArgs,
     ): Promise<{ id: string } | null>
@@ -195,6 +198,124 @@ export type VerifiedPaymentInput = {
   paymentReference: string
 }
 
+export type VerifiedPaidPaymentInput =
+  VerifiedPaymentInput & {
+    amount: string
+    currency: string
+  }
+
+/**
+ * Moeda única aceite pela loja. O modelo de encomenda não guarda moeda,
+ * por isso a moeda confirmada pelo fornecedor é comparada com esta constante.
+ */
+export const PAYMENT_CURRENCY = 'EUR'
+
+// Estados em que a encomenda ainda pode receber o pagamento.
+const payableConfirmationOrderStatuses =
+  new Set<LifecycleOrderStatus>([
+    'PENDING',
+    'CONFIRMED',
+    'PROCESSING',
+    'READY_FOR_PICKUP',
+  ])
+
+const paymentAmountPattern =
+  /^\d{1,8}(?:\.\d{1,2})?$/
+
+type OrderLifecycleRecord =
+  OrderLifecycleState & {
+    total?: {
+      toString(): string
+    }
+  }
+
+function moneyStringToCents(
+  value: string,
+) {
+  const [whole, fraction = ''] =
+    value.split('.')
+
+  return (
+    Number(whole) * 100 +
+    Number(fraction.padEnd(2, '0'))
+  )
+}
+
+function normalizePaidAmountCents(
+  value: unknown,
+) {
+  if (
+    typeof value !== 'string' ||
+    !paymentAmountPattern.test(
+      value.trim(),
+    )
+  ) {
+    throw new OrderLifecycleValidationError(
+      'amount',
+      'Valor de pagamento inválido',
+    )
+  }
+
+  return moneyStringToCents(
+    value.trim(),
+  )
+}
+
+function validatePaidAmount(
+  order: OrderLifecycleRecord,
+  paidAmountCents: number,
+) {
+  const totalValue =
+    order.total?.toString()
+
+  if (
+    totalValue === undefined ||
+    !paymentAmountPattern.test(
+      totalValue,
+    )
+  ) {
+    throw new Error(
+      'Encomenda sem total válido para confirmar pagamento',
+    )
+  }
+
+  if (
+    moneyStringToCents(totalValue) !==
+    paidAmountCents
+  ) {
+    throw new OrderLifecycleConflictError(
+      'O valor pago não corresponde ao total da encomenda',
+    )
+  }
+}
+
+function validatePaidCurrency(
+  currency: string,
+) {
+  if (currency !== PAYMENT_CURRENCY) {
+    throw new OrderLifecycleConflictError(
+      'A moeda do pagamento não corresponde à moeda da loja',
+    )
+  }
+}
+
+function toOrderLifecycleState(
+  order: OrderLifecycleRecord,
+): OrderLifecycleState {
+  return {
+    id: order.id,
+    status: order.status,
+    paymentStatus:
+      order.paymentStatus,
+    fulfillmentMethod:
+      order.fulfillmentMethod,
+    paymentProvider:
+      order.paymentProvider,
+    paymentReference:
+      order.paymentReference,
+  }
+}
+
 const orderLifecycleSelect: OrderLifecycleSelect = {
   id: true,
   status: true,
@@ -202,6 +323,11 @@ const orderLifecycleSelect: OrderLifecycleSelect = {
   fulfillmentMethod: true,
   paymentProvider: true,
   paymentReference: true,
+}
+
+const paymentOrderSelect: OrderLifecycleSelect = {
+  ...orderLifecycleSelect,
+  total: true,
 }
 
 const readyForPickupSourceStatuses =
@@ -282,27 +408,150 @@ function normalizeAdminOrderAction(
   return value as AdminOrderLifecycleAction
 }
 
+// Restrições de unicidade relevantes para o ciclo de vida do pagamento.
+const orderModelName = 'Order'
+
+const paymentReferenceUniqueConstraintName =
+  'Order_paymentProvider_paymentReference_key'
+
+const paymentReferenceUniqueFields = [
+  'paymentProvider',
+  'paymentReference',
+]
+
+export type RecognizedPaymentConstraint =
+  | 'payment-reference'
+  | 'unrecognized'
+
+function isRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value)
+  )
+}
+
 function isUniqueConstraintViolation(
   error: unknown,
-) {
+): error is Record<string, unknown> & {
+  code: 'P2002'
+} {
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
+    isRecord(error) &&
     error.code === 'P2002'
   )
+}
+
+function matchesPaymentReferenceFields(
+  value: unknown,
+) {
+  if (
+    !Array.isArray(value) ||
+    value.length !==
+      paymentReferenceUniqueFields.length
+  ) {
+    return false
+  }
+
+  const fields =
+    value.filter(
+      (field): field is string =>
+        typeof field === 'string',
+    )
+
+  if (
+    fields.length !== value.length
+  ) {
+    return false
+  }
+
+  return paymentReferenceUniqueFields.every(
+    (field) => fields.includes(field),
+  )
+}
+
+function matchesPaymentReferenceConstraint(
+  constraint: unknown,
+) {
+  if (!isRecord(constraint)) {
+    return false
+  }
+
+  if (
+    typeof constraint.index === 'string' &&
+    constraint.index ===
+      paymentReferenceUniqueConstraintName
+  ) {
+    return true
+  }
+
+  return matchesPaymentReferenceFields(
+    constraint.fields,
+  )
+}
+
+/**
+ * Identifica a restrição de unicidade violada (R29). O cliente Prisma
+ * instalado (7.10.0 com `@prisma/adapter-pg`) expõe o alvo da violação em
+ * `meta.driverAdapterError.cause` (`kind` e `constraint`, como `{ index }`
+ * ou `{ fields }`). O antigo `meta.target` já não é produzido por este
+ * cliente e não é interpretado, para nunca classificar metadados
+ * desconhecidos como a restrição esperada. Uma violação não reconhecida
+ * mantém o erro original, em vez de o converter em conflito de referência.
+ */
+export function classifyPaymentConstraintViolation(
+  error: unknown,
+): RecognizedPaymentConstraint {
+  if (!isUniqueConstraintViolation(error)) {
+    return 'unrecognized'
+  }
+
+  const meta = error.meta
+
+  if (
+    !isRecord(meta) ||
+    meta.modelName !== orderModelName
+  ) {
+    return 'unrecognized'
+  }
+
+  const adapterError = meta.driverAdapterError
+
+  if (!isRecord(adapterError)) {
+    return 'unrecognized'
+  }
+
+  const adapterCause = adapterError.cause
+
+  if (
+    !isRecord(adapterCause) ||
+    adapterCause.kind !==
+      'UniqueConstraintViolation'
+  ) {
+    return 'unrecognized'
+  }
+
+  return matchesPaymentReferenceConstraint(
+    adapterCause.constraint,
+  )
+    ? 'payment-reference'
+    : 'unrecognized'
 }
 
 async function loadOrder(
   orderId: string,
   client: OrderLifecycleClient,
+  select: OrderLifecycleSelect =
+    orderLifecycleSelect,
 ) {
   const order =
     await client.order.findUnique({
       where: {
         id: orderId,
       },
-      select: orderLifecycleSelect,
+      select,
     })
 
   if (!order) {
@@ -339,7 +588,7 @@ async function reloadOrder(
  * webhooks; essa validação pertence ao adaptador/rota do fornecedor.
  */
 export async function recordVerifiedPayment(
-  input: VerifiedPaymentInput,
+  input: VerifiedPaidPaymentInput,
   client?: OrderLifecycleClient,
 ): Promise<OrderLifecycleState> {
   const orderId =
@@ -359,6 +608,18 @@ export async function recordVerifiedPayment(
       'Referência de pagamento inválida',
     )
 
+  const paidAmountCents =
+    normalizePaidAmountCents(
+      input.amount,
+    )
+
+  const currency =
+    normalizeRequiredString(
+      input.currency,
+      'currency',
+      'Moeda de pagamento inválida',
+    )
+
   const db =
     getClient(client)
 
@@ -366,18 +627,26 @@ export async function recordVerifiedPayment(
     await loadOrder(
       orderId,
       db,
+      paymentOrderSelect,
     )
 
-  if (
-    order.paymentStatus === 'PAID'
-  ) {
+  validatePaidAmount(
+    order,
+    paidAmountCents,
+  )
+
+  validatePaidCurrency(currency)
+
+  if (order.paymentStatus === 'PAID') {
     if (
       order.paymentProvider ===
         paymentProvider &&
       order.paymentReference ===
         paymentReference
     ) {
-      return order
+      return toOrderLifecycleState(
+        order,
+      )
     }
 
     throw new OrderLifecycleConflictError(
@@ -400,6 +669,16 @@ export async function recordVerifiedPayment(
   ) {
     throw new OrderLifecycleConflictError(
       'Um pagamento falhado tem de ser tentado novamente antes de poder ser confirmado',
+    )
+  }
+
+  if (
+    !payableConfirmationOrderStatuses.has(
+      order.status,
+    )
+  ) {
+    throw new OrderLifecycleConflictError(
+      'O estado atual da encomenda não permite confirmar o pagamento',
     )
   }
 
@@ -448,6 +727,8 @@ export async function recordVerifiedPayment(
           await tx.order.updateMany({
             where: {
               id: orderId,
+              status:
+                order.status,
               paymentStatus:
                 order.paymentStatus,
               paymentProvider:
@@ -483,9 +764,10 @@ export async function recordVerifiedPayment(
     )
   } catch (error) {
     if (
-      isUniqueConstraintViolation(
+      classifyPaymentConstraintViolation(
         error,
-      )
+      ) ===
+      'payment-reference'
     ) {
       throw new OrderLifecycleConflictError(
         'A referência de pagamento já pertence a outra encomenda',
@@ -652,9 +934,10 @@ export async function recordVerifiedPaymentFailure(
     )
   } catch (error) {
     if (
-      isUniqueConstraintViolation(
+      classifyPaymentConstraintViolation(
         error,
-      )
+      ) ===
+      'payment-reference'
     ) {
       throw new OrderLifecycleConflictError(
         'A referência de pagamento já pertence a outra encomenda',

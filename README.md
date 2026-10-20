@@ -29,6 +29,10 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Product image uploads
+
+Admin product images are stored as URLs/paths and metadata in the database; image bytes are never stored in the database. Existing `Product.images` URL arrays remain supported and are converted to general-image metadata the next time the product is saved. The development upload adapter writes files to `public/uploads/products` (configurable with `PRODUCT_IMAGE_UPLOAD_DIR` and `PRODUCT_IMAGE_PUBLIC_PATH`). Set `PRODUCT_IMAGE_STORAGE=local` explicitly or replace `src/server/image-storage.ts` with an object-storage adapter before deploying to an ephemeral/serverless environment. The local adapter does not clean up files when an administrator removes an image from a product.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.

@@ -1,22 +1,25 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import Price from '@/components/storefront/price'
 import ProductCard from '@/components/storefront/product-card'
-import StockBadge from '@/components/storefront/stock-badge'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
 import {
   isStorefrontCategoryVisible,
   sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
+import { getCategoryFilterProfile } from '@/lib/storefront-category-profile'
 import {
   getCatalogCategoryPageBySlug,
   getCatalogProductBySlug,
   listCatalogCategories,
 } from '@/server/catalog'
 import { listProductCompatibilities } from '@/server/product-compatibilities'
-import AddToCartButton from './add-to-cart-button'
+import CompatibilityAnchorLink from './compatibility-anchor-link'
 import ProductGallery from './product-gallery'
+import {
+  ProductImageSelectionProvider,
+} from './product-image-selection'
 import ProductInformationAccordion from './product-information-accordion'
+import ProductPurchasePanel from './product-purchase-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -95,19 +98,31 @@ function formatCompatibility(
       Boolean(value),
   )
 
-  const years =
+  const configuration =
     compatibility.vehicleConfiguration
-      ? formatYears(
-          compatibility
-            .vehicleConfiguration.yearFrom,
-          compatibility
-            .vehicleConfiguration.yearTo,
-        )
-      : null
+
+  const engineParts = [
+    configuration?.engineCode ?? null,
+    configuration?.powerKw != null
+      ? `${configuration.powerKw} kW`
+      : null,
+  ].filter(
+    (value): value is string =>
+      Boolean(value),
+  )
+
+  const years = configuration
+    ? formatYears(
+        configuration.yearFrom,
+        configuration.yearTo,
+      )
+    : null
 
   return {
     label: parts.join(' · '),
     years,
+    engine: engineParts.join(' · ') || null,
+    bodyType: configuration?.bodyType ?? null,
   }
 }
 
@@ -159,15 +174,31 @@ export default async function ProductPage({
     notFound()
   }
 
+  const profile = getCategoryFilterProfile(
+    product.category,
+  )
+
+  /**
+   * Jantes não têm uma lista de veículos compatível
+   * mantida à mão: a adequação vem das especificações
+   * das variantes (furação, furo central, diâmetro,
+   * largura e offset), por isso a página não mostra
+   * aplicações de veículo.
+   */
+  const showsVehicleCompatibility =
+    profile !== 'wheels'
+
   const [
     categories,
     compatibilities,
     categoryPage,
   ] = await Promise.all([
     listCatalogCategories(),
-    listProductCompatibilities(
-      product.id,
-    ),
+    showsVehicleCompatibility
+      ? listProductCompatibilities(
+          product.id,
+        )
+      : Promise.resolve([]),
     getCatalogCategoryPageBySlug(
       product.category.slug,
     ),
@@ -207,6 +238,25 @@ export default async function ProductPage({
       label: 'Categoria',
       value: product.category.name,
     },
+    ...(profile === 'exterior'
+      ? [
+          ...new Set(
+            product.variants
+              .flatMap((variant) =>
+                variant.options.filter(
+                  (option) =>
+                    option.code === 'productType',
+                ),
+              )
+              .map(
+                (option) => option.value,
+              ),
+          ),
+        ].map((productType) => ({
+          label: 'Tipo de produto',
+          value: productType,
+        }))
+      : []),
   ]
 
   const informationItems = [
@@ -248,7 +298,8 @@ export default async function ProductPage({
         </dl>
       ),
     },
-    ...(compatibilities.length > 0
+    ...(showsVehicleCompatibility &&
+    compatibilities.length > 0
       ? [
           {
             id: 'compatibilidade',
@@ -276,13 +327,31 @@ export default async function ProductPage({
                           }
                         </p>
 
-                        {formatted.years && (
-                          <p className="mt-1 text-xs font-semibold text-white/36">
-                            {
-                              formatted.years
-                            }
-                          </p>
-                        )}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-white/36">
+                          {formatted.bodyType && (
+                            <span>
+                              {
+                                formatted.bodyType
+                              }
+                            </span>
+                          )}
+
+                          {formatted.engine && (
+                            <span>
+                              {
+                                formatted.engine
+                              }
+                            </span>
+                          )}
+
+                          {formatted.years && (
+                            <span>
+                              {
+                                formatted.years
+                              }
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )
                   },
@@ -320,7 +389,7 @@ export default async function ProductPage({
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
         <nav
           aria-label="Breadcrumb"
-          className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/38"
+          className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/55"
         >
           <Link
             href="/"
@@ -349,11 +418,13 @@ export default async function ProductPage({
           </span>
         </nav>
 
-        <article className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:gap-14 xl:gap-16">
-          <ProductGallery
-            name={product.name}
-            images={product.images}
-          />
+        <ProductImageSelectionProvider>
+          <article className="mt-8 grid items-start gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)] lg:gap-14 xl:gap-16">
+            <ProductGallery
+              name={product.name}
+              images={product.images}
+              imageMetadata={product.imageMetadata}
+            />
 
           <section className="lg:sticky lg:top-36">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px] font-black uppercase tracking-[0.12em]">
@@ -405,42 +476,35 @@ export default async function ProductPage({
                     </span>
                   )}
 
-                  <a
-                    href="#compatibilidade"
-                    className="transition hover:text-white"
-                  >
-                    {compatibilities.length ===
-                    1
-                      ? 'Ver aplicação'
-                      : `Ver ${compatibilities.length} aplicações`}
-                  </a>
+                  <CompatibilityAnchorLink
+                    targetId="compatibilidade"
+                    applicationsCount={
+                      compatibilities.length
+                    }
+                  />
                 </div>
               </div>
             )}
 
             <div className="mt-7 border-y border-white/8 py-5">
-              <div className="flex flex-wrap items-center gap-4">
-                <Price
-                  value={product.price}
-                  className="text-3xl font-black tracking-[-0.035em] text-white sm:text-[2rem]"
-                />
+              <ProductPurchasePanel
+                product={product}
+              />
 
-                <StockBadge
-                  inStock={
-                    product.inStock
-                  }
-                />
-              </div>
-
-              <div className="mt-4">
-                <AddToCartButton
-                  productId={product.id}
-                  inStock={
-                    product.inStock
-                  }
-                  variant="product"
-                />
-              </div>
+              {profile === 'wheels' &&
+                product.variants.some(
+                  (variant) =>
+                    variant.options.length > 0,
+                ) && (
+                  <p className="mt-4 text-xs leading-5 text-white/36">
+                    A adequação ao teu veículo é
+                    definida pelas
+                    especificações da variante
+                    selecionada (furação, furo
+                    central, diâmetro, largura e
+                    offset).
+                  </p>
+                )}
             </div>
 
             <div className="mt-7 border-t border-white/8 pt-6">
@@ -453,7 +517,8 @@ export default async function ProductPage({
               </Link>
             </div>
           </section>
-        </article>
+          </article>
+        </ProductImageSelectionProvider>
 
         <section
           aria-labelledby="product-information-heading"
