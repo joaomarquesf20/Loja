@@ -232,6 +232,55 @@ describe('product compatibilities service', () => {
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
+    test('rejeita jantes: a compatibilidade vem das especificações da variante', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue({
+        id: 'product-test',
+        category: {
+          name: 'Jantes',
+          slug: 'jantes',
+        },
+      })
+
+      await expect(
+        addProductCompatibility(
+          'product-test',
+          'vehicle-configuration-test',
+          client,
+        ),
+      ).rejects.toBeInstanceOf(ValidationError)
+
+      expect(
+        client.productVehicleCompatibility.create,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('aceita suspensão com compatibilidade por veículo', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue({
+        id: 'product-test',
+        category: {
+          name: 'Suspensão',
+          slug: 'suspensao',
+        },
+      })
+      vi.mocked(
+        client.vehicleConfiguration.findUnique,
+      ).mockResolvedValue(configurationHierarchy)
+      vi.mocked(
+        client.productVehicleCompatibility.findFirst,
+      ).mockResolvedValue(null)
+      vi.mocked(
+        client.productVehicleCompatibility.create,
+      ).mockResolvedValue(compatibilityRecord)
+
+      await expect(
+        addProductCompatibility(
+          'product-test',
+          'vehicle-configuration-test',
+          client,
+        ),
+      ).resolves.toEqual(compatibilityRecord)
+    })
+
     test('procura configuração com a hierarquia necessária', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue({
         id: 'product-test',

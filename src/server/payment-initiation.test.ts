@@ -21,6 +21,9 @@ import {
   initiateSimulatedPayment,
   type PaymentInitiationClient,
 } from './payment-initiation'
+import {
+  createUniqueConstraintViolation,
+} from '../../test/prisma-error-fixtures'
 
 function decimal(
   value: string,
@@ -315,9 +318,12 @@ describe(
           createOrder(),
         )
 
-        updateMany.mockRejectedValue({
-          code: 'P2002',
-        })
+        updateMany.mockRejectedValue(
+          createUniqueConstraintViolation({
+            index:
+              'Order_paymentProvider_paymentReference_key',
+          }),
+        )
 
         await expect(
           initiateSimulatedPayment(
@@ -333,6 +339,267 @@ describe(
           message:
             'A referência de pagamento já está associada a outra encomenda',
         })
+
+        expect(
+          findFirst,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'converte colisão UNIQUE da referência identificada pelos campos em conflito seguro',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder(),
+        )
+
+        updateMany.mockRejectedValue(
+          createUniqueConstraintViolation({
+            fields: [
+              'paymentReference',
+              'paymentProvider',
+            ],
+          }),
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_duplicate',
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'PaymentInitiationConflictError',
+          message:
+            'A referência de pagamento já está associada a outra encomenda',
+        })
+
+        expect(
+          findFirst,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test.each([
+      {
+        name: 'sem metadados',
+        error: {
+          code: 'P2002',
+        },
+      },
+      {
+        name: 'com metadados nulos',
+        error: {
+          code: 'P2002',
+          meta: null,
+        },
+      },
+      {
+        name: 'sem modelo identificado',
+        error: {
+          code: 'P2002',
+          meta: {},
+        },
+      },
+      {
+        name: 'sem detalhe do adaptador',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+          },
+        },
+      },
+      {
+        name: 'com detalhe do adaptador incompleto',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            driverAdapterError: {},
+          },
+        },
+      },
+      {
+        name: 'sem restrição no detalhe do adaptador',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            driverAdapterError: {
+              cause: {
+                kind:
+                  'UniqueConstraintViolation',
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'de outro tipo de violação',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            driverAdapterError: {
+              cause: {
+                kind:
+                  'ForeignKeyConstraintViolation',
+                constraint: {
+                  index:
+                    'Order_paymentProvider_paymentReference_key',
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'de outro modelo',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Product',
+            driverAdapterError: {
+              cause: {
+                kind:
+                  'UniqueConstraintViolation',
+                constraint: {
+                  fields: [
+                    'paymentProvider',
+                    'paymentReference',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'com campos de outra restrição',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            driverAdapterError: {
+              cause: {
+                kind:
+                  'UniqueConstraintViolation',
+                constraint: {
+                  fields: ['orderNumber'],
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'com índice de outra restrição',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            driverAdapterError: {
+              cause: {
+                kind:
+                  'UniqueConstraintViolation',
+                constraint: {
+                  index:
+                    'Order_orderNumber_key',
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        name: 'com alvo de texto (forma não emitida pelo Prisma instalado)',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            target:
+              'Order_paymentProvider_paymentReference_key',
+          },
+        },
+      },
+      {
+        name: 'com alvo vazio (forma não emitida pelo Prisma instalado)',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            target: [],
+          },
+        },
+      },
+      {
+        name: 'com alvo incompleto (forma não emitida pelo Prisma instalado)',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            target: ['paymentProvider'],
+          },
+        },
+      },
+      {
+        name: 'com alvo completo (forma não emitida pelo Prisma instalado)',
+        error: {
+          code: 'P2002',
+          meta: {
+            modelName: 'Order',
+            target: [
+              'paymentProvider',
+              'paymentReference',
+            ],
+          },
+        },
+      },
+      {
+        name: 'de persistência que não seja unicidade',
+        error: {
+          code: 'P2025',
+          meta: {
+            modelName: 'Order',
+          },
+        },
+      },
+    ])(
+      'propaga P2002 $name sem o converter em conflito de referência',
+      async ({ error }) => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder(),
+        )
+
+        updateMany.mockRejectedValue(
+          error,
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_duplicate',
+          ),
+        ).rejects.toBe(error)
 
         expect(
           findFirst,
@@ -546,6 +813,150 @@ describe(
         expect(
           createEvent,
         ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'converte colisão UNIQUE da referência na nova tentativa em conflito seguro',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+          createEvent,
+          transaction,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        updateMany.mockRejectedValue(
+          createUniqueConstraintViolation({
+            index:
+              'Order_paymentProvider_paymentReference_key',
+          }),
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_retry',
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'PaymentInitiationConflictError',
+          message:
+            'A referência de pagamento já está associada a outra encomenda',
+        })
+
+        expect(
+          transaction,
+        ).toHaveBeenCalledTimes(1)
+        expect(
+          createEvent,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'propaga P2002 de outra restrição na nova tentativa sem o converter em conflito de referência',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+          transaction,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        const uniqueConstraintError =
+          createUniqueConstraintViolation({
+            fields: ['orderNumber'],
+          })
+
+        updateMany.mockRejectedValue(
+          uniqueConstraintError,
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_retry',
+          ),
+        ).rejects.toBe(
+          uniqueConstraintError,
+        )
+
+        expect(
+          transaction,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'propaga erros de persistência que não sejam violações de unicidade na nova tentativa',
+      async () => {
+        const {
+          client,
+          findFirst,
+          updateMany,
+        } = createClient()
+
+        findFirst.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'FAILED',
+            paymentProvider:
+              'PFA_SIMULATED',
+            paymentReference:
+              'pfa_sim_failed',
+          }),
+        )
+
+        const databaseError = {
+          code: 'P2025',
+          meta: {
+            modelName: 'Order',
+          },
+        }
+
+        updateMany.mockRejectedValue(
+          databaseError,
+        )
+
+        await expect(
+          initiateSimulatedPayment(
+            'user-1',
+            'order-1',
+            client,
+            () =>
+              'pfa_sim_retry',
+          ),
+        ).rejects.toBe(databaseError)
       },
     )
 

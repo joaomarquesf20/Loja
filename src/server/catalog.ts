@@ -1,3 +1,10 @@
+import {
+  getCategoryFilterProfile,
+  shouldShowVehicleFilter,
+} from '@/lib/storefront-category-profile'
+import type {
+  ProductImageMetadata,
+} from '@/lib/product-images'
 import { prisma } from './db'
 
 type CatalogPrice =
@@ -7,6 +14,29 @@ type CatalogPrice =
       toString(): string
     }
 
+type CatalogVariantRecord = {
+  id: string
+  sku: string
+  price: CatalogPrice
+  priceSet: CatalogPrice | null
+  stockQuantity: number
+  isActive: boolean
+  images: string[]
+  position: number
+  selections: Array<{
+    optionValue: {
+      id: string
+      value: string
+      option: {
+        id: string
+        code: string
+        name: string
+        position: number
+      }
+    }
+  }>
+}
+
 type CatalogProductRecord = {
   id: string
   name: string
@@ -15,6 +45,7 @@ type CatalogProductRecord = {
   price: CatalogPrice
   stockQuantity: number
   images: string[]
+  defaultFinish?: string | null
   category: {
     id: string
     name: string
@@ -25,6 +56,7 @@ type CatalogProductRecord = {
     name: string
     slug: string
   } | null
+  variants?: CatalogVariantRecord[]
 }
 
 type CatalogProductDetailRecord =
@@ -32,6 +64,7 @@ type CatalogProductDetailRecord =
     sku: string
   }
 
+<<<<<<< HEAD
 type CatalogDefaultVariant = {
   productId: string
   sku: string
@@ -39,6 +72,22 @@ type CatalogDefaultVariant = {
   stockQuantity: number
   isActive: boolean
   images: string[]
+=======
+type CatalogImageRecord = {
+  id: string
+  productId: string
+  url: string
+  altText: string | null
+  sortOrder: number
+  isPrimary: boolean
+  finishValueId: string | null
+  finishValue: {
+    value: string
+    option: {
+      code: string
+    }
+  } | null
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 }
 
 type CatalogCategoryRecord = {
@@ -84,6 +133,23 @@ type CatalogVehicleCompatibilityRecord = {
   } | null
 }
 
+export type CatalogVariantOption = {
+  code: string
+  name: string
+  value: string
+}
+
+export type CatalogVariant = {
+  id: string
+  sku: string
+  price: number
+  /** Preço opcional do conjunto de 4 jantes. */
+  priceSet: number | null
+  inStock: boolean
+  options: CatalogVariantOption[]
+  image: string | null
+}
+
 export type CatalogProduct = {
   id: string
   name: string
@@ -92,6 +158,8 @@ export type CatalogProduct = {
   price: number
   inStock: boolean
   images: string[]
+  imageMetadata?: ProductImageMetadata[]
+  defaultFinish?: string | null
   category: {
     id: string
     name: string
@@ -102,6 +170,7 @@ export type CatalogProduct = {
     name: string
     slug: string
   } | null
+  variants: CatalogVariant[]
 }
 
 export type CatalogProductDetail =
@@ -148,6 +217,7 @@ export type CatalogVehicleConfiguration = {
 }
 
 export type CatalogSort =
+  | 'newest'
   | 'name-asc'
   | 'name-desc'
   | 'price-asc'
@@ -161,18 +231,45 @@ export type CatalogCategoryPage = {
   products: CatalogProduct[]
 }
 
+export type CatalogVariantSelection = {
+  code: string
+  values: string[]
+}
+
 export type CatalogCategoryFilters = {
   inStockOnly?: boolean
   brandSlugs?: string[]
   priceMin?: number
   priceMax?: number
-  vehicleConfigurationId?: string
+  /**
+   * Veículo selecionado. Um produto é compatível quando
+   * tem uma compatibilidade da marca, do modelo ou da
+   * geração selecionados (valores do mesmo nível são
+   * alternativas).
+   */
+  vehicleMakeIds?: string[]
+  vehicleModelIds?: string[]
+  vehicleGenerationIds?: string[]
+  variantSelections?:
+    CatalogVariantSelection[]
   sort?: CatalogSort
+}
+
+export type CatalogVariantFacet = {
+  code: string
+  name: string
+  values: Array<{
+    value: string
+    productCount: number
+  }>
 }
 
 type CatalogProductOrderBy =
   | {
       name: 'asc' | 'desc'
+    }
+  | {
+      createdAt: 'desc'
     }
   | [
       {
@@ -182,6 +279,104 @@ type CatalogProductOrderBy =
         name: 'asc'
       },
     ]
+  | [
+      {
+        createdAt: 'desc'
+      },
+      {
+        name: 'asc'
+      },
+    ]
+
+type CatalogVariantSelect = {
+  select: {
+    id: true
+    sku: true
+    price: true
+    priceSet: true
+    stockQuantity: true
+    isActive: true
+    images: true
+    position: true
+    selections: {
+      select: {
+        optionValue: {
+          select: {
+            id: true
+            value: true
+            option: {
+              select: {
+                id: true
+                code: true
+                name: true
+                position: true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+function getCatalogVariantSelect(): CatalogVariantSelect {
+  return {
+    select: {
+      id: true,
+      sku: true,
+      price: true,
+      priceSet: true,
+      stockQuantity: true,
+      isActive: true,
+      images: true,
+      position: true,
+      selections: {
+        select: {
+          optionValue: {
+            select: {
+              id: true,
+              value: true,
+              option: {
+                select: {
+                  id: true,
+                  code: true,
+                  name: true,
+                  position: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+const catalogProductSelect = {
+  id: true,
+  name: true,
+  slug: true,
+  description: true,
+  price: true,
+  stockQuantity: true,
+  images: true,
+  defaultFinish: true,
+  category: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
+  brand: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+  },
+  variants: getCatalogVariantSelect(),
+} as const
 
 type CatalogProductFindManyArgs = {
   where: {
@@ -199,39 +394,54 @@ type CatalogProductFindManyArgs = {
       gte?: number
       lte?: number
     }
+    variants?: {
+      some: {
+        isActive: true
+        price?: {
+          gte?: number
+          lte?: number
+        }
+        stockQuantity?: {
+          gt: number
+        }
+        AND?: Array<{
+          selections: {
+            some: {
+              optionValue: {
+                value: {
+                  in: string[]
+                }
+                option: {
+                  code: string
+                }
+              }
+            }
+          }
+        }>
+      }
+    }
     compatibilities?: {
       some: {
-        vehicleConfigurationId: string
+        OR: Array<{
+          vehicleBrandId?: {
+            in: string[]
+          }
+          vehicleModelId?: {
+            in: string[]
+          }
+          vehicleGenerationId?: {
+            in: string[]
+          }
+        }>
       }
     }
   }
   orderBy: CatalogProductOrderBy
-  select: {
-    id: true
-    name: true
-    slug: true
-    description: true
-    price: true
-    stockQuantity: true
-    images: true
-    category: {
-      select: {
-        id: true
-        name: true
-        slug: true
-      }
-    }
-    brand: {
-      select: {
-        id: true
-        name: true
-        slug: true
-      }
-    }
-  }
+  select: typeof catalogProductSelect
 }
 
 export interface CatalogClient {
+<<<<<<< HEAD
   productVariant?: {
     findMany(args: {
       where: {
@@ -247,6 +457,39 @@ export interface CatalogClient {
         images: true
       }
     }): Promise<CatalogDefaultVariant[]>
+=======
+  productImage?: {
+    findMany(args: {
+      where: {
+        productId: {
+          in: string[]
+        }
+      }
+      orderBy: Array<
+        | { sortOrder: 'asc' }
+        | { id: 'asc' }
+      >
+      select: {
+        id: true
+        productId: true
+        url: true
+        altText: true
+        sortOrder: true
+        isPrimary: true
+        finishValueId: true
+        finishValue: {
+          select: {
+            value: true
+            option: {
+              select: {
+                code: true
+              }
+            }
+          }
+        }
+      }
+    }): Promise<CatalogImageRecord[]>
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
   }
 
   product: {
@@ -259,29 +502,8 @@ export interface CatalogClient {
         slug: string
         isActive: true
       }
-      select: {
-        id: true
-        name: true
-        slug: true
+      select: typeof catalogProductSelect & {
         sku: true
-        description: true
-        price: true
-        stockQuantity: true
-        images: true
-        category: {
-          select: {
-            id: true
-            name: true
-            slug: true
-          }
-        }
-        brand: {
-          select: {
-            id: true
-            name: true
-            slug: true
-          }
-        }
       }
     }): Promise<CatalogProductDetailRecord | null>
   }
@@ -334,42 +556,47 @@ export interface CatalogClient {
   }
 
   productVehicleCompatibility?: {
-    findMany(args: {
-      where: {
-        product: {
-          isActive: true
-          categoryId: {
-            in: string[]
-          }
-        }
-        vehicleConfigurationId: {
-          not: null
-        }
-      }
-      select: {
-        vehicleConfiguration: {
-          select: {
-            id: true
-            name: true
-            engineCode: true
-            engineType: true
-            displacementCc: true
-            powerKw: true
-            bodyType: true
-            yearFrom: true
-            yearTo: true
-            generation: {
-              select: {
-                id: true
-                name: true
-                model: {
-                  select: {
-                    id: true
-                    name: true
-                    brand: {
-                      select: {
-                        id: true
-                        name: true
+    findMany(
+      args:
+        | {
+            where: {
+              product: {
+                isActive: true
+                categoryId: {
+                  in: string[]
+                }
+              }
+              vehicleConfigurationId: {
+                not: null
+              }
+            }
+            select: {
+              vehicleConfiguration: {
+                select: {
+                  id: true
+                  name: true
+                  engineCode: true
+                  engineType: true
+                  displacementCc: true
+                  powerKw: true
+                  bodyType: true
+                  yearFrom: true
+                  yearTo: true
+                  generation: {
+                    select: {
+                      id: true
+                      name: true
+                      model: {
+                        select: {
+                          id: true
+                          name: true
+                          brand: {
+                            select: {
+                              id: true
+                              name: true
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -377,11 +604,30 @@ export interface CatalogClient {
               }
             }
           }
-        }
-      }
-    }): Promise<
-      CatalogVehicleCompatibilityRecord[]
-    >
+        | {
+            where: {
+              product: {
+                isActive: true
+                categoryId: {
+                  in: string[]
+                }
+              }
+            }
+            select: {
+              productId: true
+              vehicleBrandId: true
+              vehicleModelId: true
+              vehicleGenerationId: true
+            }
+          },
+    ): Promise<CatalogCompatibilityFindManyResult>
+  }
+
+  vehicleBrand?: {
+    findMany(args?: {
+      orderBy?: { name: 'asc' }
+      select?: Record<string, unknown>
+    }): Promise<CatalogVehicleBrandRecord[]>
   }
 }
 
@@ -410,15 +656,171 @@ function isCatalogClient(
   )
 }
 
+function sortVariants(
+  variants: CatalogVariantRecord[],
+): CatalogVariantRecord[] {
+  return [...variants].sort(
+    (first, second) =>
+      first.position - second.position ||
+      first.sku.localeCompare(second.sku),
+  )
+}
+
+function toCatalogVariant(
+  variant: CatalogVariantRecord,
+): CatalogVariant {
+  const options = variant.selections
+    .map((selection) => ({
+      code: selection.optionValue.option.code,
+      name: selection.optionValue.option.name,
+      value: selection.optionValue.value,
+      optionPosition:
+        selection.optionValue.option.position,
+    }))
+    .sort(
+      (first, second) =>
+        first.optionPosition -
+          second.optionPosition ||
+        first.code.localeCompare(second.code),
+    )
+    .map(
+      ({ code, name, value }) => ({
+        code,
+        name,
+        value,
+      }),
+    )
+
+  return {
+    id: variant.id,
+    sku: variant.sku,
+    price: Number(variant.price),
+    priceSet:
+      variant.priceSet === null
+        ? null
+        : Number(variant.priceSet),
+    inStock:
+      variant.isActive &&
+      variant.stockQuantity > 0,
+    options,
+    image:
+      variant.images.find(
+        (candidate) =>
+          candidate.trim().length > 0,
+      ) ?? null,
+  }
+}
+
+async function getCatalogImageMetadata(
+  db: CatalogClient,
+  productIds: string[],
+) {
+  const metadataByProductId =
+    new Map<
+      string,
+      ProductImageMetadata[]
+    >()
+
+  if (
+    !db.productImage ||
+    productIds.length === 0
+  ) {
+    return metadataByProductId
+  }
+
+  const records =
+    await db.productImage.findMany({
+      where: {
+        productId: {
+          in: productIds,
+        },
+      },
+      orderBy: [
+        { sortOrder: 'asc' },
+        { id: 'asc' },
+      ],
+      select: {
+        id: true,
+        productId: true,
+        url: true,
+        altText: true,
+        sortOrder: true,
+        isPrimary: true,
+        finishValueId: true,
+        finishValue: {
+          select: {
+            value: true,
+            option: {
+              select: {
+                code: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+  for (const record of records) {
+    const images =
+      metadataByProductId.get(
+        record.productId,
+      ) ?? []
+    images.push({
+      id: record.id,
+      url: record.url,
+      altText: record.altText,
+      sortOrder: record.sortOrder,
+      isPrimary: record.isPrimary,
+      finish:
+        record.finishValue?.option.code ===
+        'finish'
+          ? record.finishValue.value
+          : null,
+      finishValueId:
+        record.finishValue?.option.code ===
+        'finish'
+          ? record.finishValueId
+          : null,
+    })
+    metadataByProductId.set(
+      record.productId,
+      images,
+    )
+  }
+
+  return metadataByProductId
+}
+
 function toCatalogProduct(
   product: CatalogProductRecord,
+<<<<<<< HEAD
   variant?: CatalogDefaultVariant,
+=======
+  imageMetadata: ProductImageMetadata[] = [],
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 ): CatalogProduct {
+  const sellableVariants =
+    (product.variants ?? []).filter(
+      (variant) => variant.isActive,
+    )
+
+  const hasVariants =
+    sellableVariants.length > 0
+
+  const price = hasVariants
+    ? Math.min(
+        ...sellableVariants.map((variant) =>
+          Number(variant.price),
+        ),
+      )
+    : Number(product.price)
+
   return {
     id: product.id,
     name: product.name,
     slug: product.slug,
     description: product.description,
+<<<<<<< HEAD
     price: Number(variant?.price ?? product.price),
     inStock: variant
       ? variant.isActive && variant.stockQuantity > 0
@@ -427,8 +829,30 @@ function toCatalogProduct(
       variant && variant.images.length > 0
         ? variant.images
         : product.images,
+=======
+    price,
+    inStock: hasVariants
+      ? sellableVariants.some(
+          (variant) =>
+            variant.stockQuantity > 0,
+        )
+      : product.stockQuantity > 0,
+    images: product.images,
+    ...(imageMetadata.length > 0
+      ? { imageMetadata }
+      : {}),
+    ...(product.defaultFinish
+      ? {
+          defaultFinish:
+            product.defaultFinish,
+        }
+      : {}),
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     category: product.category,
     brand: product.brand,
+    variants: sortVariants(
+      sellableVariants,
+    ).map(toCatalogVariant),
   }
 }
 
@@ -582,6 +1006,22 @@ function getCategoryAndDescendantIds(
   return Array.from(categoryIds)
 }
 
+function normalizeIdList(
+  values: string[] | undefined,
+) {
+  if (!values) {
+    return []
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ),
+  )
+}
+
 function normalizeBrandSlugs(
   brandSlugs: string[] | undefined,
 ) {
@@ -652,23 +1092,257 @@ function getPriceFilter(
   }
 }
 
-function normalizeVehicleConfigurationId(
-  value: string | undefined,
-) {
-  if (value === undefined) {
-    return undefined
+function normalizeVariantSelections(
+  variantSelections:
+    | CatalogVariantSelection[]
+    | undefined,
+): CatalogVariantSelection[] {
+  if (!variantSelections) {
+    return []
   }
 
-  const normalizedValue = value.trim()
+  const valuesByCode = new Map<
+    string,
+    Set<string>
+  >()
 
-  return normalizedValue.length > 0
-    ? normalizedValue
-    : undefined
+  for (const selection of variantSelections) {
+    const code = selection.code.trim()
+
+    if (!code) {
+      continue
+    }
+
+    let values = valuesByCode.get(code)
+
+    if (!values) {
+      values = new Set()
+
+      valuesByCode.set(code, values)
+    }
+
+    for (const value of selection.values) {
+      const normalizedValue =
+        value.trim()
+
+      if (normalizedValue) {
+        values.add(normalizedValue)
+      }
+    }
+  }
+
+  return Array.from(
+    valuesByCode.entries(),
+  )
+    .filter(
+      ([, values]) => values.size > 0,
+    )
+    .map(([code, values]) => ({
+      code,
+      values: Array.from(values),
+    }))
+}
+
+/**
+ * Deriva as facetas de opções de variante a partir dos
+ * produtos reais do catálogo (sem listas fixas de
+ * valores). Os valores vêm sempre das variantes ativas
+ * dos produtos devolvidos e a contagem de cada valor só
+ * inclui produtos quando existe uma variante real que
+ * combina esse valor com a seleção atual dos OUTROS
+ * eixos. Os valores do próprio eixo continuam listados
+ * (com contagem 0 quando não combinam) para se poder
+ * trocar a seleção sem perder as alternativas do mesmo
+ * eixo.
+ */
+function buildVariantFacets(
+  products: CatalogProductRecord[],
+  variantSelections: CatalogVariantSelection[] = [],
+): CatalogVariantFacet[] {
+  const facets: CatalogVariantFacet[] = []
+
+  const nameByCode = new Map<
+    string,
+    string
+  >()
+
+  const valuesByCode = new Map<
+    string,
+    Set<string>
+  >()
+
+  const productIdsByCode = new Map<
+    string,
+    Map<string, Set<string>>
+  >()
+
+  // Nomes de eixo e valores reais, a partir das
+  // variantes ativas dos produtos devolvidos.
+  for (const product of products) {
+    for (const variant of product.variants ??
+      []) {
+      if (!variant.isActive) {
+        continue
+      }
+
+      for (const selection of variant.selections) {
+        const option =
+          selection.optionValue.option
+
+        if (!nameByCode.has(option.code)) {
+          nameByCode.set(
+            option.code,
+            option.name,
+          )
+        }
+
+        let values = valuesByCode.get(
+          option.code,
+        )
+
+        if (!values) {
+          values = new Set()
+
+          valuesByCode.set(
+            option.code,
+            values,
+          )
+        }
+
+        values.add(
+          selection.optionValue.value,
+        )
+      }
+    }
+  }
+
+  for (const product of products) {
+    for (const variant of product.variants ??
+      []) {
+      if (!variant.isActive) {
+        continue
+      }
+
+      for (const selection of variant.selections) {
+        const code =
+          selection.optionValue.option.code
+
+        const value =
+          selection.optionValue.value
+
+        // Só conta o valor quando a variante
+        // combina com a seleção atual dos OUTROS
+        // eixos. Dentro do mesmo eixo os valores
+        // selecionados são alternativas (OR), por
+        // isso a seleção do próprio eixo é ignorada.
+        const matchesOtherAxes =
+          variantSelections.every(
+            (selected) =>
+              selected.code === code ||
+              variant.selections.some(
+                (other) =>
+                  other.optionValue.option
+                    .code === selected.code &&
+                  selected.values.includes(
+                    other.optionValue.value,
+                  ),
+              ),
+          )
+
+        if (!matchesOtherAxes) {
+          continue
+        }
+
+        let countsByValue =
+          productIdsByCode.get(code)
+
+        if (!countsByValue) {
+          countsByValue = new Map()
+
+          productIdsByCode.set(
+            code,
+            countsByValue,
+          )
+        }
+
+        let productIds =
+          countsByValue.get(value)
+
+        if (!productIds) {
+          productIds = new Set()
+
+          countsByValue.set(
+            value,
+            productIds,
+          )
+        }
+
+        productIds.add(product.id)
+      }
+    }
+  }
+
+  for (const [
+    code,
+    valuesByCodeEntry,
+  ] of valuesByCode) {
+    const countsByValue =
+      productIdsByCode.get(code)
+
+    const values = Array.from(
+      valuesByCodeEntry,
+    )
+      .map(
+        (value) => ({
+          value: value,
+          productCount:
+            countsByValue?.get(value)
+              ?.size ?? 0,
+        }),
+      )
+      .sort(
+        (first, second) =>
+          first.value.localeCompare(
+            second.value,
+            'pt-PT',
+            {
+              numeric: true,
+            },
+          ),
+      )
+
+    facets.push({
+      code,
+      name:
+        nameByCode.get(code) ?? code,
+      values,
+    })
+  }
+
+  facets.sort((first, second) =>
+    first.name.localeCompare(
+      second.name,
+      'pt-PT',
+    ),
+  )
+
+  return facets
 }
 
 function getCatalogProductOrderBy(
   sort: CatalogSort | undefined,
 ): CatalogProductOrderBy {
+  if (sort === 'newest') {
+    return [
+      {
+        createdAt: 'desc',
+      },
+      {
+        name: 'asc',
+      },
+    ]
+  }
+
   if (sort === 'name-desc') {
     return {
       name: 'desc',
@@ -749,18 +1423,19 @@ async function listCatalogVehicleConfigurations(
   }
 
   const compatibilities =
-    await db.productVehicleCompatibility.findMany({
-      where: {
-        product: {
-          isActive: true,
-          categoryId: {
-            in: categoryIds,
+    (
+      await db.productVehicleCompatibility.findMany({
+        where: {
+          product: {
+            isActive: true,
+            categoryId: {
+              in: categoryIds,
+            },
+          },
+          vehicleConfigurationId: {
+            not: null,
           },
         },
-        vehicleConfigurationId: {
-          not: null,
-        },
-      },
       select: {
         vehicleConfiguration: {
           select: {
@@ -795,6 +1470,7 @@ async function listCatalogVehicleConfigurations(
         },
       },
     })
+    ) as CatalogVehicleCompatibilityRecord[]
 
   const configurationsById =
     new Map<
@@ -843,40 +1519,32 @@ export async function listCatalogProducts(
     orderBy: {
       name: 'asc',
     },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      description: true,
-      price: true,
-      stockQuantity: true,
-      images: true,
-      category: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-      brand: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-        },
-      },
-    },
+    select: catalogProductSelect,
   })
 
+<<<<<<< HEAD
   const defaults = await findDefaultVariants(
     db,
     products.map((product) => product.id),
   )
+=======
+  const metadataByProductId =
+    await getCatalogImageMetadata(
+      db,
+      products.map((product) => product.id),
+    )
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 
   return products.map((product) =>
     toCatalogProduct(
       product,
+<<<<<<< HEAD
       defaults.get(product.id),
+=======
+      metadataByProductId.get(
+        product.id,
+      ),
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     ),
   )
 }
@@ -900,28 +1568,8 @@ export async function getCatalogProductBySlug(
         isActive: true,
       },
       select: {
-        id: true,
-        name: true,
-        slug: true,
+        ...catalogProductSelect,
         sku: true,
-        description: true,
-        price: true,
-        stockQuantity: true,
-        images: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-        brand: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
       },
     })
 
@@ -929,6 +1577,7 @@ export async function getCatalogProductBySlug(
     return null
   }
 
+<<<<<<< HEAD
   const defaults = await findDefaultVariants(
     db,
     [product.id],
@@ -939,6 +1588,20 @@ export async function getCatalogProductBySlug(
   return {
     ...toCatalogProduct(product, defaultVariant),
     sku: defaultVariant?.sku ?? product.sku,
+=======
+  const metadataByProductId =
+    await getCatalogImageMetadata(
+      db,
+      [product.id],
+    )
+
+  return {
+    ...toCatalogProduct(
+      product,
+      metadataByProductId.get(product.id),
+    ),
+    sku: product.sku,
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
   }
 }
 
@@ -1053,9 +1716,19 @@ export async function getCatalogCategoryPageBySlug(
           )
           .map((brand) => brand.id)
 
-  const normalizedVehicleConfigurationId =
-    normalizeVehicleConfigurationId(
-      filters.vehicleConfigurationId,
+  const normalizedVehicleMakeIds =
+    normalizeIdList(
+      filters.vehicleMakeIds,
+    )
+
+  const normalizedVehicleModelIds =
+    normalizeIdList(
+      filters.vehicleModelIds,
+    )
+
+  const normalizedVehicleGenerationIds =
+    normalizeIdList(
+      filters.vehicleGenerationIds,
     )
 
   const where: CatalogProductFindManyArgs['where'] =
@@ -1069,6 +1742,15 @@ export async function getCatalogCategoryPageBySlug(
   if (filters.inStockOnly && !db.productVariant) {
     where.stockQuantity = {
       gt: 0,
+    }
+
+    where.variants = {
+      some: {
+        isActive: true,
+        stockQuantity: {
+          gt: 0,
+        },
+      },
     }
   }
 
@@ -1085,17 +1767,18 @@ export async function getCatalogCategoryPageBySlug(
 
   if (priceFilter && !db.productVariant) {
     where.price = priceFilter
-  }
 
-  if (normalizedVehicleConfigurationId) {
-    where.compatibilities = {
+    where.variants = {
+      ...where.variants,
       some: {
-        vehicleConfigurationId:
-          normalizedVehicleConfigurationId,
+        ...where.variants?.some,
+        isActive: true,
+        price: priceFilter,
       },
     }
   }
 
+<<<<<<< HEAD
   const products =
     await db.product.findMany({
       where,
@@ -1128,8 +1811,105 @@ export async function getCatalogCategoryPageBySlug(
             name: true,
             slug: true,
           },
+=======
+  if (
+    normalizedVehicleMakeIds.length > 0 ||
+    normalizedVehicleModelIds.length > 0 ||
+    normalizedVehicleGenerationIds.length > 0
+  ) {
+    where.compatibilities = {
+      some: {
+        OR: [
+          ...(normalizedVehicleMakeIds.length >
+          0
+            ? [
+                {
+                  vehicleBrandId: {
+                    in: normalizedVehicleMakeIds,
+                  },
+                },
+              ]
+            : []),
+          ...(normalizedVehicleModelIds.length >
+          0
+            ? [
+                {
+                  vehicleModelId: {
+                    in: normalizedVehicleModelIds,
+                  },
+                },
+              ]
+            : []),
+          ...(normalizedVehicleGenerationIds
+            .length > 0
+            ? [
+                {
+                  vehicleGenerationId: {
+                    in:
+                      normalizedVehicleGenerationIds,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+    }
+  }
+
+  // Filtros por opções de variante (ex.:
+  // diameter=19", pcd=5x112, front_drop_mm=40). Uma
+  // variante só corresponde se tiver um dos valores
+  // selecionados de cada eixo escolhido (OR dentro do
+  // eixo) e valores de todos os eixos selecionados (AND
+  // entre eixos: a mesma variante tem de combinar uma
+  // configuração que existe mesmo no catálogo).
+  const variantSelections =
+    normalizeVariantSelections(
+      filters.variantSelections,
+    )
+
+  let productWhere: CatalogProductFindManyArgs['where'] =
+    where
+
+  if (variantSelections.length > 0) {
+    productWhere = {
+      ...where,
+      variants: {
+        some: {
+          ...(where.variants?.some ?? {}),
+          isActive: true,
+          AND: variantSelections.map(
+            (selection) => ({
+              selections: {
+                some: {
+                  optionValue: {
+                    value: {
+                      in: selection.values,
+                    },
+                    option: {
+                      code: selection.code,
+                    },
+                  },
+                },
+              },
+            }),
+          ),
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
         },
       },
+    }
+  }
+
+  const orderBy =
+    getCatalogProductOrderBy(
+      filters.sort,
+    )
+
+  const products =
+    await db.product.findMany({
+      where: productWhere,
+      orderBy,
+      select: catalogProductSelect,
     })
 
   if (
@@ -1139,6 +1919,7 @@ export async function getCatalogCategoryPageBySlug(
     return null
   }
 
+<<<<<<< HEAD
   const defaults = await findDefaultVariants(
     db,
     products.map((product) => product.id),
@@ -1191,6 +1972,13 @@ export async function getCatalogCategoryPageBySlug(
         first.name.localeCompare(second.name),
     )
   }
+=======
+  const metadataByProductId =
+    await getCatalogImageMetadata(
+      db,
+      products.map((product) => product.id),
+    )
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 
   return {
     category:
@@ -1198,7 +1986,19 @@ export async function getCatalogCategoryPageBySlug(
     brands:
       brands.map(toCatalogBrand),
     vehicleConfigurations,
+<<<<<<< HEAD
     products: mappedProducts,
+=======
+    products:
+      products.map((product) =>
+        toCatalogProduct(
+          product,
+          metadataByProductId.get(
+            product.id,
+          ),
+        ),
+      ),
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
   }
 }
 
@@ -1244,11 +2044,634 @@ export async function listCatalogCategories(
           )
         : undefined
     }
-  }
-
-  return categories
+  }  return categories
     .filter((category) =>
       visibleCategoryIds.has(category.id),
     )
     .map(toCatalogCategory)
 }
+<<<<<<< HEAD
+=======
+
+export type CatalogVehicleGenerationFacet = {
+  id: string
+  name: string
+  modelId: string
+  productCount: number
+}
+
+export type CatalogVehicleModelFacet = {
+  id: string
+  name: string
+  brandId: string
+  productCount: number
+  generations: CatalogVehicleGenerationFacet[]
+}
+
+export type CatalogVehicleMakeFacet = {
+  id: string
+  name: string
+  productCount: number
+  models: CatalogVehicleModelFacet[]
+}
+
+export type CatalogBrandFacet = CatalogBrand & {
+  productCount: number
+}
+
+export type CatalogCategoryFacets = {
+  inStockCount: number
+  brands: CatalogBrandFacet[]
+  vehicleMakes: CatalogVehicleMakeFacet[]
+  variantFacets: CatalogVariantFacet[]
+}
+
+type CatalogProductVehicleRecord = {
+  productId: string
+  vehicleBrandId: string
+  vehicleModelId: string
+  vehicleGenerationId: string | null
+}
+
+type CatalogCompatibilityFindManyResult =
+  | CatalogVehicleCompatibilityRecord[]
+  | CatalogProductVehicleRecord[]
+
+type CatalogVehicleBrandRecord = {
+  id: string
+  name: string
+  models: Array<{
+    id: string
+    name: string
+    generations: Array<{
+      id: string
+      name: string
+    }>
+  }>
+}
+
+type FacetDimension =
+  | 'stock'
+  | 'brand'
+  | 'price'
+  | 'vehicle'
+  | 'variant'
+
+function isPriceInRange(
+  price: number,
+  filters: CatalogCategoryFilters,
+) {
+  return (
+    (filters.priceMin === undefined ||
+      price >= filters.priceMin) &&
+    (filters.priceMax === undefined ||
+      price <= filters.priceMax)
+  )
+}
+
+/**
+ * Espelha a consulta SQL do filtro de preço: o preço do
+ * produto e o preço de alguma variante ativa têm de estar
+ * no intervalo, para as contagens nunca divergirem dos
+ * resultados.
+ */
+function getFacetProductPrice(
+  product: CatalogProductRecord,
+  filters: CatalogCategoryFilters,
+) {
+  if (
+    !isPriceInRange(
+      Number(product.price),
+      filters,
+    )
+  ) {
+    return false
+  }
+
+  return (product.variants ?? []).some(
+    (variant) =>
+      variant.isActive &&
+      isPriceInRange(
+        Number(variant.price),
+        filters,
+      ),
+  )
+}
+
+/**
+ * Espelha a consulta SQL do filtro de stock: stock no
+ * produto e uma variante ativa com stock.
+ */
+function getFacetProductInStock(
+  product: CatalogProductRecord,
+) {
+  return (
+    product.stockQuantity > 0 &&
+    (product.variants ?? []).some(
+      (variant) =>
+        variant.isActive &&
+        variant.stockQuantity > 0,
+    )
+  )
+}
+
+function getFacetProductVehicle(
+  product: CatalogProductRecord,
+  compatibilitiesByProductId: Map<
+    string,
+    CatalogProductVehicleRecord[]
+  >,
+) {
+  return (
+    compatibilitiesByProductId.get(product.id) ??
+    []
+  )
+}
+
+function matchesVehicleSelection(
+  compatibilities: CatalogProductVehicleRecord[],
+  makeIds: string[],
+  modelIds: string[],
+  generationIds: string[],
+) {
+  return compatibilities.some(
+    (compatibility) =>
+      makeIds.includes(
+        compatibility.vehicleBrandId,
+      ) ||
+      modelIds.includes(
+        compatibility.vehicleModelId,
+      ) ||
+      (compatibility.vehicleGenerationId !=
+        null &&
+        generationIds.includes(
+          compatibility
+            .vehicleGenerationId,
+        )),
+  )
+}
+
+function matchesVariantSelections(
+  product: CatalogProductRecord,
+  selections: CatalogVariantSelection[],
+) {
+  if (selections.length === 0) {
+    return true
+  }
+
+  return (product.variants ?? []).some(
+    (variant) =>
+      variant.isActive &&
+      selections.every((selection) =>
+        variant.selections.some(
+          (variantSelection) =>
+            variantSelection.optionValue
+                .option.code ===
+              selection.code &&
+            selection.values.includes(
+              variantSelection.optionValue
+                .value,
+            ),
+        ),
+      ),
+  )
+}
+
+function matchesFacetFilters(
+  product: CatalogProductRecord,
+  filters: CatalogCategoryFilters,
+  options: {
+    compatibilitiesByProductId: Map<
+      string,
+      CatalogProductVehicleRecord[]
+    >
+    variantSelections: CatalogVariantSelection[]
+    makeIds: string[]
+    modelIds: string[]
+    generationIds: string[]
+    skip?: FacetDimension
+  },
+) {
+  const brandSlugs =
+    normalizeBrandSlugs(filters.brandSlugs)
+
+  if (
+    options.skip !== 'stock' &&
+    filters.inStockOnly &&
+    !getFacetProductInStock(product)
+  ) {
+    return false
+  }
+
+  if (
+    options.skip !== 'brand' &&
+    brandSlugs.length > 0 &&
+    (!product.brand ||
+      !brandSlugs.includes(product.brand.slug))
+  ) {
+    return false
+  }
+
+  if (
+    options.skip !== 'price' &&
+    !getFacetProductPrice(product, filters)
+  ) {
+    return false
+  }
+
+  if (
+    options.skip !== 'vehicle' &&
+    (options.makeIds.length > 0 ||
+      options.modelIds.length > 0 ||
+      options.generationIds.length > 0) &&
+    !matchesVehicleSelection(
+      getFacetProductVehicle(
+        product,
+        options.compatibilitiesByProductId,
+      ),
+      options.makeIds,
+      options.modelIds,
+      options.generationIds,
+    )
+  ) {
+    return false
+  }
+
+  if (
+    options.skip !== 'variant' &&
+    !matchesVariantSelections(
+      product,
+      options.variantSelections,
+    )
+  ) {
+    return false
+  }
+
+  return true
+}
+
+function countProducts(
+  products: CatalogProductRecord[],
+  predicate: (
+    product: CatalogProductRecord,
+  ) => boolean,
+) {
+  let count = 0
+
+  for (const product of products) {
+    if (predicate(product)) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+/**
+ * Calcula as contagens de todas as facetas da categoria a
+ * partir dos produtos reais. Cada faceta é contada com os
+ * restantes filtros aplicados (exceto o seu próprio), para
+ * que o número mostrado ao lado de cada opção corresponda
+ * aos produtos que essa opção devolve.
+ */
+export function buildCategoryFacets({
+  products,
+  compatibilities,
+  vehicleBrands,
+  filters,
+}: {
+  products: CatalogProductRecord[]
+  compatibilities: CatalogProductVehicleRecord[]
+  vehicleBrands: CatalogVehicleBrandRecord[]
+  filters: CatalogCategoryFilters
+}): CatalogCategoryFacets {
+  const compatibilitiesByProductId =
+    new Map<
+      string,
+      CatalogProductVehicleRecord[]
+    >()
+
+  for (const compatibility of compatibilities) {
+    const current =
+      compatibilitiesByProductId.get(
+        compatibility.productId,
+      ) ?? []
+
+    current.push(compatibility)
+
+    compatibilitiesByProductId.set(
+      compatibility.productId,
+      current,
+    )
+  }
+
+  const variantSelections =
+    normalizeVariantSelections(
+      filters.variantSelections,
+    )
+
+  const generationIds = normalizeIdList(
+    filters.vehicleGenerationIds,
+  )
+
+  const modelIds = normalizeIdList(
+    filters.vehicleModelIds,
+  )
+
+  const makeIds = normalizeIdList(
+    filters.vehicleMakeIds,
+  )
+
+  const matchOptions = {
+    compatibilitiesByProductId,
+    variantSelections,
+    makeIds,
+    modelIds,
+    generationIds,
+  }
+
+  const matches = (
+    product: CatalogProductRecord,
+    skip?: FacetDimension,
+  ) =>
+    matchesFacetFilters(
+      product,
+      filters,
+      skip
+        ? { ...matchOptions, skip }
+        : matchOptions,
+    )
+
+  // Produtos que cumprem tudo menos a variante alimentam
+  // as facetas de opção, para que os valores possíveis
+  // continuem visíveis quando a seleção atual não tem
+  // combinações.
+  const productsForVariantFacets =
+    products.filter((product) =>
+      matches(product, 'variant'),
+    )
+
+  const brandIdsBySlug = new Map<string, string>()
+
+  for (const product of products) {
+    if (product.brand) {
+      brandIdsBySlug.set(
+        product.brand.slug,
+        product.brand.id,
+      )
+    }
+  }
+
+  const brands: CatalogBrandFacet[] = Array.from(
+    brandIdsBySlug.entries(),
+  )
+    .map(([slug, id]) => {
+      const brand =
+        products.find(
+          (product) =>
+            product.brand?.id === id,
+        )?.brand
+
+      return {
+        id,
+        name: brand?.name ?? slug,
+        slug,
+        productCount: countProducts(
+          products,
+          (product) =>
+            product.brand?.slug === slug &&
+            matches(product, 'brand'),
+        ),
+      }
+    })
+    .sort((first, second) =>
+      first.name.localeCompare(
+        second.name,
+        'pt-PT',
+      ),
+    )
+
+  const vehicleMakes: CatalogVehicleMakeFacet[] =
+    vehicleBrands
+      .map((brand) => {
+        const models = (brand.models ?? []).map((model) => {
+            const generations = (model.generations ?? []).map(
+                (generation) => ({
+                  id: generation.id,
+                  name: generation.name,
+                  modelId: model.id,
+                  productCount:
+                    countProducts(
+                      products,
+                      (product) =>
+                        matches(
+                          product,
+                          'vehicle',
+                        ) &&
+                        getFacetProductVehicle(
+                          product,
+                          compatibilitiesByProductId,
+                        ).some(
+                          (compatibility) =>
+                            (compatibility
+                              .vehicleGenerationId ===
+                              generation.id ||
+                              (compatibility
+                                .vehicleGenerationId ===
+                                null &&
+                                compatibility
+                                  .vehicleModelId ===
+                                  model.id)),
+                        ),
+                    ),
+                }),
+              )
+
+            return {
+              id: model.id,
+              name: model.name,
+              brandId: brand.id,
+              productCount:
+                countProducts(
+                  products,
+                  (product) =>
+                    matches(
+                      product,
+                      'vehicle',
+                    ) &&
+                    getFacetProductVehicle(
+                      product,
+                      compatibilitiesByProductId,
+                    ).some(
+                      (compatibility) =>
+                        compatibility
+                          .vehicleModelId ===
+                        model.id,
+                    ),
+                ),
+              generations,
+            }
+          })
+          .sort((first, second) =>
+            first.name.localeCompare(
+              second.name,
+              'pt-PT',
+            ),
+          )
+
+        return {
+          id: brand.id,
+          name: brand.name,
+          productCount:
+            countProducts(
+              products,
+              (product) =>
+                matches(product, 'vehicle') &&
+                getFacetProductVehicle(
+                  product,
+                  compatibilitiesByProductId,
+                ).some(
+                  (compatibility) =>
+                    compatibility
+                      .vehicleBrandId ===
+                    brand.id,
+                ),
+            ),
+          models,
+        }
+      })
+      .sort((first, second) =>
+        first.name.localeCompare(
+          second.name,
+          'pt-PT',
+        ),
+      )
+
+  return {
+    inStockCount: countProducts(
+      products,
+      (product) =>
+        getFacetProductInStock(product) &&
+        matches(product, 'stock'),
+    ),
+    brands,
+    vehicleMakes,
+    variantFacets: buildVariantFacets(
+      productsForVariantFacets,
+      variantSelections,
+    ),
+  }
+}
+
+export async function getCatalogCategoryFacetsBySlug(
+  slug: string,
+  filters: CatalogCategoryFilters = {},
+  options?: {
+    includeVehicleFacets?: boolean
+    client?: CatalogClient
+  },
+): Promise<CatalogCategoryFacets | null> {
+  const normalizedSlug = slug.trim()
+
+  if (!normalizedSlug) {
+    return null
+  }
+
+  const db = getClient(options?.client)
+
+  const categories = await getCategoryRecords(db)
+
+  const category = categories.find(
+    (item) => item.slug === normalizedSlug,
+  )
+
+  if (!category) {
+    return null
+  }
+
+  // Jantes não mostram filtros de veículo (a
+  // compatibilidade vem das especificações da variante),
+  // por isso nem sequer consultamos a árvore de veículos
+  // para esta categoria.
+  const includeVehicleFacets =
+    options?.includeVehicleFacets ??
+    shouldShowVehicleFilter(
+      getCategoryFilterProfile(category),
+    )
+
+  const categoryIds =
+    getCategoryAndDescendantIds(
+      categories,
+      category.id,
+    )
+
+  const products = await db.product.findMany({
+    where: {
+      isActive: true,
+      categoryId: {
+        in: categoryIds,
+      },
+    },
+    orderBy: {
+      name: 'asc',
+    },
+    select: catalogProductSelect,
+  })
+
+  const [compatibilities, vehicleBrands] =
+    await Promise.all([
+      db.productVehicleCompatibility
+        ? (db.productVehicleCompatibility.findMany(
+            {
+              where: {
+                product: {
+                  isActive: true,
+                  categoryId: {
+                    in: categoryIds,
+                  },
+                },
+              },
+              select: {
+                productId: true,
+                vehicleBrandId: true,
+                vehicleModelId: true,
+                vehicleGenerationId: true,
+              },
+            },
+          ) as Promise<
+            CatalogProductVehicleRecord[]
+          >)
+        : Promise.resolve([]),
+      db.vehicleBrand && includeVehicleFacets
+        ? db.vehicleBrand.findMany({
+            orderBy: { name: 'asc' as const },
+            select: {
+              id: true,
+              name: true,
+              models: {
+                orderBy: { name: 'asc' as const },
+                select: {
+                  id: true,
+                  name: true,
+                  generations: {
+                    orderBy: { name: 'asc' as const },
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : Promise.resolve([]),
+    ])
+
+  return buildCategoryFacets({
+    products,
+    compatibilities,
+    vehicleBrands,
+    filters,
+  })
+}
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)

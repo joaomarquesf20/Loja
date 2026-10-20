@@ -3,6 +3,9 @@ import {
 } from 'node:crypto'
 
 import { prisma } from './db'
+import {
+  classifyPaymentConstraintViolation,
+} from './order-lifecycle'
 
 export const SIMULATED_PAYMENT_PROVIDER =
   'PFA_SIMULATED'
@@ -228,17 +231,6 @@ function normalizeRequiredString(
   }
 
   return normalized
-}
-
-function isUniqueConstraintViolation(
-  error: unknown,
-) {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2002'
-  )
 }
 
 function moneyToString(
@@ -477,9 +469,10 @@ async function retryFailedSimulatedPayment(
       )
   } catch (error) {
     if (
-      isUniqueConstraintViolation(
+      classifyPaymentConstraintViolation(
         error,
-      )
+      ) ===
+      'payment-reference'
     ) {
       throw new PaymentInitiationConflictError(
         'A referência de pagamento já está associada a outra encomenda',
@@ -630,9 +623,10 @@ export async function initiateSimulatedPayment(
       })
   } catch (error) {
     if (
-      isUniqueConstraintViolation(
+      classifyPaymentConstraintViolation(
         error,
-      )
+      ) ===
+      'payment-reference'
     ) {
       throw new PaymentInitiationConflictError(
         'A referência de pagamento já está associada a outra encomenda',

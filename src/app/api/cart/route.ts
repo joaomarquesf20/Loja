@@ -5,6 +5,7 @@ import {
   CartInsufficientStockError,
   CartItemNotFoundError,
   CartProductUnavailableError,
+  CartVariantSelectionRequiredError,
   CartValidationError,
   listCartItems,
   removeCartItem,
@@ -85,6 +86,19 @@ function handleCartError(
 
   if (
     error instanceof
+    CartVariantSelectionRequiredError
+  ) {
+    // Combinação de opções inexistente — resposta
+    // controlada para o utilizador escolher outra
+    // configuração (nunca 500).
+    return errorResponse(
+      error.message,
+      400,
+    )
+  }
+
+  if (
+    error instanceof
     CartValidationError
   ) {
     return errorResponse(
@@ -129,7 +143,7 @@ function handleCartError(
   )
 
   return errorResponse(
-    'Erro interno do servidor',
+    'Não foi possível atualizar o carrinho. Tenta novamente.',
     500,
   )
 }
@@ -150,6 +164,16 @@ export async function GET() {
   } catch (error) {
     return handleCartError(error)
   }
+}
+
+function isPositiveInteger(
+  value: unknown,
+): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value > 0
+  )
 }
 
 export async function POST(
@@ -206,8 +230,7 @@ export async function POST(
 
     if (
       quantity !== undefined &&
-      typeof quantity !==
-        'number'
+      !isPositiveInteger(quantity)
     ) {
       return errorResponse(
         'Quantidade inválida',
@@ -227,7 +250,10 @@ export async function POST(
                 : {}),
               productVariantId,
             }
-          : (productId as string),
+          : {
+              productId:
+                productId as string,
+            },
         quantity === undefined
           ? 1
           : quantity,
@@ -315,7 +341,10 @@ export async function PATCH(
                 : {}),
               productVariantId,
             }
-          : (productId as string),
+          : {
+              productId:
+                productId as string,
+            },
         quantity,
       )
 

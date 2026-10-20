@@ -47,6 +47,7 @@ vi.mock(
       OrderLifecycleValidationError,
       OrderLifecycleNotFoundError,
       OrderLifecycleConflictError,
+      PAYMENT_CURRENCY: 'EUR',
       recordVerifiedPayment:
         vi.fn(),
     }
@@ -175,6 +176,8 @@ describe(
             'PFA_SIMULATED',
           paymentReference:
             'pfa_sim_test-123',
+          amount: '128.50',
+          currency: 'EUR',
         })
       },
     )
@@ -201,7 +204,108 @@ describe(
             'PFA_SIMULATED',
           paymentReference:
             'pfa_sim_test-123',
+          amount: '128.50',
+          currency: 'EUR',
         })
+      },
+    )
+
+    test(
+      'devolve 404 em produção sem flag explícita, sem tocar na encomenda',
+      async () => {
+        vi.stubEnv(
+          'NODE_ENV',
+          'production',
+        )
+        vi.stubEnv(
+          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          '',
+        )
+
+        try {
+          const response =
+            await POST(request())
+
+          expect(response.status).toBe(
+            404,
+          )
+          expect(
+            mockRequireActiveUserId,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockInitiateSimulatedPayment,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockRecordVerifiedPayment,
+          ).not.toHaveBeenCalled()
+        } finally {
+          vi.unstubAllEnvs()
+        }
+      },
+    )
+
+    test(
+      'devolve 404 em produção quando a flag não é exatamente true',
+      async () => {
+        vi.stubEnv(
+          'NODE_ENV',
+          'production',
+        )
+        vi.stubEnv(
+          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          'TRUE',
+        )
+
+        try {
+          const response =
+            await POST(request())
+
+          expect(response.status).toBe(
+            404,
+          )
+          expect(
+            mockRequireActiveUserId,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockInitiateSimulatedPayment,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockRecordVerifiedPayment,
+          ).not.toHaveBeenCalled()
+        } finally {
+          vi.unstubAllEnvs()
+        }
+      },
+    )
+
+    test(
+      'devolve 404 em produção mesmo com flag explícita',
+      async () => {
+        vi.stubEnv(
+          'NODE_ENV',
+          'production',
+        )
+        vi.stubEnv(
+          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          'true',
+        )
+
+        try {
+          const response =
+            await POST(request())
+
+          expect(response.status).toBe(
+            404,
+          )
+          expect(
+            mockRequireActiveUserId,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockRecordVerifiedPayment,
+          ).not.toHaveBeenCalled()
+        } finally {
+          vi.unstubAllEnvs()
+        }
       },
     )
 

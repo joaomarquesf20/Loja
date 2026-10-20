@@ -143,9 +143,13 @@ export async function POST(
         ? await recordVerifiedPaymentFailure(
             paymentInput,
           )
-        : await recordVerifiedPayment(
-            paymentInput,
-          )
+        : await recordVerifiedPayment({
+            ...paymentInput,
+            amount:
+              event.amount,
+            currency:
+              event.currency,
+          })
 
     return Response.json(
       {

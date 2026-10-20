@@ -27,7 +27,9 @@ export default function CategorySortControl({
         searchParams.toString(),
       )
 
-    if (nextValue) {
+    // "Novidades" é o valor por omissão, por isso
+    // não fica na URL.
+    if (nextValue && nextValue !== 'newest') {
       params.set('sort', nextValue)
     } else {
       params.delete('sort')
@@ -50,7 +52,7 @@ export default function CategorySortControl({
 
       <select
         aria-label="Ordenar produtos"
-        value={value ?? ''}
+        value={value ?? 'newest'}
         onChange={(event) =>
           handleChange(
             event.target.value,
@@ -58,11 +60,8 @@ export default function CategorySortControl({
         }
         className="h-10 max-w-[12.5rem] rounded-sm border border-white/10 bg-[#15181b] px-3 text-xs font-bold text-white/72 outline-none focus:border-brand/60 sm:max-w-none"
       >
-        <option value="">
-          Nome: A–Z
-        </option>
-        <option value="name-desc">
-          Nome: Z–A
+        <option value="newest">
+          Novidades
         </option>
         <option value="price-asc">
           Preço: menor para maior

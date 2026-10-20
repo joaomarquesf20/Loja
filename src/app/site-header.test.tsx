@@ -177,7 +177,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Maria',
         },
@@ -189,7 +189,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Maria',
         },
@@ -201,7 +201,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
@@ -240,7 +240,7 @@ describe('SiteHeader', () => {
     openAccountMenu()
 
     expect(
-      screen.getByRole('link', {
+      screen.getByRole('menuitem', {
         name:
           'Administração',
       }),
@@ -251,7 +251,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Admin',
         },
@@ -298,7 +298,7 @@ describe('SiteHeader', () => {
 
     fireEvent.click(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
@@ -340,7 +340,7 @@ describe('SiteHeader', () => {
 
     fireEvent.click(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
@@ -354,5 +354,57 @@ describe('SiteHeader', () => {
     ).toHaveTextContent(
       'Não foi possível terminar a sessão.',
     )
+  })
+
+  test('fecha o menu de conta com Escape ou clique fora e devolve o foco ao gatilho', () => {
+    mocks.useSession.mockReturnValue({
+      status: 'authenticated',
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Maria',
+          email: 'maria@example.com',
+          role: 'BUYER',
+        },
+      },
+    })
+
+    render(<SiteHeader />)
+
+    const trigger = screen.getByRole('button', {
+      name: 'Conta',
+    })
+
+    openAccountMenu()
+
+    expect(
+      screen.getByRole('menu'),
+    ).toBeInTheDocument()
+    expect(document.activeElement).not.toBe(
+      trigger,
+    )
+
+    fireEvent.keyDown(window, {
+      key: 'Escape',
+    })
+
+    expect(
+      screen.queryByRole('menu'),
+    ).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(
+      trigger,
+    )
+
+    // Reabre e fecha ao clicar fora do menu.
+    fireEvent.click(trigger)
+    expect(
+      screen.getByRole('menu'),
+    ).toBeInTheDocument()
+
+    fireEvent.pointerDown(document.body)
+
+    expect(
+      screen.queryByRole('menu'),
+    ).not.toBeInTheDocument()
   })
 })

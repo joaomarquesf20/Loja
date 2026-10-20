@@ -1,229 +1,97 @@
 'use client'
 
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
-  FormEvent,
+  useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from 'react'
-import ProductCompatibilitiesClient from './product-compatibilities-client'
 
-type ProductShippingClass =
-  | 'UNASSIGNED'
-  | 'SMALL'
-  | 'STANDARD'
-  | 'BULKY'
-  | 'HEAVY'
-  | 'QUOTE_REQUIRED'
+import type {
+  AdminProduct,
+  AdminProductBulkResult,
+  AdminProductDeleteResult,
+} from '@/server/admin-products'
 
-type AssignableProductShippingClass =
-  Exclude<
-    ProductShippingClass,
-    'UNASSIGNED'
-  >
-
-type Product = {
-  id: string
-  categoryId: string
-  productBrandId: string | null
-  name: string
-  slug: string
-  sku: string
-  description: string | null
-  price: number | string
-  stockQuantity: number
-  isActive: boolean
-  shippingClass: ProductShippingClass
-  mainlandShippingCost:
-    | string
-    | null
-}
+import ProductsRowMenu from './products-row-menu'
 
 type Category = {
   id: string
   name: string
+  slug: string
 }
 
-type ProductBrand = {
+type Manufacturer = {
   id: string
   name: string
-}
-
-type ProductForm = {
-  name: string
   slug: string
-  sku: string
-  description: string
-  price: string
-  stockQuantity: string
-  categoryId: string
-  productBrandId: string
-  isActive: boolean
-  shippingClass:
-    | ProductShippingClass
-    | ''
-  mainlandShippingCost: string
-}
-
-const assignableShippingClasses: Array<{
-  value: AssignableProductShippingClass
-  label: string
-}> = [
-  {
-    value: 'SMALL',
-    label: 'Pequeno',
-  },
-  {
-    value: 'STANDARD',
-    label: 'Normal',
-  },
-  {
-    value: 'BULKY',
-    label: 'Volumoso',
-  },
-  {
-    value: 'HEAVY',
-    label: 'Pesado',
-  },
-  {
-    value: 'QUOTE_REQUIRED',
-    label: 'Sob consulta',
-  },
-]
-
-const shippingClassLabels:
-  Record<ProductShippingClass, string> = {
-  UNASSIGNED: 'Por classificar',
-  SMALL: 'Pequeno',
-  STANDARD: 'Normal',
-  BULKY: 'Volumoso',
-  HEAVY: 'Pesado',
-  QUOTE_REQUIRED: 'Sob consulta',
-}
-
-const emptyForm: ProductForm = {
-  name: '',
-  slug: '',
-  sku: '',
-  description: '',
-  price: '',
-  stockQuantity: '0',
-  categoryId: '',
-  productBrandId: '',
-  isActive: true,
-  shippingClass: '',
-  mainlandShippingCost: '',
-}
-
-function isAssignableShippingClass(
-  value: ProductForm['shippingClass'],
-): value is AssignableProductShippingClass {
-  return (
-    value === 'SMALL' ||
-    value === 'STANDARD' ||
-    value === 'BULKY' ||
-    value === 'HEAVY' ||
-    value === 'QUOTE_REQUIRED'
-  )
-}
-
-function getShippingDescription(
-  shippingClass:
-    ProductForm['shippingClass'],
-) {
-  switch (shippingClass) {
-    case 'SMALL':
-      return 'Usa a tarifa global configurada para artigos pequenos.'
-
-    case 'STANDARD':
-      return 'Usa a tarifa global configurada para artigos de dimensão normal.'
-
-    case 'BULKY':
-      return 'Requer uma tarifa específica para Portugal Continental. O valor é validado pelos limites da configuração comercial e não beneficia de portes grátis.'
-
-    case 'HEAVY':
-      return 'Classe reservada a artigos pesados. O checkout automático permanece indisponível enquanto não existir uma regra comercial ativa.'
-
-    case 'QUOTE_REQUIRED':
-      return 'O transporte deste produto fica sujeito a consulta e não usa checkout automático.'
-
-    case 'UNASSIGNED':
-      return 'Este produto histórico ainda precisa de uma classificação de transporte.'
-
-    default:
-      return null
-  }
-}
-
-function formatProductShipping(
-  product: Product,
-) {
-  const label =
-    shippingClassLabels[
-      product.shippingClass
-    ]
-
-  if (
-    product.shippingClass !==
-    'BULKY'
-  ) {
-    return label
-  }
-
-  if (
-    product.mainlandShippingCost ===
-    null
-  ) {
-    return `${label} — tarifa em falta`
-  }
-
-  const cost = Number(
-    product.mainlandShippingCost,
-  )
-
-  if (!Number.isFinite(cost)) {
-    return `${label} — tarifa inválida`
-  }
-
-  return `${label} — ${cost.toFixed(
-    2,
-  )} €`
 }
 
 async function getErrorMessage(
   response: Response,
 ) {
   try {
-    const data =
-      (await response.json()) as {
-        error?: string
-      }
+    const data = (await response.json()) as {
+      error?: string
+    }
+
+    if (response.status >= 500) {
+      return 'Não foi possível concluir a operação. Tenta novamente.'
+    }
 
     return (
       data.error ??
-      'Ocorreu um erro inesperado'
+      `Erro HTTP ${response.status}`
     )
   } catch {
-    return 'Ocorreu um erro inesperado'
+    return response.status >= 500
+      ? 'Não foi possível concluir a operação. Tenta novamente.'
+      : `Erro HTTP ${response.status}`
   }
+}
+
+function stockSummary(
+  product: AdminProduct,
+) {
+  const total = product.variants.reduce(
+    (sum, variant) =>
+      sum + variant.stockQuantity,
+    0,
+  )
+  const outOfStock =
+    product.variants.filter(
+      (variant) =>
+        variant.stockQuantity === 0,
+    ).length
+
+  if (total === 0) {
+    return 'Sem stock'
+  }
+
+  return `${total} em stock${
+    outOfStock > 0
+      ? ` · ${outOfStock} variante${outOfStock === 1 ? '' : 's'} esgotada${outOfStock === 1 ? '' : 's'}`
+      : ''
+  }`
 }
 
 export default function ProductsClient() {
   const [products, setProducts] =
-    useState<Product[]>([])
-
+    useState<AdminProduct[]>([])
   const [categories, setCategories] =
     useState<Category[]>([])
-
-  const [
-    productBrands,
-    setProductBrands,
-  ] = useState<ProductBrand[]>([])
-
-  const [form, setForm] =
-    useState<ProductForm>(emptyForm)
-
-  const [editingId, setEditingId] =
+  const [manufacturers, setManufacturers] =
+    useState<Manufacturer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(
+    null,
+  )
+  const [busyId, setBusyId] =
     useState<string | null>(null)
+<<<<<<< HEAD
 
   const [editingProduct, setEditingProduct] =
     useState<Product | null>(null)
@@ -237,101 +105,123 @@ export default function ProductsClient() {
     useState(true)
 
   const [submitting, setSubmitting] =
+=======
+  const [bulkBusy, setBulkBusy] =
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     useState(false)
-
-  const [error, setError] =
+  const [selectedIds, setSelectedIds] =
+    useState<string[]>([])
+  const [success, setSuccess] =
     useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [categoryId, setCategoryId] =
+    useState('')
+  const [manufacturerId, setManufacturerId] =
+    useState('')
+  const [status, setStatus] = useState(
+    'all',
+  )
+  const selectAllRef =
+    useRef<HTMLInputElement>(null)
+  const router = useRouter()
 
-  const compatibilityProduct =
-    compatibilityProductId === null
-      ? null
-      : products.find(
-          (product) =>
-            product.id ===
-            compatibilityProductId,
-        ) ?? null
+  const load = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [
+        productsResponse,
+        categoriesResponse,
+        manufacturersResponse,
+      ] = await Promise.all([
+        fetch('/api/admin/products/manage', {
+          cache: 'no-store',
+        }),
+        fetch('/api/admin/categories', {
+          cache: 'no-store',
+        }),
+        fetch('/api/admin/product-brands', {
+          cache: 'no-store',
+        }),
+      ])
 
-  useEffect(() => {
-    async function loadInitialData() {
-      try {
-        setLoading(true)
-        setError(null)
-
-        const [
-          productsResponse,
-          categoriesResponse,
-          brandsResponse,
-        ] = await Promise.all([
-          fetch(
-            '/api/admin/products',
-          ),
-          fetch(
-            '/api/admin/categories',
-          ),
-          fetch(
-            '/api/admin/product-brands',
-          ),
-        ])
-
-        if (!productsResponse.ok) {
+      for (const response of [
+        productsResponse,
+        categoriesResponse,
+        manufacturersResponse,
+      ]) {
+        if (!response.ok) {
           throw new Error(
-            await getErrorMessage(
-              productsResponse,
-            ),
+            await getErrorMessage(response),
           )
         }
-
-        if (!categoriesResponse.ok) {
-          throw new Error(
-            await getErrorMessage(
-              categoriesResponse,
-            ),
-          )
-        }
-
-        if (!brandsResponse.ok) {
-          throw new Error(
-            await getErrorMessage(
-              brandsResponse,
-            ),
-          )
-        }
-
-        const productsData =
-          (await productsResponse.json()) as Product[]
-
-        const categoriesData =
-          (await categoriesResponse.json()) as Category[]
-
-        const brandsData =
-          (await brandsResponse.json()) as ProductBrand[]
-
-        setProducts(productsData)
-        setCategories(categoriesData)
-        setProductBrands(brandsData)
-      } catch (loadError) {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : 'Não foi possível carregar os dados',
-        )
-      } finally {
-        setLoading(false)
       }
-    }
 
-    void loadInitialData()
+      setProducts(
+        (await productsResponse.json()) as AdminProduct[],
+      )
+      setCategories(
+        (await categoriesResponse.json()) as Category[],
+      )
+      setManufacturers(
+        (await manufacturersResponse.json()) as Manufacturer[],
+      )
+      setError(null)
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : 'Não foi possível carregar os produtos',
+      )
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
-  async function reloadProducts() {
-    const response = await fetch(
-      '/api/admin/products',
-    )
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      void load()
+    }, 0)
+    return () => window.clearTimeout(timeout)
+  }, [load])
 
-    if (!response.ok) {
-      throw new Error(
-        await getErrorMessage(response),
+  const filteredProducts = useMemo(() => {
+    const query = search
+      .trim()
+      .toLocaleLowerCase('pt-PT')
+
+    return products.filter((product) => {
+      const matchesSearch =
+        !query ||
+        [
+          product.name,
+          product.sku,
+          product.brand?.name ?? '',
+          product.category.name,
+        ].some((value) =>
+          value
+            .toLocaleLowerCase('pt-PT')
+            .includes(query),
+        )
+      const matchesCategory =
+        !categoryId ||
+        product.category.id === categoryId
+      const matchesManufacturer =
+        !manufacturerId ||
+        product.brand?.id === manufacturerId
+      const matchesStatus =
+        status === 'all' ||
+        (status === 'active' &&
+          product.isActive) ||
+        (status === 'inactive' &&
+          !product.isActive)
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesManufacturer &&
+        matchesStatus
       )
+<<<<<<< HEAD
     }
 
     const data =
@@ -372,138 +262,163 @@ export default function ProductsClient() {
       mainlandShippingCost:
         product.mainlandShippingCost ??
         '',
+=======
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     })
+  }, [
+    categoryId,
+    manufacturerId,
+    products,
+    search,
+    status,
+  ])
 
-    setError(null)
+  const visibleProductIds = useMemo(
+    () =>
+      filteredProducts.map(
+        (product) => product.id,
+      ),
+    [filteredProducts],
+  )
+  const activeSelectedIds = useMemo(
+    () => {
+      const visible = new Set(
+        visibleProductIds,
+      )
+      return selectedIds.filter((id) =>
+        visible.has(id),
+      )
+    },
+    [selectedIds, visibleProductIds],
+  )
+  const allVisibleSelected =
+    visibleProductIds.length > 0 &&
+    activeSelectedIds.length ===
+      visibleProductIds.length
+  const someVisibleSelected =
+    activeSelectedIds.length > 0
+
+  // A filter change must not leave a previous selection active for a later
+  // destructive action. The header therefore always operates on the current
+  // filtered result set, never on the complete catalogue.
+
+  useEffect(() => {
+    if (!selectAllRef.current) {
+      return
+    }
+
+    selectAllRef.current.indeterminate =
+      someVisibleSelected &&
+      !allVisibleSelected
+  }, [
+    allVisibleSelected,
+    someVisibleSelected,
+  ])
+
+  function applyDeleteResult(
+    result: AdminProductDeleteResult,
+  ) {
+    setProducts((current) => {
+      if (result.status === 'deleted') {
+        return current.filter(
+          (product) =>
+            product.id !== result.id,
+        )
+      }
+
+      return current.map((product) =>
+        product.id === result.id
+          ? {
+              ...product,
+              isActive: false,
+            }
+          : product,
+      )
+    })
+    setSelectedIds((current) =>
+      current.filter((id) => id !== result.id),
+    )
   }
 
-  async function handleSubmit(
-    event:
-      FormEvent<HTMLFormElement>,
+  function pluralizeProducts(
+    count: number,
   ) {
-    event.preventDefault()
+    return count === 1
+      ? 'produto'
+      : 'produtos'
+  }
 
-    if (submitting) {
-      return
-    }
+  function countedProducts(
+    count: number,
+    singular: string,
+    plural: string,
+  ) {
+    return `${count} ${pluralizeProducts(
+      count,
+    )} ${count === 1 ? singular : plural}`
+  }
 
-    if (!form.categoryId) {
-      setError(
-        'Seleciona uma categoria válida',
+  function bulkSummary(
+    result: AdminProductBulkResult,
+  ) {
+    const parts: string[] = []
+    const {
+      deleted,
+      archived,
+      updated,
+      failed,
+    } = result
+
+    if (deleted.length > 0) {
+      parts.push(
+        countedProducts(
+          deleted.length,
+          'eliminado',
+          'eliminados',
+        ),
       )
-      return
     }
-
-    if (
-      !isAssignableShippingClass(
-        form.shippingClass,
+    if (archived.length > 0) {
+      parts.push(
+        `${countedProducts(
+          archived.length,
+          'arquivado',
+          'arquivados',
+        )} para preservar o histórico`,
       )
-    ) {
-      setError(
-        'Seleciona uma classe de transporte válida',
+    }
+    if (updated.length > 0) {
+      const actionLabel =
+        result.action === 'activate'
+          ? ['ativado', 'ativados']
+          : ['desativado', 'desativados']
+      parts.push(
+        countedProducts(
+          updated.length,
+          actionLabel[0],
+          actionLabel[1],
+        ),
       )
-      return
+    }
+    if (failed.length === 0) {
+      return parts.join(' · ')
     }
 
-    const price =
-      Number(form.price)
+    return parts.length > 0
+      ? `${parts.join(' · ')}; ${failed.length} ${pluralizeProducts(
+          failed.length,
+        )} sem alteração`
+      : `${failed.length} ${pluralizeProducts(
+          failed.length,
+        )} sem alteração`
+  }
 
-    const stockQuantity =
-      Number(form.stockQuantity)
-
-    if (
-      !Number.isFinite(price) ||
-      price < 0
-    ) {
-      setError(
-        'O preço tem de ser um número igual ou superior a zero',
-      )
-      return
-    }
-
-    if (
-      !Number.isInteger(
-        stockQuantity,
-      ) ||
-      stockQuantity < 0
-    ) {
-      setError(
-        'O stock tem de ser um número inteiro igual ou superior a zero',
-      )
-      return
-    }
-
-    let mainlandShippingCost:
-      | number
-      | null = null
-
-    if (
-      form.shippingClass ===
-      'BULKY'
-    ) {
-      if (
-        !form.mainlandShippingCost.trim()
-      ) {
-        setError(
-          'Indica os portes específicos do artigo volumoso',
-        )
-        return
-      }
-
-      const parsedShippingCost =
-        Number(
-          form.mainlandShippingCost,
-        )
-
-      if (
-        !Number.isFinite(
-          parsedShippingCost,
-        ) ||
-        parsedShippingCost < 0
-      ) {
-        setError(
-          'Os portes específicos têm de ser um número igual ou superior a zero',
-        )
-        return
-      }
-
-      const scaled =
-        parsedShippingCost * 100
-
-      if (
-        Math.abs(
-          scaled -
-            Math.round(scaled),
-        ) > 0.000001
-      ) {
-        setError(
-          'Os portes específicos só podem ter duas casas decimais',
-        )
-        return
-      }
-
-      mainlandShippingCost =
-        parsedShippingCost
-    }
-
-    const payload = {
-      name: form.name,
-      slug: form.slug,
-      sku: form.sku,
-      description:
-        form.description,
-      price,
-      stockQuantity,
-      categoryId:
-        form.categoryId,
-      productBrandId:
-        form.productBrandId ||
-        null,
-      isActive: form.isActive,
-      shippingClass:
-        form.shippingClass,
-      mainlandShippingCost,
-    }
+  async function toggleProduct(
+    product: AdminProduct,
+  ) {
+    setBusyId(product.id)
+    setError(null)
+    setSuccess(null)
 
     const requestPayload =
       editingId && editingProduct
@@ -538,709 +453,621 @@ export default function ProductsClient() {
         : payload
 
     try {
-      setSubmitting(true)
-      setError(null)
-
       const response = await fetch(
-        editingId
-          ? `/api/admin/products/${editingId}`
-          : '/api/admin/products',
+        `/api/admin/products/${product.id}/manage`,
         {
-          method: editingId
-            ? 'PATCH'
-            : 'POST',
+          method: 'PATCH',
           headers: {
             'Content-Type':
               'application/json',
           },
+<<<<<<< HEAD
           body: JSON.stringify(
             requestPayload,
           ),
+=======
+          body: JSON.stringify({
+            isActive: !product.isActive,
+          }),
+>>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
         },
       )
 
       if (!response.ok) {
         throw new Error(
-          await getErrorMessage(
-            response,
-          ),
+          await getErrorMessage(response),
         )
       }
 
-      await reloadProducts()
-      resetForm()
-    } catch (submitError) {
+      await load()
+    } catch (toggleError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : 'Não foi possível guardar o produto',
+        toggleError instanceof Error
+          ? toggleError.message
+          : 'Não foi possível alterar o estado do produto',
       )
     } finally {
-      setSubmitting(false)
+      setBusyId(null)
     }
   }
 
-  async function handleDelete(
-    product: Product,
+  async function deleteProduct(
+    product: AdminProduct,
   ) {
-    if (submitting) {
-      return
-    }
-
-    const confirmed =
-      window.confirm(
-        `Tens a certeza de que queres apagar "${product.name}"?`,
-      )
+    const confirmed = window.confirm(
+      `Eliminar “${product.name}”?\n\nO produto será removido permanentemente quando não estiver associado a encomendas ou histórico. As variantes, imagens e restantes registos específicos do produto também serão removidos apenas quando for seguro. Se existir histórico, o produto será arquivado para preservar as encomendas e pagamentos. Esta ação não pode ser anulada.`,
+    )
 
     if (!confirmed) {
       return
     }
 
-    try {
-      setSubmitting(true)
-      setError(null)
+    setBusyId(product.id)
+    setError(null)
+    setSuccess(null)
 
+    try {
       const response = await fetch(
-        `/api/admin/products/${product.id}`,
+        `/api/admin/products/${product.id}/manage`,
+        { method: 'DELETE' },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          await getErrorMessage(response),
+        )
+      }
+
+      const result =
+        (await response.json()) as AdminProductDeleteResult
+      applyDeleteResult(result)
+      setSuccess(
+        result.status === 'deleted'
+          ? `${result.name} eliminado.`
+          : `${result.name}: ${result.message}`,
+      )
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Não foi possível eliminar o produto',
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function runBulkAction(
+    action: 'activate' | 'deactivate' | 'delete',
+  ) {
+    const ids = [...activeSelectedIds]
+    if (ids.length === 0) {
+      return
+    }
+
+    if (action === 'delete') {
+      const selectedProducts =
+        products.filter((product) =>
+          ids.includes(product.id),
+        )
+      const names = selectedProducts
+        .slice(0, 8)
+        .map((product) => product.name)
+      const remaining =
+        selectedProducts.length - names.length
+      const nameList =
+        names.join(', ') +
+        (remaining > 0
+          ? ` e mais ${remaining}`
+          : '')
+      const confirmed = window.confirm(
+        `Eliminar ${ids.length} ${pluralizeProducts(
+          ids.length,
+        )}?\n\nProdutos: ${nameList}.\n\nOs produtos sem referências serão eliminados permanentemente, incluindo os seus registos específicos quando for seguro. Os que tiverem histórico ou carrinhos associados serão arquivados para preservar encomendas e pagamentos. Esta ação não pode ser anulada.`,
+      )
+
+      if (!confirmed) {
+        return
+      }
+    }
+
+    setBulkBusy(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch(
+        '/api/admin/products/bulk',
         {
-          method: 'DELETE',
+          method: 'POST',
+          headers: {
+            'Content-Type':
+              'application/json',
+          },
+          body: JSON.stringify({
+            ids,
+            action,
+          }),
         },
       )
 
       if (!response.ok) {
         throw new Error(
-          await getErrorMessage(
-            response,
-          ),
+          await getErrorMessage(response),
         )
       }
 
-      await reloadProducts()
-
-      if (
-        editingId === product.id
-      ) {
-        resetForm()
-      }
-
-      if (
-        compatibilityProductId ===
-        product.id
-      ) {
-        setCompatibilityProductId(
-          null,
-        )
-      }
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : 'Não foi possível apagar o produto',
+      const result =
+        (await response.json()) as AdminProductBulkResult
+      const deletedIds = new Set(
+        result.deleted.map((item) => item.id),
       )
+      const archivedIds = new Set(
+        result.archived.map((item) => item.id),
+      )
+      const updatedById = new Map(
+        result.updated.map((item) => [
+          item.id,
+          item.isActive,
+        ]),
+      )
+
+      setProducts((current) =>
+        current
+          .filter(
+            (product) =>
+              !deletedIds.has(product.id),
+          )
+          .map((product) => {
+            if (archivedIds.has(product.id)) {
+              return {
+                ...product,
+                isActive: false,
+              }
+            }
+
+            const isActive = updatedById.get(
+              product.id,
+            )
+            return isActive === undefined
+              ? product
+              : {
+                  ...product,
+                  isActive,
+                }
+          }),
+      )
+      setSelectedIds([])
+
+      const summary = bulkSummary(result)
+      if (
+        result.deleted.length > 0 ||
+        result.archived.length > 0 ||
+        result.updated.length > 0
+      ) {
+        setSuccess(`${summary}.`)
+      }
+
+      if (result.failed.length > 0) {
+        const failureDetails =
+          result.failed
+            .map((failure) => {
+              const product = products.find(
+                (item) =>
+                  item.id === failure.id,
+              )
+              return `${product?.name ?? failure.id}: ${failure.error}`
+            })
+            .join(' ')
+        setError(
+          `${result.failed.length} ${pluralizeProducts(
+            result.failed.length,
+          )} ${result.failed.length === 1 ? 'não pôde' : 'não puderam'} ser processado${result.failed.length === 1 ? '' : 's'}. ${failureDetails}`,
+        )
+      }
+    } catch (bulkError) {
+      setError(
+        bulkError instanceof Error
+          ? bulkError.message
+          : 'Não foi possível concluir a operação em massa',
+      )
+      if (action === 'delete') {
+        setSelectedIds([])
+      }
     } finally {
-      setSubmitting(false)
+      setBulkBusy(false)
+    }
+  }
+
+  async function duplicateProduct(
+    product: AdminProduct,
+  ) {
+    if (
+      !window.confirm(
+        `Duplicar “${product.name}” como uma cópia inativa?`,
+      )
+    ) {
+      return
+    }
+
+    setBusyId(product.id)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch(
+        `/api/admin/products/${product.id}/duplicate`,
+        { method: 'POST' },
+      )
+
+      if (!response.ok) {
+        throw new Error(
+          await getErrorMessage(response),
+        )
+      }
+
+      const copy =
+        (await response.json()) as AdminProduct
+      router.push(`/admin/products/${copy.id}`)
+    } catch (duplicateError) {
+      setError(
+        duplicateError instanceof Error
+          ? duplicateError.message
+          : 'Não foi possível duplicar o produto',
+      )
+      setBusyId(null)
     }
   }
 
   if (loading) {
     return (
-      <p>A carregar produtos...</p>
+      <p className="rounded-lg border border-black/8 bg-white p-5 text-sm text-[#687078]">
+        A carregar produtos...
+      </p>
     )
   }
 
-  const shippingDescription =
-    getShippingDescription(
-      form.shippingClass,
-    )
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {error && (
-        <div
+        <p
           role="alert"
-          className="rounded border border-red-300 bg-red-50 p-3 text-red-800"
+          className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
         >
           {error}
-        </div>
+        </p>
+      )}
+      {success && (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+        >
+          {success}
+        </p>
       )}
 
-      <section className="rounded border p-4">
-        <h2 className="mb-4 text-xl font-semibold">
-          {editingId
-            ? 'Editar produto'
-            : 'Novo produto'}
-        </h2>
+      <section className="grid gap-3 rounded-xl border border-black/8 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(160px,220px))]">
+        <label className="grid gap-1 text-xs font-black uppercase tracking-[0.08em] text-[#687078]">
+          Pesquisar
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setSelectedIds([])
+            }}
+            placeholder="Nome, SKU ou marca"
+            className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
+          />
+        </label>
 
-        {categories.length === 0 && (
-          <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">
-            Não existem categorias
-            disponíveis. Cria primeiro uma
-            categoria antes de adicionar
-            produtos.
-          </p>
-        )}
-
-        {editingId &&
-          form.shippingClass ===
-            'UNASSIGNED' && (
-            <p className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">
-              Este produto histórico ainda
-              está por classificar. Escolhe
-              uma classe de transporte antes
-              de guardar.
-            </p>
-          )}
-
-        <form
-          onSubmit={handleSubmit}
-          className="grid gap-4 md:grid-cols-2"
-        >
-          <label className="flex flex-col gap-1">
-            <span>Nome</span>
-            <input
-              required
-              type="text"
-              value={form.name}
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    name:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>Slug</span>
-            <input
-              required
-              type="text"
-              value={form.slug}
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    slug:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>SKU</span>
-            <input
-              required
-              type="text"
-              value={form.sku}
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    sku:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>Preço (€)</span>
-            <input
-              required
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.price}
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    price:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>Stock</span>
-            <input
-              required
-              type="number"
-              min="0"
-              step="1"
-              value={
-                form.stockQuantity
-              }
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    stockQuantity:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>Categoria</span>
-            <select
-              required
-              value={form.categoryId}
-              disabled={
-                submitting ||
-                categories.length === 0
-              }
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    categoryId:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            >
-              <option value="">
-                Selecionar categoria
-              </option>
-
-              {categories.map(
-                (category) => (
-                  <option
-                    key={category.id}
-                    value={
-                      category.id
-                    }
-                  >
-                    {category.name}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>Marca</span>
-            <select
-              value={
-                form.productBrandId
-              }
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    productBrandId:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            >
-              <option value="">
-                Sem marca
-              </option>
-
-              {productBrands.map(
-                (brand) => (
-                  <option
-                    key={brand.id}
-                    value={brand.id}
-                  >
-                    {brand.name}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span>
-              Classe de transporte
-            </span>
-
-            <select
-              required
-              aria-label="Classe de transporte"
-              value={
-                form.shippingClass
-              }
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    shippingClass:
-                      event.target
-                        .value as ProductForm['shippingClass'],
-                    mainlandShippingCost:
-                      event.target
-                        .value ===
-                      'BULKY'
-                        ? current.mainlandShippingCost
-                        : '',
-                  }),
-                )
-              }
-              className="rounded border px-3 py-2"
-            >
-              <option value="">
-                Selecionar classe
-              </option>
-
-              {form.shippingClass ===
-                'UNASSIGNED' && (
-                <option
-                  value="UNASSIGNED"
-                  disabled
-                >
-                  Por classificar —
-                  corrigir
-                </option>
-              )}
-
-              {assignableShippingClasses.map(
-                (option) => (
-                  <option
-                    key={
-                      option.value
-                    }
-                    value={
-                      option.value
-                    }
-                  >
-                    {option.label}
-                  </option>
-                ),
-              )}
-            </select>
-
-            {shippingDescription && (
-              <span className="text-sm text-neutral-600">
-                {
-                  shippingDescription
-                }
-              </span>
-            )}
-          </label>
-
-          {form.shippingClass ===
-            'BULKY' && (
-            <label className="flex flex-col gap-1">
-              <span>
-                Portes específicos —
-                Portugal Continental (€)
-              </span>
-
-              <input
-                required
-                aria-label="Portes específicos — Portugal Continental (€)"
-                type="number"
-                min="0"
-                step="0.01"
-                value={
-                  form.mainlandShippingCost
-                }
-                disabled={submitting}
-                onChange={(event) =>
-                  setForm(
-                    (current) => ({
-                      ...current,
-                      mainlandShippingCost:
-                        event.target
-                          .value,
-                    }),
-                  )
-                }
-                className="rounded border px-3 py-2"
-              />
-
-              <span className="text-sm text-neutral-600">
-                O servidor valida este
-                valor pelos limites
-                atualmente definidos na
-                configuração comercial.
-              </span>
-            </label>
-          )}
-
-          <label className="flex items-center gap-2 self-end py-2">
-            <input
-              type="checkbox"
-              checked={form.isActive}
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    isActive:
-                      event.target
-                        .checked,
-                  }),
-                )
-              }
-            />
-
-            <span>Produto ativo</span>
-          </label>
-
-          <label className="flex flex-col gap-1 md:col-span-2">
-            <span>Descrição</span>
-            <textarea
-              value={
-                form.description
-              }
-              disabled={submitting}
-              onChange={(event) =>
-                setForm(
-                  (current) => ({
-                    ...current,
-                    description:
-                      event.target
-                        .value,
-                  }),
-                )
-              }
-              rows={4}
-              className="rounded border px-3 py-2"
-            />
-          </label>
-
-          <div className="flex gap-2 md:col-span-2">
-            <button
-              type="submit"
-              disabled={
-                submitting ||
-                categories.length === 0
-              }
-              className="rounded bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting
-                ? 'A guardar...'
-                : editingId
-                  ? 'Guardar alterações'
-                  : 'Criar produto'}
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={resetForm}
-                className="rounded border px-4 py-2 disabled:cursor-not-allowed disabled:opacity-50"
+        <label className="grid gap-1 text-xs font-black uppercase tracking-[0.08em] text-[#687078]">
+          Categoria
+          <select
+            value={categoryId}
+            onChange={(event) => {
+              setCategoryId(event.target.value)
+              setSelectedIds([])
+            }}
+            className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
+          >
+            <option value="">
+              Todas
+            </option>
+            {categories.map((category) => (
+              <option
+                key={category.id}
+                value={category.id}
               >
-                Cancelar
-              </button>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="grid gap-1 text-xs font-black uppercase tracking-[0.08em] text-[#687078]">
+          Fabricante
+          <select
+            value={manufacturerId}
+            onChange={(event) => {
+              setManufacturerId(
+                event.target.value,
+              )
+              setSelectedIds([])
+            }}
+            className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
+          >
+            <option value="">
+              Todos
+            </option>
+            {manufacturers.map(
+              (manufacturer) => (
+                <option
+                  key={manufacturer.id}
+                  value={manufacturer.id}
+                >
+                  {manufacturer.name}
+                </option>
+              ),
             )}
-          </div>
-        </form>
+          </select>
+        </label>
+
+        <label className="grid gap-1 text-xs font-black uppercase tracking-[0.08em] text-[#687078]">
+          Estado
+          <select
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value)
+              setSelectedIds([])
+            }}
+            className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
+          >
+            <option value="all">
+              Todos
+            </option>
+            <option value="active">
+              Ativos
+            </option>
+            <option value="inactive">
+              Inativos
+            </option>
+          </select>
+        </label>
       </section>
 
-      <section>
-        <h2 className="mb-4 text-xl font-semibold">
-          Produtos
-        </h2>
+      <section className="overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-black/8 px-5 py-4">
+          <div>
+            <h2 className="font-black">
+              Todos os produtos
+            </h2>
+            <p className="mt-0.5 text-xs text-[#687078]">
+              {filteredProducts.length} de {products.length} produtos
+            </p>
+          </div>
+          <Link
+            href="/admin/products/new"
+            className="rounded-lg bg-[#ef5b2a] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#d94a1b]"
+          >
+            + Novo produto
+          </Link>
+        </div>
 
-        {products.length === 0 ? (
-          <p>
-            Não existem produtos.
-          </p>
+        {activeSelectedIds.length > 0 && (
+          <div
+            role="toolbar"
+            aria-label="Ações em massa"
+            className="flex flex-wrap items-center gap-2 border-b border-black/8 bg-[#fff8f4] px-5 py-3"
+          >
+            <span className="mr-auto text-sm font-bold">
+              {activeSelectedIds.length}{' '}
+              {pluralizeProducts(
+                activeSelectedIds.length,
+              )}{' '}
+              selecionado{activeSelectedIds.length === 1 ? '' : 's'}
+            </span>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() =>
+                void runBulkAction('activate')
+              }
+              className="rounded-md border border-black/12 bg-white px-3 py-1.5 text-sm font-bold hover:border-black/30 disabled:opacity-50"
+            >
+              Ativar selecionados
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() =>
+                void runBulkAction('deactivate')
+              }
+              className="rounded-md border border-black/12 bg-white px-3 py-1.5 text-sm font-bold hover:border-black/30 disabled:opacity-50"
+            >
+              Desativar / Arquivar selecionados
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() =>
+                void runBulkAction('delete')
+              }
+              className="rounded-md border border-red-200 bg-white px-3 py-1.5 text-sm font-bold text-red-700 hover:border-red-400 disabled:opacity-50"
+            >
+              Eliminar permanentemente
+            </button>
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={() =>
+                setSelectedIds([])
+              }
+              className="rounded-md px-3 py-1.5 text-sm font-bold text-[#ef5b2a] underline disabled:opacity-50"
+            >
+              Limpar seleção
+            </button>
+          </div>
+        )}
+
+        {filteredProducts.length === 0 ? (
+          <div className="p-10 text-center">
+            <p className="font-semibold">
+              Nenhum produto corresponde aos filtros
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setCategoryId('')
+                setManufacturerId('')
+                setStatus('all')
+                setSelectedIds([])
+              }}
+              className="mt-2 text-sm font-bold text-[#ef5b2a] underline"
+            >
+              Limpar filtros
+            </button>
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse border">
-              <thead>
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="bg-[#f4f4f2] text-xs uppercase tracking-[0.06em] text-[#687078]">
                 <tr>
-                  <th className="border p-2 text-left">
-                    Nome
+                  <th className="w-12 px-4 py-3">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      disabled={
+                        visibleProductIds.length === 0 ||
+                        bulkBusy
+                      }
+                      onChange={() =>
+                        setSelectedIds(
+                          allVisibleSelected
+                            ? []
+                            : visibleProductIds,
+                        )
+                      }
+                      aria-label="Selecionar todos os produtos visíveis"
+                      className="h-4 w-4 accent-[#ef5b2a]"
+                    />
                   </th>
-
-                  <th className="border p-2 text-left">
-                    SKU
+                  <th className="px-4 py-3 font-black">
+                    Produto
                   </th>
-
-                  <th className="border p-2 text-left">
-                    Slug
+                  <th className="px-4 py-3 font-black">
+                    Fabricante
                   </th>
-
-                  <th className="border p-2 text-right">
-                    Preço
+                  <th className="px-4 py-3 font-black">
+                    Categoria
                   </th>
-
-                  <th className="border p-2 text-right">
+                  <th className="px-4 py-3 text-center font-black">
+                    Variantes
+                  </th>
+                  <th className="px-4 py-3 font-black">
                     Stock
                   </th>
-
-                  <th className="border p-2 text-left">
-                    Transporte
-                  </th>
-
-                  <th className="border p-2 text-left">
+                  <th className="px-4 py-3 font-black">
                     Estado
                   </th>
-
-                  <th className="border p-2 text-left">
+                  <th className="px-4 py-3 text-right font-black">
                     Ações
                   </th>
                 </tr>
               </thead>
-
-              <tbody>
-                {products.map(
-                  (product) => (
-                    <tr
-                      key={
-                        product.id
-                      }
-                    >
-                      <td className="border p-2">
-                        {
-                          product.name
-                        }
-                      </td>
-
-                      <td className="border p-2">
-                        {
-                          product.sku
-                        }
-                      </td>
-
-                      <td className="border p-2">
-                        {
-                          product.slug
-                        }
-                      </td>
-
-                      <td className="border p-2 text-right">
-                        {Number(
-                          product.price,
-                        ).toFixed(2)}{' '}
-                        €
-                      </td>
-
-                      <td className="border p-2 text-right">
-                        {
-                          product.stockQuantity
-                        }
-                      </td>
-
-                      <td className="border p-2">
-                        {formatProductShipping(
-                          product,
+              <tbody className="divide-y divide-black/6">
+                {filteredProducts.map((product) => (
+                  <tr key={product.id}>
+                    <td className="px-4 py-4">
+                      <input
+                        type="checkbox"
+                        checked={activeSelectedIds.includes(
+                          product.id,
                         )}
-                      </td>
-
-                      <td className="border p-2">
+                        disabled={bulkBusy}
+                        onChange={() =>
+                          setSelectedIds(
+                            (current) =>
+                              current.includes(
+                                product.id,
+                              )
+                                ? current.filter(
+                                    (id) =>
+                                      id !==
+                                      product.id,
+                                  )
+                                : [
+                                    ...current,
+                                    product.id,
+                                  ],
+                          )
+                        }
+                        aria-label={`Selecionar ${product.name}`}
+                        className="h-4 w-4 accent-[#ef5b2a]"
+                      />
+                    </td>
+                    <td className="px-4 py-4">
+                      <Link
+                        href={`/admin/products/${product.id}`}
+                        className="font-black hover:text-[#ef5b2a]"
+                      >
+                        {product.name}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-[#687078]">
+                        {product.sku}
+                      </p>
+                    </td>
+                    <td className="px-4 py-4">
+                      {product.brand?.name ?? '—'}
+                    </td>
+                    <td className="px-4 py-4">
+                      {product.category.name}
+                    </td>
+                    <td className="px-4 py-4 text-center font-semibold">
+                      {product.variants.length}
+                    </td>
+                    <td className="px-4 py-4">
+                      {stockSummary(product)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-black ${
+                          product.isActive
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-neutral-200 text-neutral-700'
+                        }`}
+                      >
                         {product.isActive
                           ? 'Ativo'
                           : 'Inativo'}
-                      </td>
-
-                      <td className="border p-2">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            disabled={
-                              submitting
-                            }
-                            onClick={() =>
-                              startEditing(
-                                product,
-                              )
-                            }
-                            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Editar
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={
-                              submitting
-                            }
-                            onClick={() => {
-                              setCompatibilityProductId(
-                                product.id,
-                              )
-                              setError(
-                                null,
-                              )
-                            }}
-                            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Compatibilidades
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={
-                              submitting
-                            }
-                            onClick={() => {
-                              void handleDelete(
-                                product,
-                              )
-                            }}
-                            className="rounded border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            Apagar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ),
-                )}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <ProductsRowMenu
+                        product={product}
+                        busy={
+                          busyId === product.id || bulkBusy
+                        }
+                        onToggleActive={(target) =>
+                          void toggleProduct(target)
+                        }
+                        onDuplicate={(target) =>
+                          void duplicateProduct(target)
+                        }
+                        onDelete={(target) =>
+                          void deleteProduct(target)
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
       </section>
-
-      {compatibilityProduct && (
-        <ProductCompatibilitiesClient
-          key={
-            compatibilityProduct.id
-          }
-          productId={
-            compatibilityProduct.id
-          }
-          productName={
-            compatibilityProduct.name
-          }
-          onClose={() =>
-            setCompatibilityProductId(
-              null,
-            )
-          }
-        />
-      )}
     </div>
   )
 }

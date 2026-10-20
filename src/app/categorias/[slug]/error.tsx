@@ -1,6 +1,9 @@
 'use client'
 
+import { useEffect } from 'react'
+
 export default function Error({
+  error,
   reset,
 }: {
   error: Error & {
@@ -8,6 +11,16 @@ export default function Error({
   }
   reset: () => void
 }) {
+  // Em desenvolvimento o erro original (ficheiro, função e
+  // mensagem) fica na consola — a UI genérica nunca esconde a
+  // causa real de uma categoria que falha a carregar.
+  useEffect(() => {
+    console.error(
+      '[categorias] falha ao carregar a categoria:',
+      error,
+    )
+  }, [error])
+
   return (
     <main className="grid min-h-[70vh] place-items-center bg-[#0b0d0f] px-4 text-white">
       <section className="w-full max-w-xl border border-white/8 bg-[#111315] px-6 py-10 sm:px-8">

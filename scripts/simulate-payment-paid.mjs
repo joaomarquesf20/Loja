@@ -8,6 +8,9 @@ import pg from 'pg'
 const { Client } = pg
 
 const PAYMENT_PROVIDER = 'PFA_SIMULATED'
+const PAYMENT_CURRENCY = 'EUR'
+const PAYMENT_AMOUNT_PATTERN =
+  /^\d{1,8}(?:\.\d{1,2})?$/
 const DEFAULT_BASE_URL = 'http://localhost:3000'
 const LOCAL_HOSTNAMES = new Set([
   'localhost',
@@ -173,7 +176,8 @@ async function findOrder(
           "orderNumber",
           "paymentStatus",
           "paymentProvider",
-          "paymentReference"
+          "paymentReference",
+          total::text AS total
         FROM "Order"
         WHERE
           id = $1
@@ -218,6 +222,17 @@ function validateOrderForSimulation(order) {
   }
 
   if (
+    typeof order.total !== 'string' ||
+    !PAYMENT_AMOUNT_PATTERN.test(
+      order.total.trim(),
+    )
+  ) {
+    fail(
+      'A encomenda não tem um total válido.',
+    )
+  }
+
+  if (
     order.paymentStatus !== 'PENDING' &&
     order.paymentStatus !== 'PAID'
   ) {
@@ -242,6 +257,8 @@ function createSignedWebhook(
       PAYMENT_PROVIDER,
     paymentReference:
       order.paymentReference,
+    amount: order.total.trim(),
+    currency: PAYMENT_CURRENCY,
   })
 
   const digest = createHmac(

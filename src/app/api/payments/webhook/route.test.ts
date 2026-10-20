@@ -114,6 +114,8 @@ const event = {
     'provider-test',
   paymentReference:
     'pay-123',
+  amount: '128.50',
+  currency: 'EUR',
 }
 
 const paidOrder = {
@@ -131,9 +133,13 @@ const paidOrder = {
 }
 
 const failedEvent = {
-  ...event,
   type:
     'PAYMENT_FAILED' as const,
+  orderId: 'order-1',
+  paymentProvider:
+    'provider-test',
+  paymentReference:
+    'pay-123',
 }
 
 const failedOrder = {
@@ -188,6 +194,8 @@ describe(
             'provider-test',
           paymentReference:
             'pay-123',
+          amount: '128.50',
+          currency: 'EUR',
         })
       },
     )

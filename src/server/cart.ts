@@ -103,6 +103,16 @@ export class CartProductUnavailableError extends Error {
   }
 }
 
+export class CartVariantSelectionRequiredError extends Error {
+  constructor(
+    message = 'Esta combinação não está disponível. Escolha outra configuração.',
+  ) {
+    super(message)
+    this.name =
+      'CartVariantSelectionRequiredError'
+  }
+}
+
 export class CartInsufficientStockError extends Error {
   constructor(
     message = 'Stock insuficiente',
@@ -448,12 +458,25 @@ async function resolveVariant(
       },
     })
 
+  if (!variant) {
+    // Uma variante inexistente para o produto indica uma
+    // combinação de opções inválida (ex.: 19" + 5x100 que
+    // nunca foi criada) e não um produto indisponível.
+    if (normalized.productVariantId) {
+      throw new CartVariantSelectionRequiredError()
+    }
+
+    throw new CartProductUnavailableError()
+  }
+
   if (
-    !variant ||
-    (normalized.productId &&
-      variant.productId !==
-        normalized.productId)
+    normalized.productId &&
+    variant.productId !==
+      normalized.productId
   ) {
+    // A variante existe mas pertence a outro produto:
+    // o pedido é inconsistente, não uma combinação de
+    // opções do produto pedido.
     throw new CartProductUnavailableError()
   }
 

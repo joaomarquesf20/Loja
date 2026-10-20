@@ -228,6 +228,34 @@ function createProduct(
   }
 }
 
+type TestCheckoutVariant = {
+  id: string
+  productId: string
+  sku: string
+  price: string | number | { toString(): string }
+  stockQuantity: number
+  isActive: boolean
+  selections: Array<{
+    optionValue: {
+      value: string
+      option: {
+        code: string
+        name: string
+        position: number
+      }
+    }
+  }>
+}
+
+type TestCheckoutCartItem = {
+  id: string
+  productId: string
+  productVariantId: string
+  quantity: number
+  product: ReturnType<typeof createProduct>
+  variant: TestCheckoutVariant
+}
+
 function createCartItem(
   overrides?: Partial<{
     id: string
@@ -238,7 +266,7 @@ function createCartItem(
         typeof createProduct
       >
   }>,
-) {
+): TestCheckoutCartItem {
   const product =
     overrides?.product ??
     createProduct()

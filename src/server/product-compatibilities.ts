@@ -1,3 +1,4 @@
+import { getCategoryFilterProfile } from '@/lib/storefront-category-profile'
 import { prisma } from './db'
 import {
   ConflictError,
@@ -144,7 +145,21 @@ export interface ProductCompatibilityClient {
   product: {
     findUnique(args: {
       where: { id: string }
-    }): Promise<{ id: string } | null>
+      select?: {
+        category: {
+          select: {
+            name: true
+            slug: true
+          }
+        }
+      }
+    }): Promise<{
+      id: string
+      category?: {
+        name: string
+        slug: string
+      } | null
+    } | null>
   }
 
   vehicleConfiguration: {
@@ -231,10 +246,36 @@ export async function addProductCompatibility(
 
   const product = await db.product.findUnique({
     where: { id: data.productId },
+    select: {
+      category: {
+        select: {
+          name: true,
+          slug: true,
+        },
+      },
+    },
   })
 
   if (!product) {
     throw new NotFoundError('Produto não encontrado')
+  }
+
+  /**
+   * Jantes não podem ter uma lista de veículos compatível
+   * mantida à mão: many modelos encaixam em vários
+   * veículos e a adequação resulta das especificações da
+   * variante (furação, furo central, diâmetro, largura e
+   * offset).
+   */
+  if (
+    product.category &&
+    getCategoryFilterProfile(
+      product.category,
+    ) === 'wheels'
+  ) {
+    throw new ValidationError(
+      'Jantes não usam compatibilidade por veículo: a adequação é calculada a partir das especificações da variante',
+    )
   }
 
   const vehicleConfiguration =

@@ -7,7 +7,11 @@ import {
   signOut,
   useSession,
 } from 'next-auth/react'
-import { useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 
 type HeaderCategory = {
   name: string
@@ -20,7 +24,7 @@ type SiteHeaderProps = {
 }
 
 const navLinkClass =
-  'whitespace-nowrap py-2.5 text-[11px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:text-white focus:outline-none focus-visible:text-white'
+  'whitespace-nowrap py-2.5 text-[11px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:text-white focus:outline-none focus-visible:text-white focus-visible:ring-2 focus-visible:ring-brand'
 
 function SearchIcon() {
   return (
@@ -138,6 +142,70 @@ export default function SiteHeader({
     setIsAccountMenuOpen,
   ] = useState(false)
 
+  const accountTriggerRef =
+    useRef<HTMLButtonElement>(null)
+  const accountMenuRef =
+    useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) {
+      return
+    }
+
+    const menu = accountMenuRef.current
+
+    menu
+      ?.querySelector<HTMLElement>(
+        'a, button:not([disabled])',
+      )
+      ?.focus()
+
+    function onKeyDown(
+      event: KeyboardEvent,
+    ) {
+      if (event.key === 'Escape') {
+        setIsAccountMenuOpen(false)
+
+        accountTriggerRef.current?.focus()
+      }
+    }
+
+    function onPointerDown(
+      event: PointerEvent,
+    ) {
+      if (
+        !menu?.contains(
+          event.target as Node,
+        ) &&
+        !accountTriggerRef.current?.contains(
+          event.target as Node,
+        )
+      ) {
+        setIsAccountMenuOpen(false)
+      }
+    }
+
+    window.addEventListener(
+      'keydown',
+      onKeyDown,
+    )
+    window.addEventListener(
+      'pointerdown',
+      onPointerDown,
+    )
+
+    return () => {
+      window.removeEventListener(
+        'keydown',
+        onKeyDown,
+      )
+      window.removeEventListener(
+        'pointerdown',
+        onPointerDown,
+      )
+    }
+  }, [isAccountMenuOpen])
+
   if (
     pathname === '/admin' ||
     pathname.startsWith('/admin/')
@@ -213,12 +281,12 @@ export default function SiteHeader({
             name="q"
             aria-label="Pesquisar produtos"
             placeholder="Pesquisar produtos, marcas ou categorias..."
-            className="min-w-0 flex-1 bg-transparent px-0 py-2 text-sm font-medium text-white outline-none placeholder:text-white/28"
+            className="min-w-0 flex-1 bg-transparent px-0 py-2 text-sm font-medium text-white outline-none placeholder:text-white/50"
           />
 
           <button
             type="submit"
-            className="inline-flex shrink-0 items-center justify-center border-l border-white/10 px-4 text-[10px] font-black uppercase tracking-[0.09em] text-white/58 transition hover:bg-brand hover:text-white focus:outline-none focus-visible:bg-brand focus-visible:text-white sm:px-5"
+            className="inline-flex shrink-0 items-center justify-center border-l border-white/10 px-4 text-[10px] font-black uppercase tracking-[0.09em] text-white/58 transition hover:bg-brand hover:text-white focus:outline-none focus-visible:bg-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:text-white sm:px-5"
           >
             Pesquisar
           </button>
@@ -226,14 +294,16 @@ export default function SiteHeader({
 
         <div className="relative flex items-center justify-end gap-1.5">
           {status === 'loading' ? (
-            <span className="hidden px-2 text-xs text-white/40 xl:inline">
+            <span className="hidden px-2 text-xs text-white/55 xl:inline">
               A verificar sessão…
             </span>
           ) : user ? (
             <div className="relative">
               <button
+                ref={accountTriggerRef}
                 type="button"
                 aria-label="Conta"
+                aria-haspopup="menu"
                 aria-expanded={
                   isAccountMenuOpen
                 }
@@ -254,6 +324,7 @@ export default function SiteHeader({
 
               {isAccountMenuOpen && (
                 <div
+                  ref={accountMenuRef}
                   role="menu"
                   className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-md border border-white/10 bg-[#15181b] p-1.5 shadow-2xl shadow-black/45"
                 >
@@ -262,7 +333,7 @@ export default function SiteHeader({
                       {accountLabel}
                     </p>
                     {user.email && (
-                      <p className="mt-0.5 truncate text-[10px] text-white/38">
+                      <p className="mt-0.5 truncate text-[10px] text-white/55">
                         {user.email}
                       </p>
                     )}
@@ -274,6 +345,7 @@ export default function SiteHeader({
                       user.email ??
                       undefined
                     }
+                    role="menuitem"
                     className="mt-1 flex items-center rounded px-3 py-2 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white"
                   >
                     {accountLabel}
@@ -283,6 +355,7 @@ export default function SiteHeader({
                     'ADMIN' && (
                     <Link
                       href="/admin"
+                      role="menuitem"
                       className="flex items-center rounded px-3 py-2 text-sm font-bold text-white/64 transition hover:bg-white/7 hover:text-white"
                     >
                       Administração
@@ -291,6 +364,7 @@ export default function SiteHeader({
 
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={
                       handleSignOut
                     }
@@ -319,7 +393,7 @@ export default function SiteHeader({
             <>
               <Link
                 href="/registar"
-                className="hidden rounded px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/35 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand xl:inline-flex"
+                className="hidden rounded px-2 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/58 transition hover:bg-white/7 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand xl:inline-flex"
               >
                 Criar conta
               </Link>
