@@ -50,3 +50,6 @@ playwright/.cache/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Estado local da ferramenta (BD SQLite e logs), não é código
+.freebuff/
