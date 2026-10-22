@@ -255,47 +255,6 @@ function createFacetedProduct(
 
 describe('Catalog', () => {
   describe('listCatalogProducts', () => {
-    test('usa preço e stock da variante default após o checkout', async () => {
-      const client = createClient()
-      client.productVariant = {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            productId: 'product-1',
-            sku: 'VAR-001',
-            price: '24.50',
-            stockQuantity: 0,
-            isActive: true,
-            images: [],
-          },
-        ]),
-      }
-
-      vi.mocked(client.product.findMany).mockResolvedValue([
-        {
-          id: 'product-1',
-          name: 'Produto 1',
-          slug: 'produto-1',
-          description: null,
-          price: '19.99',
-          stockQuantity: 5,
-          images: [],
-          category: {
-            id: 'category-1',
-            name: 'Categoria 1',
-            slug: 'categoria-1',
-          },
-          brand: null,
-        },
-      ])
-
-      const [product] = await listCatalogProducts(client)
-
-      expect(product).toMatchObject({
-        price: 24.5,
-        inStock: false,
-      })
-    })
-
     test('consulta apenas produtos ativos', async () => {
       const client = createClient()
 
@@ -767,51 +726,6 @@ describe('Catalog', () => {
   })
 
   describe('getCatalogProductBySlug', () => {
-    test('mostra SKU e preço da variante default', async () => {
-      const client = createClient()
-      client.productVariant = {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            productId: 'product-1',
-            sku: 'VAR-001',
-            price: '29.90',
-            stockQuantity: 1,
-            isActive: true,
-            images: ['/variant.jpg'],
-          },
-        ]),
-      }
-
-      vi.mocked(client.product.findFirst).mockResolvedValue({
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        sku: 'SKU-001',
-        description: null,
-        price: '19.90',
-        stockQuantity: 0,
-        images: [],
-        category: {
-          id: 'category-1',
-          name: 'Categoria 1',
-          slug: 'categoria-1',
-        },
-        brand: null,
-      })
-
-      const product = await getCatalogProductBySlug(
-        'produto-1',
-        client,
-      )
-
-      expect(product).toMatchObject({
-        sku: 'VAR-001',
-        price: 29.9,
-        inStock: true,
-        images: ['/variant.jpg'],
-      })
-    })
-
     test('procura apenas produto ativo pelo slug', async () => {
       const client = createClient()
 
@@ -931,91 +845,6 @@ describe('Catalog', () => {
   })
 
   describe('getCatalogCategoryPageBySlug', () => {
-    test('filtra stock e preço e ordena pelo preço das variantes default', async () => {
-      const client = createClient()
-      client.productVariant = {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            productId: 'product-a',
-            sku: 'VAR-A',
-            price: '10.00',
-            stockQuantity: 0,
-            isActive: true,
-            images: [],
-          },
-          {
-            productId: 'product-b',
-            sku: 'VAR-B',
-            price: '30.00',
-            stockQuantity: 2,
-            isActive: true,
-            images: [],
-          },
-          {
-            productId: 'product-c',
-            sku: 'VAR-C',
-            price: '20.00',
-            stockQuantity: 2,
-            isActive: true,
-            images: [],
-          },
-        ]),
-      }
-
-      vi.mocked(client.category.findMany).mockResolvedValue([
-        {
-          id: 'category-1',
-          parentId: null,
-          name: 'Categoria 1',
-          slug: 'categoria-1',
-          description: null,
-          _count: { products: 3 },
-        },
-      ])
-
-      vi.mocked(client.product.findMany).mockResolvedValue(
-        ['a', 'b', 'c'].map((letter) => ({
-          id: `product-${letter}`,
-          name: `Produto ${letter}`,
-          slug: `produto-${letter}`,
-          description: null,
-          price: '100.00',
-          stockQuantity: 10,
-          images: [],
-          category: {
-            id: 'category-1',
-            name: 'Categoria 1',
-            slug: 'categoria-1',
-          },
-          brand: null,
-        })),
-      )
-
-      const page = await getCatalogCategoryPageBySlug(
-        'categoria-1',
-        {
-          inStockOnly: true,
-          priceMin: 20,
-          sort: 'price-asc',
-        },
-        client,
-      )
-
-      expect(client.product.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: {
-            isActive: true,
-            categoryId: { in: ['category-1'] },
-          },
-          orderBy: { name: 'asc' },
-        }),
-      )
-      expect(page?.products.map((product) => product.id)).toEqual([
-        'product-c',
-        'product-b',
-      ])
-    })
-
     test('slug vazio devolve null sem consultar a base de dados', async () => {
       const client = createClient()
 
@@ -3872,9 +3701,6 @@ describe('Catalog', () => {
       ])
     })
   })
-<<<<<<< HEAD
-})
-=======
 
   describe('regressão — facetas de veículo em categorias não-wheel', () => {
     test('vehicleBrand.findMany recebe select e buildCategoryFacets nunca lê models undefined', async () => {
@@ -3970,4 +3796,3 @@ describe('Catalog', () => {
     })
   })
 })
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)

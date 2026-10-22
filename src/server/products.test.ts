@@ -175,32 +175,6 @@ describe('products service', () => {
 })
 
   describe('listProducts', () => {
-    test('mostra preço, SKU e stock da variante default', async () => {
-      client.productVariant = {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            productId: product.id,
-            sku: 'SKU-VARIANTE',
-            price: '24.50',
-            stockQuantity: 3,
-          },
-        ]),
-        upsert: vi.fn(),
-      }
-
-      vi.mocked(client.product.findMany).mockResolvedValue([
-        product,
-      ])
-
-      const [result] = await listProducts(client)
-
-      expect(result).toMatchObject({
-        sku: 'SKU-VARIANTE',
-        price: 24.5,
-        stockQuantity: 3,
-      })
-    })
-
     test('ordena produtos e inclui os portes do Continente', async () => {
       vi.mocked(
         client.product.findMany,
@@ -299,50 +273,6 @@ describe('products service', () => {
   })
 
   describe('createProduct', () => {
-    test('grava produto e variante default na mesma transação', async () => {
-      vi.mocked(client.product.findUnique).mockResolvedValue(null)
-      vi.mocked(client.category.findUnique).mockResolvedValue({
-        id: 'category-test',
-      })
-
-      const txCreate = vi.fn().mockResolvedValue(product)
-      const txUpsert = vi.fn().mockRejectedValue(
-        new Error('Falha na variante'),
-      )
-
-      client.$transaction = vi.fn(async (callback) =>
-        callback({
-          ...client,
-          product: {
-            ...client.product,
-            create: txCreate,
-          },
-          productVariant: {
-            upsert: txUpsert,
-          },
-        }),
-      )
-
-      await expect(
-        createProduct(
-          {
-            name: 'Produto Teste',
-            slug: 'produto-teste',
-            sku: 'SKU-TESTE-001',
-            price: 19.99,
-            stockQuantity: 10,
-            categoryId: 'category-test',
-            shippingClass: 'STANDARD',
-          },
-          client,
-        ),
-      ).rejects.toThrow('Falha na variante')
-
-      expect(client.$transaction).toHaveBeenCalledOnce()
-      expect(txCreate).toHaveBeenCalledOnce()
-      expect(txUpsert).toHaveBeenCalledOnce()
-      expect(client.product.create).not.toHaveBeenCalled()
-    })
     test('rejeita input inválido', async () => {
       await expect(
         createProduct(
@@ -1263,44 +1193,6 @@ describe('products service', () => {
       )
     })
 
-<<<<<<< HEAD
-    test('editar o nome não repõe o stock legado na variante default', async () => {
-      client.productVariant = {
-        upsert: vi.fn(),
-      }
-
-      vi.mocked(client.product.findUnique).mockResolvedValue(product)
-      vi.mocked(client.product.update).mockResolvedValue({
-        ...product,
-        name: 'Produto Atualizado',
-      })
-
-      await updateProduct(
-        'product-test',
-        { name: 'Produto Atualizado' },
-        client,
-      )
-
-      expect(client.productVariant.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          update: {},
-        }),
-      )
-    })
-
-    test('sincroniza apenas os campos comerciais alterados explicitamente', async () => {
-      client.productVariant = {
-        upsert: vi.fn(),
-      }
-
-      vi.mocked(client.product.findUnique).mockResolvedValue(product)
-      vi.mocked(client.product.update).mockResolvedValue({
-        ...product,
-        price: 24.5,
-        stockQuantity: 0,
-        isActive: false,
-      })
-=======
     test('envia preço e stock do formulário à variante default', async () => {
       vi.mocked(
         client.product.findUnique,
@@ -1311,34 +1203,16 @@ describe('products service', () => {
       vi.mocked(
         client.product.update,
       ).mockResolvedValue(product)
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
 
       await updateProduct(
         'product-test',
         {
-<<<<<<< HEAD
-          price: 24.5,
-          stockQuantity: 0,
-          isActive: false,
-=======
           price: 24.9,
           stockQuantity: 7,
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
         },
         client,
       )
 
-<<<<<<< HEAD
-      expect(client.productVariant.upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          update: {
-            price: 24.5,
-            stockQuantity: 0,
-            isActive: false,
-          },
-        }),
-      )
-=======
       // O preço e o stock do formulário básico
       // passam a escrever a variante 'default',
       // em vez de campos do Product.
@@ -1418,7 +1292,6 @@ describe('products service', () => {
           optionKey: 'default',
         },
       })
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     })
 
     test('permite corrigir produto histórico UNASSIGNED', async () => {

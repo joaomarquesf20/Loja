@@ -91,23 +91,7 @@ export default function ProductsClient() {
   )
   const [busyId, setBusyId] =
     useState<string | null>(null)
-<<<<<<< HEAD
-
-  const [editingProduct, setEditingProduct] =
-    useState<Product | null>(null)
-
-  const [
-    compatibilityProductId,
-    setCompatibilityProductId,
-  ] = useState<string | null>(null)
-
-  const [loading, setLoading] =
-    useState(true)
-
-  const [submitting, setSubmitting] =
-=======
   const [bulkBusy, setBulkBusy] =
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     useState(false)
   const [selectedIds, setSelectedIds] =
     useState<string[]>([])
@@ -221,49 +205,6 @@ export default function ProductsClient() {
         matchesManufacturer &&
         matchesStatus
       )
-<<<<<<< HEAD
-    }
-
-    const data =
-      (await response.json()) as Product[]
-
-    setProducts(data)
-  }
-
-  function resetForm() {
-    setForm(emptyForm)
-    setEditingId(null)
-    setEditingProduct(null)
-  }
-
-  function startEditing(
-    product: Product,
-  ) {
-    setEditingId(product.id)
-    setEditingProduct(product)
-
-    setForm({
-      name: product.name,
-      slug: product.slug,
-      sku: product.sku,
-      description:
-        product.description ?? '',
-      price: String(product.price),
-      stockQuantity: String(
-        product.stockQuantity,
-      ),
-      categoryId:
-        product.categoryId,
-      productBrandId:
-        product.productBrandId ?? '',
-      isActive: product.isActive,
-      shippingClass:
-        product.shippingClass,
-      mainlandShippingCost:
-        product.mainlandShippingCost ??
-        '',
-=======
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     })
   }, [
     categoryId,
@@ -420,38 +361,6 @@ export default function ProductsClient() {
     setError(null)
     setSuccess(null)
 
-    const requestPayload =
-      editingId && editingProduct
-        ? {
-            name: payload.name,
-            slug: payload.slug,
-            description: payload.description,
-            categoryId: payload.categoryId,
-            productBrandId: payload.productBrandId,
-            shippingClass: payload.shippingClass,
-            mainlandShippingCost:
-              payload.mainlandShippingCost,
-            ...(payload.sku !== editingProduct.sku
-              ? { sku: payload.sku }
-              : {}),
-            ...(payload.price !==
-            Number(editingProduct.price)
-              ? { price: payload.price }
-              : {}),
-            ...(payload.stockQuantity !==
-            editingProduct.stockQuantity
-              ? {
-                  stockQuantity:
-                    payload.stockQuantity,
-                }
-              : {}),
-            ...(payload.isActive !==
-            editingProduct.isActive
-              ? { isActive: payload.isActive }
-              : {}),
-          }
-        : payload
-
     try {
       const response = await fetch(
         `/api/admin/products/${product.id}/manage`,
@@ -461,15 +370,9 @@ export default function ProductsClient() {
             'Content-Type':
               'application/json',
           },
-<<<<<<< HEAD
-          body: JSON.stringify(
-            requestPayload,
-          ),
-=======
           body: JSON.stringify({
             isActive: !product.isActive,
           }),
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
         },
       )
 

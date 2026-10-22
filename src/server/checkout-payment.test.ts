@@ -159,11 +159,7 @@ function createCartItem() {
   return {
     id: 'cart-1',
     productId: 'product-1',
-<<<<<<< HEAD
-    productVariantId: 'variant-1',
-=======
     productVariantId: 'variant-product-1',
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     quantity: 2,
     product: {
       id: 'product-1',
@@ -177,11 +173,7 @@ function createCartItem() {
       shippingRates: [],
     },
     variant: {
-<<<<<<< HEAD
-      id: 'variant-1',
-=======
       id: 'variant-product-1',
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
       productId: 'product-1',
       sku: 'SKU-1',
       price: '19.99',
@@ -417,12 +409,9 @@ describe('checkout payment terms', () => {
 
     expect(
       orderTx.productVariant.updateMany,
-<<<<<<< HEAD
-=======
     ).not.toHaveBeenCalled()
     expect(
       orderTx.product.updateMany,
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     ).not.toHaveBeenCalled()
     expect(
       orderTx.order.create,

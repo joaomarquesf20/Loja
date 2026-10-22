@@ -62,15 +62,6 @@ type CatalogProductDetailRecord =
     sku: string
   }
 
-<<<<<<< HEAD
-type CatalogDefaultVariant = {
-  productId: string
-  sku: string
-  price: CatalogPrice
-  stockQuantity: number
-  isActive: boolean
-  images: string[]
-=======
 type CatalogImageRecord = {
   id: string
   productId: string
@@ -85,7 +76,6 @@ type CatalogImageRecord = {
       code: string
     }
   } | null
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 }
 
 type CatalogCategoryRecord = {
@@ -422,23 +412,6 @@ type CatalogProductFindManyArgs = {
 }
 
 export interface CatalogClient {
-<<<<<<< HEAD
-  productVariant?: {
-    findMany(args: {
-      where: {
-        productId: { in: string[] }
-        optionKey: 'default'
-      }
-      select: {
-        productId: true
-        sku: true
-        price: true
-        stockQuantity: true
-        isActive: true
-        images: true
-      }
-    }): Promise<CatalogDefaultVariant[]>
-=======
   productImage?: {
     findMany(args: {
       where: {
@@ -470,7 +443,6 @@ export interface CatalogClient {
         }
       }
     }): Promise<CatalogImageRecord[]>
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
   }
 
   product: {
@@ -774,11 +746,7 @@ async function getCatalogImageMetadata(
 
 function toCatalogProduct(
   product: CatalogProductRecord,
-<<<<<<< HEAD
-  variant?: CatalogDefaultVariant,
-=======
   imageMetadata: ProductImageMetadata[] = [],
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 ): CatalogProduct {
   const sellableVariants =
     (product.variants ?? []).filter(
@@ -805,16 +773,6 @@ function toCatalogProduct(
     name: product.name,
     slug: product.slug,
     description: product.description,
-<<<<<<< HEAD
-    price: Number(variant?.price ?? product.price),
-    inStock: variant
-      ? variant.isActive && variant.stockQuantity > 0
-      : product.stockQuantity > 0,
-    images:
-      variant && variant.images.length > 0
-        ? variant.images
-        : product.images,
-=======
     price,
     inStock: hasVariants
       ? sellableVariants.some(
@@ -832,44 +790,12 @@ function toCatalogProduct(
             product.defaultFinish,
         }
       : {}),
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     category: product.category,
     brand: product.brand,
     variants: sortVariants(
       sellableVariants,
     ).map(toCatalogVariant),
   }
-}
-
-async function findDefaultVariants(
-  db: CatalogClient,
-  productIds: string[],
-) {
-  if (!db.productVariant || productIds.length === 0) {
-    return new Map<string, CatalogDefaultVariant>()
-  }
-
-  const variants = await db.productVariant.findMany({
-    where: {
-      productId: { in: productIds },
-      optionKey: 'default',
-    },
-    select: {
-      productId: true,
-      sku: true,
-      price: true,
-      stockQuantity: true,
-      isActive: true,
-      images: true,
-    },
-  })
-
-  return new Map(
-    variants.map((variant) => [
-      variant.productId,
-      variant,
-    ]),
-  )
 }
 
 function toCatalogCategory(
@@ -1522,29 +1448,18 @@ export async function listCatalogProducts(
     select: catalogProductSelect,
   })
 
-<<<<<<< HEAD
-  const defaults = await findDefaultVariants(
-    db,
-    products.map((product) => product.id),
-  )
-=======
   const metadataByProductId =
     await getCatalogImageMetadata(
       db,
       products.map((product) => product.id),
     )
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 
   return products.map((product) =>
     toCatalogProduct(
       product,
-<<<<<<< HEAD
-      defaults.get(product.id),
-=======
       metadataByProductId.get(
         product.id,
       ),
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
     ),
   )
 }
@@ -1577,18 +1492,6 @@ export async function getCatalogProductBySlug(
     return null
   }
 
-<<<<<<< HEAD
-  const defaults = await findDefaultVariants(
-    db,
-    [product.id],
-  )
-
-  const defaultVariant = defaults.get(product.id)
-
-  return {
-    ...toCatalogProduct(product, defaultVariant),
-    sku: defaultVariant?.sku ?? product.sku,
-=======
   const metadataByProductId =
     await getCatalogImageMetadata(
       db,
@@ -1601,7 +1504,6 @@ export async function getCatalogProductBySlug(
       metadataByProductId.get(product.id),
     ),
     sku: product.sku,
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
   }
 }
 
@@ -1739,18 +1641,10 @@ export async function getCatalogCategoryPageBySlug(
       },
     }
 
-<<<<<<< HEAD
-  if (filters.inStockOnly && !db.productVariant) {
-    where.stockQuantity = {
-      gt: 0,
-    }
-
-=======
   if (filters.inStockOnly) {
     // O stock de listagem vem das variantes: basta uma
     // variante ativa com stock para o produto estar
     // disponível.
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     where.variants = {
       some: {
         isActive: true,
@@ -1772,16 +1666,10 @@ export async function getCatalogCategoryPageBySlug(
     filters.priceMax,
   )
 
-<<<<<<< HEAD
-  if (priceFilter && !db.productVariant) {
-    where.price = priceFilter
-
-=======
   if (priceFilter) {
     // O preço de listagem de um produto é o da variante
     // ativa mais barata: o filtro SQL é avaliado apenas nas
     // variantes ativas.
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     where.variants = {
       ...where.variants,
       some: {
@@ -1792,40 +1680,6 @@ export async function getCatalogCategoryPageBySlug(
     }
   }
 
-<<<<<<< HEAD
-  const products =
-    await db.product.findMany({
-      where,
-      orderBy:
-        getCatalogProductOrderBy(
-          db.productVariant &&
-          (filters.sort === 'price-asc' ||
-            filters.sort === 'price-desc')
-            ? 'name-asc'
-            : filters.sort,
-        ),
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        description: true,
-        price: true,
-        stockQuantity: true,
-        images: true,
-        category: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-        brand: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-=======
   if (
     normalizedVehicleMakeIds.length > 0 ||
     normalizedVehicleModelIds.length > 0 ||
@@ -1908,7 +1762,6 @@ export async function getCatalogCategoryPageBySlug(
               },
             }),
           ),
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
         },
       },
     }
@@ -1933,66 +1786,11 @@ export async function getCatalogCategoryPageBySlug(
     return null
   }
 
-<<<<<<< HEAD
-  const defaults = await findDefaultVariants(
-    db,
-    products.map((product) => product.id),
-  )
-
-  const mappedProducts = products
-    .map((product) =>
-      toCatalogProduct(
-        product,
-        defaults.get(product.id),
-      ),
-    )
-    .filter((product) => {
-      if (!db.productVariant) {
-        return true
-      }
-
-      if (filters.inStockOnly && !product.inStock) {
-        return false
-      }
-
-      if (
-        priceFilter?.gte !== undefined &&
-        product.price < priceFilter.gte
-      ) {
-        return false
-      }
-
-      if (
-        priceFilter?.lte !== undefined &&
-        product.price > priceFilter.lte
-      ) {
-        return false
-      }
-
-      return true
-    })
-
-  if (
-    db.productVariant &&
-    (filters.sort === 'price-asc' ||
-      filters.sort === 'price-desc')
-  ) {
-    const direction =
-      filters.sort === 'price-asc' ? 1 : -1
-
-    mappedProducts.sort(
-      (first, second) =>
-        direction * (first.price - second.price) ||
-        first.name.localeCompare(second.name),
-    )
-  }
-=======
   const metadataByProductId =
     await getCatalogImageMetadata(
       db,
       products.map((product) => product.id),
     )
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 
   const mappedProducts = products.map(
     (product) =>
@@ -2010,26 +1808,10 @@ export async function getCatalogCategoryPageBySlug(
     brands:
       brands.map(toCatalogBrand),
     vehicleConfigurations,
-<<<<<<< HEAD
-<<<<<<< HEAD
-    products: mappedProducts,
-=======
-    products:
-      products.map((product) =>
-        toCatalogProduct(
-          product,
-          metadataByProductId.get(
-            product.id,
-          ),
-        ),
-      ),
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
-=======
     products: sortCatalogProducts(
       mappedProducts,
       filters.sort,
     ),
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
   }
 }
 
@@ -2081,8 +1863,6 @@ export async function listCatalogCategories(
     )
     .map(toCatalogCategory)
 }
-<<<<<<< HEAD
-=======
 
 export type CatalogVehicleGenerationFacet = {
   id: string
@@ -2692,4 +2472,3 @@ export async function getCatalogCategoryFacetsBySlug(
     filters,
   })
 }
->>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)

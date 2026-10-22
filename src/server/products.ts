@@ -49,13 +49,6 @@ type ProductRecord = {
   variants?: ProductVariantSummaryRecord[]
 }
 
-type DefaultVariantCommerce = {
-  productId: string
-  sku: string
-  price: DecimalValue
-  stockQuantity: number
-}
-
 export type ProductResponse = Omit<
   ProductRecord,
   'shippingRates' | 'variants'
@@ -128,27 +121,7 @@ const mainlandShippingInclude = {
 } as const
 
 export interface ProductClient {
-<<<<<<< HEAD
-  $transaction?<T>(
-    callback: (tx: ProductClient) => Promise<T>,
-  ): Promise<T>
-
-  productVariant?: {
-    findMany?(args: {
-      where: {
-        productId: { in: string[] }
-        optionKey: 'default'
-      }
-      select: {
-        productId: true
-        sku: true
-        price: true
-        stockQuantity: true
-      }
-    }): Promise<DefaultVariantCommerce[]>
-=======
   productVariant: {
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     upsert(args: {
       where: {
         productId_optionKey: {
@@ -157,17 +130,10 @@ export interface ProductClient {
         }
       }
       update: {
-<<<<<<< HEAD
-        sku?: string
-        price?: number
-        stockQuantity?: number
-        isActive?: boolean
-=======
         sku: string
         price?: number
         stockQuantity?: number
         isActive: boolean
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
       }
       create: {
         productId: string
@@ -265,15 +231,6 @@ function getClient(
     client ??
     (prisma as unknown as ProductClient)
   )
-}
-
-async function writeProductAndVariant<T>(
-  db: ProductClient,
-  callback: (tx: ProductClient) => Promise<T>,
-): Promise<T> {
-  return db.$transaction
-    ? db.$transaction(callback)
-    : callback(db)
 }
 
 function validateId(id: string) {
@@ -388,7 +345,6 @@ function mapProduct(
   mainlandShippingCostOverride?:
     | string
     | null,
-  defaultVariant?: DefaultVariantCommerce,
 ): ProductResponse {
   const {
     shippingRates,
@@ -424,62 +380,17 @@ function mapProduct(
 
   return {
     ...productData,
-<<<<<<< HEAD
-    ...(defaultVariant
-      ? {
-          sku: defaultVariant.sku,
-          price: Number(
-            defaultVariant.price.toString(),
-          ),
-          stockQuantity:
-            defaultVariant.stockQuantity,
-        }
-      : {}),
-=======
     price: Number(
       defaultVariant?.price ?? 0,
     ),
     stockQuantity:
       defaultVariant?.stockQuantity ??
       0,
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     shippingClass:
       product.shippingClass ??
       'UNASSIGNED',
     mainlandShippingCost,
   }
-}
-
-async function findDefaultVariants(
-  db: ProductClient,
-  productIds: string[],
-) {
-  if (
-    productIds.length === 0 ||
-    !db.productVariant?.findMany
-  ) {
-    return new Map<string, DefaultVariantCommerce>()
-  }
-
-  const variants = await db.productVariant.findMany({
-    where: {
-      productId: { in: productIds },
-      optionKey: 'default',
-    },
-    select: {
-      productId: true,
-      sku: true,
-      price: true,
-      stockQuantity: true,
-    },
-  })
-
-  return new Map(
-    variants.map((variant) => [
-      variant.productId,
-      variant,
-    ]),
-  )
 }
 
 async function getBulkyShippingBounds() {
@@ -577,17 +488,8 @@ export async function listProducts(
         mainlandShippingInclude,
     })
 
-  const defaults = await findDefaultVariants(
-    db,
-    products.map((product) => product.id),
-  )
-
   return products.map((product) =>
-    mapProduct(
-      product,
-      undefined,
-      defaults.get(product.id),
-    ),
+    mapProduct(product),
   )
 }
 
@@ -612,16 +514,7 @@ export async function getProductById(
     )
   }
 
-  const defaults = await findDefaultVariants(
-    db,
-    [product.id],
-  )
-
-  return mapProduct(
-    product,
-    undefined,
-    defaults.get(product.id),
-  )
+  return mapProduct(product)
 }
 
 export async function createProduct(
@@ -738,47 +631,11 @@ if (
     }
   }
 
-  const product = await writeProductAndVariant(
-    db,
-    async (tx) => {
-      const created = await tx.product.create({
-        data: createData,
-      })
+  const product =
+    await db.product.create({
+      data: createData,
+    })
 
-<<<<<<< HEAD
-      if (tx.productVariant) {
-        await tx.productVariant.upsert({
-          where: {
-            productId_optionKey: {
-              productId: created.id,
-              optionKey: 'default',
-            },
-          },
-          update: {
-            sku: created.sku,
-            price: created.price,
-            stockQuantity:
-              created.stockQuantity,
-            isActive: created.isActive,
-          },
-          create: {
-            productId: created.id,
-            sku: created.sku,
-            price: created.price,
-            stockQuantity:
-              created.stockQuantity,
-            isActive: created.isActive,
-            images: [],
-            position: 0,
-            optionKey: 'default',
-          },
-        })
-      }
-
-      return created
-    },
-  )
-=======
   await db.productVariant.upsert({
     where: {
       productId_optionKey: {
@@ -817,7 +674,6 @@ if (
       include:
         mainlandShippingInclude,
     })
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
 
   return mapProduct(
     storedProduct ?? product,
@@ -1047,58 +903,12 @@ export async function updateProduct(
       shippingRates
   }
 
-  const product = await writeProductAndVariant(
-    db,
-    async (tx) => {
-      const updated = await tx.product.update({
-        where: { id },
-        data: updateData,
-      })
+  const product =
+    await db.product.update({
+      where: { id },
+      data: updateData,
+    })
 
-<<<<<<< HEAD
-      if (tx.productVariant) {
-        await tx.productVariant.upsert({
-          where: {
-            productId_optionKey: {
-              productId: updated.id,
-              optionKey: 'default',
-            },
-          },
-          update: {
-            ...(data.sku !== undefined
-              ? { sku: updated.sku }
-              : {}),
-            ...(data.price !== undefined
-              ? { price: updated.price }
-              : {}),
-            ...(data.stockQuantity !== undefined
-              ? {
-                  stockQuantity:
-                    updated.stockQuantity,
-                }
-              : {}),
-            ...(data.isActive !== undefined
-              ? { isActive: updated.isActive }
-              : {}),
-          },
-          create: {
-            productId: updated.id,
-            sku: updated.sku,
-            price: updated.price,
-            stockQuantity:
-              updated.stockQuantity,
-            isActive: updated.isActive,
-            images: [],
-            position: 0,
-            optionKey: 'default',
-          },
-        })
-      }
-
-      return updated
-    },
-  )
-=======
   await db.productVariant.upsert({
     where: {
       productId_optionKey: {
@@ -1152,7 +962,6 @@ export async function updateProduct(
       include:
         mainlandShippingInclude,
     })
->>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
 
   return mapProduct(
     storedProduct ?? product,
