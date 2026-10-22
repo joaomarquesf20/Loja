@@ -1,8 +1,8 @@
 ﻿# Checkpoint - 22/10/2026
 
 Ramo:
-design/storefront-foundation (trabalho por commitar: etapa 4 + correção
-dos marcadores de rebase)
+design/storefront-foundation (etapa 5 por commitar; etapas 1-4
+commitadas e pushed)
 
 Estado:
 - Etapa 1 — Webhook de pagamento (validação de segurança):
@@ -13,40 +13,27 @@ Estado:
 - Etapa 3 — Emails transacionais Resend/React Email:
   commitada (código das templates); ver `knowledge.md` §16.
 - Etapa 4 — Área de cliente / histórico de encomendas:
-  **por commitar** (3 ficheiros alterados + 4 novos); ver `knowledge.md` §17.
-
-Correção pendente de commit (importante):
-- O `git pull --rebase` do utilizador deixou marcadores de conflito
-  `<<<<<<<…` commitados em 7 ficheiros (os commits 3dc04e5/7a32c20 não
-  compilavam: catalog.ts, products.ts, checkout-payment.test.ts,
-  admin/products/products-client.tsx e testes).
-- Foi restaurada a versão validada dos 7 ficheiros a partir do `cc3eb93`
-  (lado local da mesma migração):
-  `git restore --source=cc3eb93 --worktree -- <ficheiros>`. `git status`
-  mostra-os como `modified` — é esta a correção por commitar.
+  commitada (9b30328); ver `knowledge.md` §17.
+- Correção do rebase (marcadores de conflito):
+  commitada (7869db9). Detalhes no fim da §17.
+- Etapa 5 — Painel admin: resumo de vendas e analytics:
+  **por commitar**; ver `knowledge.md` §18.
 
 Alterações não commitadas (`git status`):
-- modified: src/app/conta/orders-client.test.tsx, src/app/conta/orders-client.tsx,
-  src/emails/order-status-update.tsx
-- untracked: src/components/storefront/order-status-badge.tsx(+.test.tsx),
-  src/lib/order-status-labels.ts(+.test.ts)
-- modified (restauro do rebase): src/app/admin/products/products-client.test.tsx,
-  src/app/admin/products/products-client.tsx, src/server/catalog.test.ts,
-  src/server/catalog.ts, src/server/checkout-payment.test.ts,
-  src/server/products.test.ts, src/server/products.ts
+- new: src/server/analytics.ts + src/server/analytics.test.ts
+- new: src/components/admin/sales-dashboard.tsx(+.test.tsx)
+- new: src/app/admin/page.test.tsx
+- modified: src/app/admin/page.tsx (injeta SalesDashboard)
 
 Validações concluídas (2026-10-22):
 - Typecheck passou (tsc --noEmit)
-- 1876 testes a passar (124 ficheiros) + 3 skipped (vitest run)
-- ESLint passou
+- 1890 testes a passar (127 ficheiros) + 3 skipped (vitest run)
+- ESLint passou (0 avisos)
 - Build de produção passou
-  (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é pré-existente)
+  (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é pré-existente;
+  `/admin` fica dinâmico `ƒ` por ler a BD na visita)
 
 Próximos passos:
-1. Commitar primeiro a correção do rebase (os 7 ficheiros restaurados),
-   p.ex. `fix: restore validated catalog/product files after conflicted
-   rebase`.
-2. Depois commitar a etapa 4 em bloco próprio, p.ex.
-   `feat: order status badges and shared pt-PT labels in customer area`.
-3. Revisão do diff fica ao encargo do utilizador (posição de "theirs/ours"
-   nos 7 ficheiros restaurados).
+1. Commitar a etapa 5 em bloco próprio, p.ex.
+   `feat(admin): sales dashboard with paid-order analytics`.
+2. Revisão do diff fica ao encargo do utilizador.

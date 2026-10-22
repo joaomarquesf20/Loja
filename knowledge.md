@@ -680,6 +680,67 @@ com 7 ficheiros não compiláveis (`catalog.ts`, `catalog.test.ts`,
 `cc3eb93` era a versão validada da mesma migração (paralela à origin),
 a resolução foi restaurar os 7 ficheiros de `cc3eb93` por cima
 (`git restore --source=cc3eb93 --worktree -- <ficheiros>`). Após o
-restauro, o gate completo passou (números acima). Este restauro está
-**não commitado** — ver `CHECKPOINT.md` para a ordem de commits
-recomendada.
+restauro, o gate completo passou (números acima). A resolução foi depois
+commitada como `7869db9` ("fix(rebase): resolve lingering rebase conflict
+markers across catalog and products"); a etapa 4 é o commit `9b30328`.
+
+## 18. Painel admin: resumo de vendas e analytics (tarefa de 2026-10-22)
+
+Estado da **etapa 5** do roadmap.
+
+**Serviço** — `src/server/analytics.ts`: `getSalesOverview({ client?,
+now? })` (padrão da §13: cliente Prisma injetável `AnalyticsClient`
+com doubles tipados, sem estado global fixado no teste). Seis consultas
+em `Promise.all`: agregação de faturação (todas as encomendas pagas),
+`groupBy` por `status`, `groupBy` por `paymentStatus`, `groupBy` de
+`OrderItem` (produtos mais vendidos), `findMany` da janela de tendência
+e `findMany` das últimas 8 encomendas.
+
+Definições (fixadas para uma mesma leitura entre páginas/testes):
+- **Faturação total** = soma de `total` de encomendas com
+  `paymentStatus = 'PAID'` e `status != 'CANCELLED'` (dinheiro
+  reembolsado/cancelado não conta como faturação).
+- **AOV** = faturação ÷ número de encomendas pagas; `'0.00'` sem
+  pagamentos.
+- **Pendentes** = contagem com `status = 'PENDING'` (derivada da
+  lista de distribuição — sem consulta extra).
+- **Mais vendidos** = top 5 por quantidade (`_sum.quantity desc` no
+  SQL) com receita (`_sum.subtotalAtPurchase`), agrupado por
+  `productVariantId` + nome/SKU no momento da compra (snapshot, sem
+  joins para `Product`/`Variant` atuais).
+- **Últimos 30 dias** e **tendência mensal** derivam de um único
+  `findMany` (encomendas pagas não canceladas desde o 1.º dia UTC do
+  5.º mês anterior); agregação de meses feita em JS com chaves
+  `YYYY-MM` em UTC, meses sem vendas mantidos a zero.
+- Dinheiro sai como strings decimais (`MoneyValue`/`decimalToString`,
+  mesmo padrão de `orders.ts`); referência temporal injetável (`now`)
+  para testes determinísticos.
+
+**Página** — `src/app/admin/page.tsx` mantém o guard de sessão
+(`redirect('/login')` / `notFound()`), chama o serviço e injeta o novo
+componente puro `src/components/admin/sales-dashboard.tsx` antes da grelha
+de áreas: 4 cartões executivos (faturação, AOV, encomendas + pendentes,
+últimos 30 dias), distribuição por estado da encomenda e do pagamento
+com os **badges/etiquetas partilhados** da §17 (`OrderStatusBadge` /
+`PaymentStatusBadge` — garantia de rótulos iguais aos emails), top
+produtos e últimas encomendas com links
+`/admin/orders/[id]` + 'Ver todas'. Vazio: mensagens dedicadas
+('Sem encomendas registadas.' etc.). A renderização do painel é
+dinâmica (`/admin` ƒ) porque lê a base de dados por visita.
+
+**Testes novos** — `src/server/analytics.test.ts` (base vazia → zeros;
+estados mistos → faturação/AOV/pendentes/distribuições; asserção das
+consultas SQL de faturação/top-vendas; filtragem dos 30 dias e janela
+de 6 meses com meses vazios; mapeamento das últimas encomendas),
+`src/components/admin/sales-dashboard.test.tsx` (cartões, badges
+partilhados, produtos, links do detalhe, tendência, estados vazios) e
+`src/app/admin/page.test.tsx` (renderiza resumo + áreas; guarda:
+`redirect('/login')` sem sessão e `notFound()` sem perfil ADMIN -
+`next-auth`/`next/navigation`/analytics e `@/server/auth` simulados;
+cuidado: `beforeEach(vi.clearAllMocks())` para não arrastar chamadas
+entre testes de guard).
+
+**Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1890
+testes, 127 ficheiros (+3 skipped); ESLint limpo (0 avisos); `next
+build` concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
+pré-existente). Trabalho **não commitado** — ver `CHECKPOINT.md`.

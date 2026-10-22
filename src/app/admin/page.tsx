@@ -5,6 +5,8 @@ import {
   redirect,
 } from 'next/navigation'
 
+import SalesDashboard from '@/components/admin/sales-dashboard'
+import { getSalesOverview } from '@/server/analytics'
 import { authOptions } from '@/server/auth'
 
 const areas = [
@@ -57,6 +59,9 @@ export default async function AdminPage() {
     notFound()
   }
 
+  const overview =
+    await getSalesOverview()
+
   return (
     <main className="space-y-7">
       <section className="flex flex-col gap-5 rounded-xl bg-[#171a1d] p-6 text-white sm:p-8">
@@ -91,6 +96,10 @@ export default async function AdminPage() {
           </Link>
         </div>
       </section>
+
+      <SalesDashboard
+        overview={overview}
+      />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {areas.map((area) => (
