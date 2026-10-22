@@ -842,7 +842,7 @@ describe(
         ).toBeInTheDocument()
         expect(
           screen.getByText(
-            'Pendente → Falhou',
+            'Pendente → Falhado',
           ),
         ).toBeInTheDocument()
         expect(
@@ -852,7 +852,7 @@ describe(
         ).toBeInTheDocument()
         expect(
           screen.getByText(
-            'Falhou → Pendente',
+            'Falhado → Pendente',
           ),
         ).toBeInTheDocument()
         expect(
@@ -1647,6 +1647,156 @@ describe(
             ),
           ).toBeInTheDocument()
         })
+      },
+    )
+
+    test(
+      'apresenta badges de estado e pagamento no cartão',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        const orderBadge =
+          screen.getByText(
+            'Confirmada',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          orderBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'info',
+        )
+
+        const paymentBadge =
+          screen.getByText(
+            'Pago',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          paymentBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'success',
+        )
+      },
+    )
+
+    test(
+      'apresenta o total no cartão de cada encomenda',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            (
+              _content,
+              element,
+            ) =>
+              element?.tagName ===
+                'P' &&
+              element?.textContent ===
+                `Total: ${new Intl.NumberFormat(
+                  'pt-PT',
+                  {
+                    style: 'currency',
+                    currency: 'EUR',
+                  },
+                ).format(
+                  128.5,
+                )}`,
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'mostra estados desconhecidos como valor original em badges neutras',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'ARCHIVED',
+                paymentStatus:
+                  'PENDING_REFUND',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        const orderBadge =
+          screen.getByText(
+            'ARCHIVED',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          orderBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'neutral',
+        )
+
+        const paymentBadge =
+          screen.getByText(
+            'PENDING_REFUND',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          paymentBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'neutral',
+        )
       },
     )
   },

@@ -488,6 +488,10 @@ da variante → variantes que combinam.
   mapear erros → HTTP na rota.
 - Antes de dar algo por terminado: `npm run typecheck && npm test && npm run lint`
   (e `npm run build` para mudanças estruturais).
+- Em testes de cliente (RTL/Testing Library), o `Intl` de dinheiro/pt-PT usa
+  espaço não-separável (U+00A0) e o `getByText` exato falha em texto
+  repartido por vários nós: usar matcher por função com
+  `element.textContent === '…'` em vez de `getByText('Total: 128,50 €')`.
 
 ## 14. Webhook de pagamento: validação de segurança (tarefa de 2026-10-22)
 
@@ -601,3 +605,81 @@ pré-existente e não quebra a build). Persistência confirmada em BD local
 
 **Trabalho não commitado no ramo `design/storefront-foundation`** (a etapa 1
 do webhook da §14 também está por commitar).
+
+## 16. Emails transacionais Resend + React Email (tarefa de 2026-10-22)
+
+Estado da **etapa 3** do roadmap. Nota: esta secção foi reconstruída depois
+do acidente de rebase (o incidente está descrito no fim da §17); o código
+das duas templates Está commitado no ramo.
+
+- **Templates** em `src/emails/` com `@react-email/components`:
+  `order-confirmation.tsx` e `order-status-update.tsx` (+ testes
+  co-localizados que fixam os rótulos pt-PT — 'Expedida', 'Falhado',
+  'Pronta para levantamento', etc.).
+- Particularidades: `@react-email/components` v1.0.12 não tem `Cell` — usar
+  `Column` dentro de `Row`; `@react-email/render` tem de ser dependência
+  explícita (nunca foi içada do transitive tree).
+- **Envio** a partir do backend (`src/server/email.ts`, Resend): email de
+  confirmação quando o pagamento da encomenda é confirmado (webhook /
+  simulação) e email de atualização de estado nas transições admin da
+  encomenda (após ações na rota de transição).
+- Os rótulos pt-PT de estado/pagamento ordenavam divergências entre a
+  template e a área de cliente — resolvido na §17 com módulo partilhado.
+
+## 17. Área de cliente / histórico de encomendas (tarefa de 2026-10-22)
+
+Estado da **etapa 4** do roadmap.
+
+**O que já existia** (commitado): página `/conta` com login/registo inline,
+secção de encomendas `src/app/conta/orders-client.tsx` (lista + detalhe:
+artigos com opções de variante, quantidades, preços, histórico de eventos,
+Totais e endereço/levantamento), serviço `listUserOrders(userId)` em
+`src/server/orders.ts` com filtro `where: { userId }`, API GET `/api/orders`
+(`requireActiveUserId` → 401/400/500) e cancelamento por `/api/orders/[id]/
+cancel` com verificação de posse. O checkout exige sessão autenticada
+(`userId: user.id`) — não existem encomendas de convidado.
+
+**Acrescentado nesta etapa:**
+- `src/lib/order-status-labels.ts` — fonte única pt-PT dos rótulos de
+  `OrderStatus`/`PaymentStatus`, usada AGORA pelos templates de email
+  (§16) e pela área de cliente. Unifica divergências antigas do cliente:
+  SHIPPED 'Enviada' → 'Expedida', FAILED 'Falhou' → 'Falhado'. Estados
+  desconhecidos devolvem o valor original da BD (sem inventar etiqueta).
+- `src/components/storefront/order-status-badge.tsx` — `OrderStatusBadge`
+  e `PaymentStatusBadge` (chips com `data-variant` success/info/warning/
+  danger/neutral; mapeamento semântico, desconhecido → neutral).
+- `orders-client.tsx`: badges de estado/pagamento no cabeçalho de cada
+  cartão + `Total: X €` no cartão (o desdobramento subtotal/portes/
+  imposto mantém-se no bloco Totais); switches locais de etiquetas
+  removidos em favor do módulo partilhado.
+- Badges no menu admin ficam para uma tarefa futura.
+
+**Decisões de segurança:** histórico é estritamente por sessão
+(`requireActiveUserId` → consultar apenas por `userId`); consulta por
+endereço de email foi excluída por fugir PII (e é desnecessária: sem
+encomendas de convidado). Testes de segurarçe de query e 401 já cobertos
+em `orders.test.ts` / `api/orders/route.test.ts`.
+
+**Testes novos:** `src/lib/order-status-labels.test.ts`,
+`src/components/storefront/order-status-badge.test.tsx` e três testes no
+`orders-client.test.tsx` (badges, total no cartão, estados desconhecidos
+em badges neutras); as strings do histórico '… → Falhou' passaram a
+'… → Falhado'. Convenção RTL para dinheiro com U+00A0: ver §13.
+
+**Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1876
+testes, 124 ficheiros (+3 skipped); ESLint limpo; `next build` concluída
+(aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é pré-existente).
+
+**Incidente de rebase e resolução:** um `git pull --rebase` do utilizador
+rebaseou os últimos 6 commits locais sobre a origin e dois commits com
+conflitos ("Move storefront…" e "refactor(catalog)…") foram continuados
+com os marcadores `<<<<<<<…` commitados — a branch ficava "up to date"
+com 7 ficheiros não compiláveis (`catalog.ts`, `catalog.test.ts`,
+`products.ts`, `products.test.ts`, `checkout-payment.test.ts`,
+`admin/products/products-client.tsx(+test)`). Como o lado local em
+`cc3eb93` era a versão validada da mesma migração (paralela à origin),
+a resolução foi restaurar os 7 ficheiros de `cc3eb93` por cima
+(`git restore --source=cc3eb93 --worktree -- <ficheiros>`). Após o
+restauro, o gate completo passou (números acima). Este restauro está
+**não commitado** — ver `CHECKPOINT.md` para a ordem de commits
+recomendada.

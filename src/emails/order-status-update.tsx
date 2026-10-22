@@ -12,6 +12,11 @@ import {
   Text,
 } from '@react-email/components'
 
+import {
+  getOrderStatusLabel,
+  getPaymentStatusLabel,
+} from '@/lib/order-status-labels'
+
 import { STORE_NAME } from './brand'
 
 /**
@@ -26,33 +31,6 @@ export type OrderStatusUpdateEmailProps = {
   paymentStatus: string
   /** Data ISO 8601 do momento da alteração. */
   updatedAt: string
-}
-
-const orderStatusLabel: Record<
-  string,
-  string
-> = {
-  PENDING: 'Pendente',
-  CONFIRMED: 'Confirmada',
-  PROCESSING:
-    'Em processamento',
-  SHIPPED: 'Expedida',
-  DELIVERED: 'Entregue',
-  READY_FOR_PICKUP:
-    'Pronta para levantamento',
-  PICKED_UP: 'Levantada',
-  CANCELLED: 'Cancelada',
-}
-
-const paymentStatusLabel: Record<
-  string,
-  string
-> = {
-  PENDING: 'Pendente',
-  AUTHORIZED: 'Autorizado',
-  PAID: 'Pago',
-  FAILED: 'Falhado',
-  REFUNDED: 'Reembolsado',
 }
 
 const dateFormatter =
@@ -168,13 +146,14 @@ export function OrderStatusUpdateEmail(
     customerName.trim()
 
   const orderStatusLabelValue =
-    orderStatusLabel[status] ??
-    status
+    getOrderStatusLabel(
+      status,
+    )
 
   const paymentStatusLabelValue =
-    paymentStatusLabel[
-      paymentStatus
-    ] ?? paymentStatus
+    getPaymentStatusLabel(
+      paymentStatus,
+    )
 
   return (
     <Html lang="pt-PT">

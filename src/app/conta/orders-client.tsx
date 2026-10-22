@@ -5,6 +5,15 @@ import {
   useState,
 } from 'react'
 
+import {
+  OrderStatusBadge,
+  PaymentStatusBadge,
+} from '@/components/storefront/order-status-badge'
+import {
+  getOrderStatusLabel,
+  getPaymentStatusLabel,
+} from '@/lib/order-status-labels'
+
 type FulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
@@ -435,50 +444,6 @@ function formatDateTime(
       timeZone: 'Europe/Lisbon',
     },
   ).format(new Date(value))
-}
-
-function getOrderStatusLabel(
-  status: string,
-) {
-  switch (status) {
-    case 'PENDING':
-      return 'Pendente'
-    case 'CONFIRMED':
-      return 'Confirmada'
-    case 'PROCESSING':
-      return 'Em processamento'
-    case 'SHIPPED':
-      return 'Enviada'
-    case 'DELIVERED':
-      return 'Entregue'
-    case 'READY_FOR_PICKUP':
-      return 'Pronta para levantamento'
-    case 'PICKED_UP':
-      return 'Levantada'
-    case 'CANCELLED':
-      return 'Cancelada'
-    default:
-      return status
-  }
-}
-
-function getPaymentStatusLabel(
-  status: string,
-) {
-  switch (status) {
-    case 'PENDING':
-      return 'Pendente'
-    case 'AUTHORIZED':
-      return 'Autorizado'
-    case 'PAID':
-      return 'Pago'
-    case 'FAILED':
-      return 'Falhou'
-    case 'REFUNDED':
-      return 'Reembolsado'
-    default:
-      return status
-  }
 }
 
 function getOrderEventTitle(
@@ -930,22 +895,25 @@ export function OrdersClient() {
                     </div>
 
                     <div className="text-sm sm:text-right">
-                      <p>
-                        Estado:{' '}
-                        <span className="font-semibold">
-                          {getOrderStatusLabel(
-                            order.status,
-                          )}
-                        </span>
-                      </p>
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
+                        <OrderStatusBadge
+                          status={
+                            order.status
+                          }
+                        />
 
-                      <p className="mt-1">
-                        Pagamento:{' '}
-                        <span className="font-semibold">
-                          {getPaymentStatusLabel(
-                            order.paymentStatus,
-                          )}
-                        </span>
+                        <PaymentStatusBadge
+                          status={
+                            order.paymentStatus
+                          }
+                        />
+                      </div>
+
+                      <p className="mt-2 font-semibold">
+                        Total:{' '}
+                        {formatMoney(
+                          order.total,
+                        )}
                       </p>
                     </div>
                   </div>
