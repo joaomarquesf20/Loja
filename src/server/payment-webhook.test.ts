@@ -3,15 +3,19 @@ import {
 } from 'node:crypto'
 
 import {
+  afterEach,
+  beforeEach,
   describe,
   expect,
   test,
+  vi,
 } from 'vitest'
 
 import {
   RequestPayloadTooLargeError,
 } from './http-request'
 import {
+  PAYMENT_WEBHOOK_MAX_AGE_SECONDS,
   PAYMENT_WEBHOOK_MAX_BODY_BYTES,
   PaymentWebhookAuthenticationError,
   PaymentWebhookConfigurationError,
@@ -35,12 +39,13 @@ const timestamp =
 function sign(
   rawBody: string,
   signedTimestamp = timestamp,
+  signingSecret = secret,
 ) {
   return (
     'sha256=' +
     createHmac(
       'sha256',
-      secret,
+      signingSecret,
     )
       .update(signedTimestamp)
       .update('.')
@@ -111,6 +116,24 @@ function validBody() {
 describe(
   'verifyPaymentWebhookRequest',
   () => {
+    beforeEach(() => {
+      // Garante o comportamento de omissão nos testes que não exercitam a
+      // configuração por ambiente: janela por omissão (±300 s) e rotação
+      // desativada, mesmo que o processo herde estas variáveis definidas.
+      vi.stubEnv(
+        'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+        '',
+      )
+      vi.stubEnv(
+        'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+        '',
+      )
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
     test(
       'valida assinatura e normaliza evento PAYMENT_PAID',
       async () => {
@@ -237,6 +260,8 @@ describe(
             {
               secret,
               nowMs,
+              maxAgeSeconds:
+                PAYMENT_WEBHOOK_MAX_AGE_SECONDS,
             },
           ),
         ).rejects.toMatchObject({
@@ -270,6 +295,8 @@ describe(
             {
               secret,
               nowMs,
+              maxAgeSeconds:
+                PAYMENT_WEBHOOK_MAX_AGE_SECONDS,
             },
           ),
         ).rejects.toBeInstanceOf(
@@ -540,6 +567,8 @@ describe(
             {
               secret,
               nowMs,
+              maxAgeSeconds:
+                PAYMENT_WEBHOOK_MAX_AGE_SECONDS,
             },
           )
 
@@ -730,6 +759,401 @@ describe(
           ),
         ).rejects.toBeInstanceOf(
           RequestPayloadTooLargeError,
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'janela temporal configurável por ambiente (R9/M1)',
+  () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    function windowRequest(
+      offsetSeconds: number,
+    ) {
+      const signedTimestamp =
+        String(
+          Math.floor(
+            nowMs / 1000,
+          ) + offsetSeconds,
+        )
+
+      return requestFor(
+        validBody(),
+        {
+          signedTimestamp,
+          signature:
+            sign(
+              validBody(),
+              signedTimestamp,
+            ),
+        },
+      )
+    }
+
+    test(
+      'usa por omissão a janela de ±300 s (valor vazio/ausente)',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          '',
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            windowRequest(-300),
+            {
+              secret,
+              nowMs,
+            },
+          ),
+        ).resolves.toMatchObject({
+          type: 'PAYMENT_PAID',
+        })
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            windowRequest(-301),
+            {
+              secret,
+              nowMs,
+            },
+          ),
+        ).rejects.toMatchObject({
+          name:
+            'PaymentWebhookAuthenticationError',
+          message:
+            'Timestamp do webhook inválido ou expirado',
+        })
+      },
+    )
+
+    test.each([
+      { name: 'aceita', offset: -600 },
+      { name: 'aceita', offset: 600 },
+      { name: 'rejeita', offset: -601 },
+      { name: 'rejeita', offset: 601 },
+    ])(
+      '$name timestamps de 600 s configurados por ambiente',
+      async ({
+        name,
+        offset,
+      }) => {
+        // Valor com espaços à volta: normalizado por trim antes de validar.
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          ' 600 ',
+        )
+
+        const verification =
+          verifyPaymentWebhookRequest(
+            windowRequest(offset),
+            {
+              secret,
+              nowMs,
+            },
+          )
+
+        if (name === 'aceita') {
+          await expect(
+            verification,
+          ).resolves.toMatchObject({
+            type: 'PAYMENT_PAID',
+          })
+
+          return
+        }
+
+        await expect(
+          verification,
+        ).rejects.toMatchObject({
+          name:
+            'PaymentWebhookAuthenticationError',
+          message:
+            'Timestamp do webhook inválido ou expirado',
+        })
+      },
+    )
+
+    test(
+      'aceita o limite superior da janela (86400 s)',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          '86400',
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            windowRequest(-86400),
+            {
+              secret,
+              nowMs,
+            },
+          ),
+        ).resolves.toMatchObject({
+          type: 'PAYMENT_PAID',
+        })
+      },
+    )
+
+    test.each([
+      'abc',
+      '0',
+      '-5',
+      '3.5',
+      '86401',
+    ])(
+      'falha em fechado com janela inválida: %s',
+      async (invalidValue) => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          invalidValue,
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            windowRequest(0),
+            {
+              secret,
+              nowMs,
+            },
+          ),
+        ).rejects.toBeInstanceOf(
+          PaymentWebhookConfigurationError,
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'rotação de segredo (R11/L2/L3)',
+  () => {
+    const previousSecret =
+      '11111111111111111111111111111112'
+
+    const thirdSecret =
+      '33333333333333333333333333333334'
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    test(
+      'aceita assinatura com o segredo ativo quando há segredo anterior configurado',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET',
+          secret,
+        )
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          previousSecret,
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+            ),
+            {
+              nowMs,
+            },
+          ),
+        ).resolves.toEqual({
+          type: 'PAYMENT_PAID',
+          orderId: 'order-1',
+          paymentProvider:
+            'provider-test',
+          paymentReference:
+            'pay-123',
+          amount: '128.50',
+          currency: 'EUR',
+        })
+      },
+    )
+
+    test(
+      'aceita assinatura com o segredo anterior durante a rotação',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET',
+          secret,
+        )
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          previousSecret,
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+              {
+                signature:
+                  sign(
+                    validBody(),
+                    timestamp,
+                    previousSecret,
+                  ),
+              },
+            ),
+            {
+              nowMs,
+            },
+          ),
+        ).resolves.toMatchObject({
+          type: 'PAYMENT_PAID',
+        })
+      },
+    )
+
+    test(
+      'rejeita assinatura com segredo desconhecido durante a rotação',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET',
+          secret,
+        )
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          previousSecret,
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+              {
+                signature:
+                  sign(
+                    validBody(),
+                    timestamp,
+                    thirdSecret,
+                  ),
+              },
+            ),
+            {
+              nowMs,
+            },
+          ),
+        ).rejects.toBeInstanceOf(
+          PaymentWebhookAuthenticationError,
+        )
+      },
+    )
+
+    test(
+      'ignora variável de segredo anterior vazia',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET',
+          secret,
+        )
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          '',
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+            ),
+            {
+              nowMs,
+            },
+          ),
+        ).resolves.toMatchObject({
+          type: 'PAYMENT_PAID',
+        })
+      },
+    )
+
+    test(
+      'falha em fechado com segredo anterior demasiado curto',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET',
+          secret,
+        )
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          'curto',
+        )
+
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+            ),
+            {
+              nowMs,
+            },
+          ),
+        ).rejects.toBeInstanceOf(
+          PaymentWebhookConfigurationError,
+        )
+      },
+    )
+
+    test(
+      'aceita previousSecret por opções mesmo sem ambiente configurado',
+      async () => {
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+              {
+                signature:
+                  sign(
+                    validBody(),
+                    timestamp,
+                    previousSecret,
+                  ),
+              },
+            ),
+            {
+              secret,
+              previousSecret,
+              nowMs,
+            },
+          ),
+        ).resolves.toMatchObject({
+          type: 'PAYMENT_PAID',
+        })
+      },
+    )
+
+    test(
+      'rejeita segredo de terceiro por opções com rotação configurada',
+      async () => {
+        await expect(
+          verifyPaymentWebhookRequest(
+            requestFor(
+              validBody(),
+              {
+                signature:
+                  sign(
+                    validBody(),
+                    timestamp,
+                    thirdSecret,
+                  ),
+              },
+            ),
+            {
+              secret,
+              previousSecret,
+              nowMs,
+            },
+          ),
+        ).rejects.toBeInstanceOf(
+          PaymentWebhookAuthenticationError,
         )
       },
     )

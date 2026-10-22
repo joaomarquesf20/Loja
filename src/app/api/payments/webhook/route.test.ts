@@ -470,5 +470,116 @@ describe(
         consoleError.mockRestore()
       },
     )
+
+    test(
+      'devolve 401 para timestamp expirado e regista a rejeição',
+      async () => {
+        const consoleWarn =
+          vi.spyOn(
+            console,
+            'warn',
+          ).mockImplementation(
+            () => undefined,
+          )
+
+        mockVerifyPaymentWebhookRequest.mockRejectedValue(
+          new PaymentWebhookAuthenticationError(
+            'Timestamp do webhook inválido ou expirado',
+          ),
+        )
+
+        const response =
+          await POST(
+            request(),
+          )
+
+        expect(
+          response.status,
+        ).toBe(401)
+
+        expect(
+          await response.json(),
+        ).toEqual({
+          error:
+            'Webhook não autenticado',
+        })
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+        expect(
+          mockRecordVerifiedPaymentFailure,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          consoleWarn,
+        ).toHaveBeenCalledWith(
+          'Webhook de pagamento rejeitado (401): Assinatura ausente, malformada, inválida ou timestamp expirado',
+        )
+
+        consoleWarn.mockRestore()
+      },
+    )
+
+    test(
+      'reentrega repetida do mesmo evento devolve 200, delegando a idempotência ao serviço',
+      async () => {
+        mockVerifyPaymentWebhookRequest.mockResolvedValue(
+          event,
+        )
+
+        mockRecordVerifiedPayment.mockResolvedValue(
+          paidOrder,
+        )
+
+        const firstResponse =
+          await POST(
+            request(),
+          )
+
+        const secondResponse =
+          await POST(
+            request(),
+          )
+
+        expect(
+          firstResponse.status,
+        ).toBe(200)
+
+        expect(
+          secondResponse.status,
+        ).toBe(200)
+
+        expect(
+          await secondResponse.json(),
+        ).toEqual({
+          received: true,
+          orderId:
+            'order-1',
+          paymentStatus:
+            'PAID',
+        })
+
+        // A rota não tem memória própria: cada entrega é validada e
+        // encaminhada; a segunda aplica-se como no-op no serviço
+        // (consultar as provas de idempotência em order-lifecycle.test.ts).
+        expect(
+          mockRecordVerifiedPayment,
+        ).toHaveBeenCalledTimes(2)
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).toHaveBeenCalledWith({
+          orderId:
+            'order-1',
+          paymentProvider:
+            'provider-test',
+          paymentReference:
+            'pay-123',
+          amount: '128.50',
+          currency: 'EUR',
+        })
+      },
+    )
   },
 )

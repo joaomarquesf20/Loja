@@ -625,3 +625,183 @@ describe(
     )
   },
 )
+
+describe(
+  'Payment Webhook API (configuração por ambiente)',
+  () => {
+    const previousEnvSecret =
+      'rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr'
+
+    const paidOrderMock = {
+      id: 'order-1',
+      paymentStatus: 'PAID',
+    } as Awaited<
+      ReturnType<
+        typeof recordVerifiedPayment
+      >
+    >
+
+    beforeEach(() => {
+      vi.stubEnv(
+        'PAYMENT_WEBHOOK_SECRET',
+        secret,
+      )
+      vi.clearAllMocks()
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    test(
+      'aceita entrega assinada com o segredo anterior durante a rotação',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_SECRET_PREVIOUS',
+          previousEnvSecret,
+        )
+        mockRecordVerifiedPayment.mockResolvedValue(
+          paidOrderMock,
+        )
+
+        const response =
+          await POST(
+            signedRequest({
+              rawBody: paidBody,
+              signature:
+                sign(
+                  paidBody,
+                  nowTimestamp(),
+                  previousEnvSecret,
+                ),
+            }),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'aceita timestamp à margem da janela ampliada por ambiente (600 s)',
+      async () => {
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          '600',
+        )
+        mockRecordVerifiedPayment.mockResolvedValue(
+          paidOrderMock,
+        )
+
+        const response =
+          await POST(
+            signedRequest({
+              rawBody: paidBody,
+              timestamp:
+                nowTimestamp(-590),
+            }),
+          )
+
+        expect(
+          response.status,
+        ).toBe(200)
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'rejeita timestamps fora da janela reduzida por ambiente (120 s)',
+      async () => {
+        const consoleWarn =
+          vi.spyOn(
+            console,
+            'warn',
+          ).mockImplementation(
+            () => undefined,
+          )
+
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          '120',
+        )
+
+        const response =
+          await POST(
+            signedRequest({
+              rawBody: paidBody,
+              timestamp:
+                nowTimestamp(-180),
+            }),
+          )
+
+        expect(
+          response.status,
+        ).toBe(401)
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          consoleWarn,
+        ).toHaveBeenCalled()
+
+        consoleWarn.mockRestore()
+      },
+    )
+
+    test(
+      'devolve 500 para janela configurada por ambiente inválida',
+      async () => {
+        const consoleError =
+          vi.spyOn(
+            console,
+            'error',
+          ).mockImplementation(
+            () => undefined,
+          )
+
+        vi.stubEnv(
+          'PAYMENT_WEBHOOK_MAX_AGE_SECONDS',
+          'abc',
+        )
+
+        const response =
+          await POST(
+            signedRequest({
+              rawBody: paidBody,
+            }),
+          )
+
+        expect(
+          response.status,
+        ).toBe(500)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Erro interno do servidor',
+        })
+
+        expect(
+          consoleError,
+        ).toHaveBeenCalled()
+
+        expect(
+          mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+
+        consoleError.mockRestore()
+      },
+    )
+  },
+)

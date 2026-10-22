@@ -7,6 +7,12 @@
 > Revisão adversarial aplicada em 2026-10-14 (achados H1–H3, M1–M5, L1–L6).
 > Correções de auditoria aplicadas em 2026-10-16 (H1, H2/R29, R15, R20, R26,
 > R29–R32 e nova observação L7).
+> **Atualização 2026-10-22 (etapa 1 de produção):** a janela temporal da
+> assinatura passou a ser configurável por ambiente (R9/M1), a rotação de
+> segredo com sobreposição passou a estar implementada (R11/L2/L3) e as
+> rejeições do webhook passaram a ser registadas (L7). A deduplicação durável
+> (R27–R35) continua **não implementada** e bloqueada por M5/R35, e a
+> limitação de taxa (L4/429) continua inexistente.
 > **Estado do documento e do código (2026-10-16).** Este ficheiro **não está
 > versionado** (aparece como não rastreado no `git status`). As afirmações
 > marcadas **atual** descrevem a **árvore de trabalho**, que inclui alterações
@@ -100,21 +106,26 @@ explicitamente que ignoram flags de ambiente. Os testes verificam-no de forma
 `'TRUE'` e `'true'` com `NODE_ENV=production` e esperam 404 em todos os casos.
 Assinalado como pendente em §8.
 
-**Nota sobre o segredo do webhook (L2).** A implementação atual exige
-`PAYMENT_WEBHOOK_SECRET` com **mínimo de 32 caracteres** e suporta **apenas um
-segredo ativo**. Não existe mecanismo de sobreposição de segredos, pelo que a
-rotação (R11) não é possível sem alteração de código.
+**Nota sobre o segredo do webhook (L2).** A implementação exige
+`PAYMENT_WEBHOOK_SECRET` com **mínimo de 32 caracteres**. **Atualização
+2026-10-22:** a sobreposição de segredos passou a estar implementada —
+`PAYMENT_WEBHOOK_SECRET_PREVIOUS` (opcional, ≥32 caracteres) é aceite enquanto
+segredo alternativo durante a rotação, e um valor configurado mas inválido
+falha em fechado (500). A rotação pode, por isso, ser feita sem alteração
+de código (R11/L3 cumprido no lado da loja; o fornecedor tem de documentar o
+procedimento). Antes desta alteração existia apenas **um segredo ativo**.
 
 **Nota sobre limitação de taxa (L4).** **Não existe limitação de taxa no caminho
 do webhook** (`src/app/api/payments/webhook/route.ts`), nem na verificação da
 assinatura: cada pedido autenticado provoca uma escrita na base de dados.
 Considera-se uma lacuna de segurança e operacional; ver R20.
 
-**Nota de observabilidade (L7).** A rota registra com `console.error` apenas os
-erros de configuração do segredo e os erros inesperados (respostas **500**). As
-rejeições 401/400/404/409 **não são registadas**, e não existem métricas nem
-alertas próprios do webhook em nenhum ponto do código. É uma lacuna operacional
-relevante para o contrato de resposta (R20) e para a deteção de reenvios
+**Nota de observabilidade (L7).** **Atualização 2026-10-22:** a rota regista
+agora `console.error` para erros de configuração e erros inesperados (respostas
+**500**) e `console.warn` para as rejeições **401/400/404/409/413**, com
+mensagens **estáticas** que não fazem eco de dados do pedido. Não existem
+métricas nem alertas estruturados próprios do webhook — continua uma lacuna
+operacional para o contrato de resposta (R20) e para a deteção de reenvios
 anómalos (R31).
 
 ## 3. Requisito de identidade estável do evento
@@ -161,12 +172,12 @@ sobre o corpo bruto (R6).
   `timestamp + "." + corpo`, com cabeçalho `sha256=<hex>`; a compatibilidade tem
   de ser avaliada contra o contrato real.
 - **R9 — Timestamp e janela.** O fornecedor tem de declarar a unidade, o
-  significado (emissão ou entrega) e a tolerância de relógio. **Atual:** a janela
-  de ±5 minutos é uma **constante fixa em código**
-  (`PAYMENT_WEBHOOK_MAX_AGE_SECONDS`) e a rota chama o verificador sem opções,
-  pelo que a janela **não é configurável** hoje. **Exigido (M1):** a janela tem de
-  passar a ser configurável (variável de ambiente) antes da integração — pendente
-  em §8, item 13.
+  significado (emissão ou entrega) e a tolerância de relógio. **Atual:** a
+  janela de ±5 minutos é o **valor por omissão** (`PAYMENT_WEBHOOK_MAX_AGE_SECONDS`)
+  e é agora **configurável por ambiente** (2026-10-22): inteiro entre 1 e 86400,
+  com **falha em fechado** (500) em valor inválido. **Exigido (M1):** o valor
+  efetivo em produção e a tolerância de relógio do fornecedor têm de ser
+  acordados no contrato — pendente em §8, item 13.
 - **R10 — Verificação em tempo constante** e rejeição *fail-closed* perante
   assinatura ausente, malformada ou inválida.
 - **R11 — Rotação de segredo.** O fornecedor tem de documentar como se rotaciona
@@ -413,6 +424,9 @@ um fornecedor escolhido e o respetivo contrato oficial:
     identificadores por comerciante/conta (R4, R27, R35).
 13. Decisão interna pendente: se a janela de assinatura passa a ser configurável
     (R9) e qual o valor por omissão.
+    **Resolvido (2026-10-22):** configurável via `PAYMENT_WEBHOOK_MAX_AGE_SECONDS`
+    (inteiro 1–86400, omissão 300, falha em fechado em valor inválido). O valor
+    efetivo de produção continua a acordar com o fornecedor.
 
 ## 9. Referências no código
 
