@@ -241,20 +241,40 @@ em memória sobre `listCatalogProducts()`.
 10. Sem i18n framework (textos pt-PT hard-coded), sem e-mails/notificações,
     sem tracking de envio, sem faturação/recibos PDF.
 
-## 7. Migração em curso: Product → ProductVariant (fase 2)
+## 7. Migração Product → ProductVariant (CONCLUÍDA — fase 3 em 2026-10-22)
 
 Contexto dos últimos commits (`49ded9a…9c1870d`): a unidade vendável passou a ser
 `ProductVariant` (optionKey `'default'`), com cart/orders já em variantes.
 
-**Estado atual:**
-- `CartItem`, `OrderItem` já referenciam `productVariantId` (NOT NULL).
-- Cart, guest-cart, cart-merge, checkout, order-cancellation e stock têm código
-  duplo legacy/variant (guardado por existência de `productVariant` no cliente),
-  incl. canonicalização de localStorage guest legado.
-- `stock.ts`: `decrementStock` (Product) é "helper legado mantido durante a
-  migração progressiva"; novos fluxos usam `decrementVariantStock`.
-- `order-cancellation.ts` repõe stock **apenas na variante** (Product ficará
-  dessincronizado — intencional e documentado no comentário do ficheiro).
+**Estado final (modelo definitivo, sem caminhos legados):**
+- `CartItem`, `OrderItem` referenciam `productVariantId` (NOT NULL).
+- **Fase 3 aplicada (2026-10-22)**: `Product.price` e `Product.stockQuantity`
+  removidos do schema; migração
+  `prisma/migrations/20261022090000_drop_product_legacy_price_stock` aplicada.
+  Preço e stock têm fonte única: `ProductVariant`.
+- Cart, guest-cart, cart-merge, checkout e stock são **variant-only** (sem
+  branches duplos legados). Itens de carrinhos antigos sem `productVariantId`
+  resolvem-se contra a variante 'default' do produto (canonicalização de
+  localStorage guest mantida); `cartItem.userId_productVariantId` é a chave
+  de unicidade.
+- `stock.ts`: helper legado `decrementStock` (Product) removido; só
+  `decrementVariantStock`.
+- `order-cancellation.ts` repõe stock **exclusivamente nas variantes** e exige
+  `productVariantId` em todos os itens (`OrderLifecycleConflictError` caso
+  contrário); o stock do Level de produto já não é espelhado.
+- `catalog.ts`: preço de listagem = variante ativa mais barata (fallback 0 se
+  não houver), `inStock` = existe variante ativa com stock; filtros de
+  preço/stock aplicados às variantes ativas; **a ordenação por preço deixou
+  de ser SQL** (a coluna saiu) — a query ordena por nome e o JS aplica
+  `sortCatalogProducts` com desempate por nome asc/desc.
+- `products.ts` (CRUD básico do admin): payload `price`/`stockQuantity` do
+  formulário básico escreve a variante 'default' (upsert + refetch do produto
+  com a variante); `ProductResponse` deriva o preço/stock apresentados da
+  variante 'default' (fallback 0/0).
+- `admin-products.ts`: sem preço/stock de nível de produto; stock do UI deriva
+  das variantes; duplicação de produto exige que o original tenha variantes.
+- Seed dev (`scripts/storefront-dev-data.mjs`) sem campos de preço/stock de
+  produto — todos os 11 produtos DEV têm variantes.
 
 **Passos prováveis seguintes (a confirmar com o responsável):**
 - ~~Migrar `catalog.ts` / storefront para preços/stock de variante~~ — feito
@@ -263,8 +283,9 @@ Contexto dos últimos commits (`49ded9a…9c1870d`): a unidade vendável passou 
   filtros de preço/stock também aplicados às variantes ativas; ordenação por
   preço continua a usar `Product.price`, que o seed mantém sincronizado com
   a variante mais barata).
-- Remover helpers legacy (`decrementStock`, caminhos sem variante) e campos
-  legados do schema (`Product.price`, `Product.stockQuantity`) numa fase 3.
+- ~~Remover helpers legacy (`decrementStock`, caminhos sem variante) e campos
+  legados do schema (`Product.price`, `Product.stockQuantity`) numa fase 3.~~ —
+  **feito em 2026-10-22, ver §15.**
 - ~~Corrigir os testes/typecheck que a migração deixou inconsistentes~~ —
   resolvido em 2026-09-24 (ver §8/§9).
 - Seed dev reescrito (`scripts/storefront-dev-data.mjs`): produtos são
@@ -467,3 +488,116 @@ da variante → variantes que combinam.
   mapear erros → HTTP na rota.
 - Antes de dar algo por terminado: `npm run typecheck && npm test && npm run lint`
   (e `npm run build` para mudanças estruturais).
+
+## 14. Webhook de pagamento: validação de segurança (tarefa de 2026-10-22)
+
+Estado da **etapa 1** (Gateway de Pagamento e Webhook) na árvore de trabalho.
+Fonte de requisitos: `payment-provider-webhook-requirements.md` (§9 lista os
+ficheiros envolvidos).
+
+**Cobertura implementada:**
+
+- **Autenticidade (mantida)**: HMAC-SHA256 sobre o corpo bruto
+  (`timestamp + '.' + body`), cabeçalho `sha256=<hex>`, comparação em tempo
+  constante, limite de corpo 32 KB (rejeição do `Content-Length` declarado
+  antes de ler e do corpo real durante a leitura).
+- **Anti-replay por timestamp (R9/M1)**: janela agora **configurável** por
+  `PAYMENT_WEBHOOK_MAX_AGE_SECONDS` — omissão 300 s (±5 min), inteiro aceito
+  entre 1 e 86400 (`PAYMENT_WEBHOOK_MAX_AGE_SECONDS_LIMIT`), **falha em
+  fechado** (`PaymentWebhookConfigurationError` → 500) em valor inválido; a
+  janela nunca é rebaixada em silêncio. A leitura acontece no verificador
+  (`resolveConfiguredMaxAgeSeconds`), pelo que a rota continua a chamar sem
+  opções.
+- **Rotação de segredo (R11/L2/L3)**: `PAYMENT_WEBHOOK_SECRET_PREVIOUS`
+  (opcional, ≥32 caracteres) aceite como segredo alternativo; o verificador
+  tenta o segredo atual e depois o anterior, sempre com `timingSafeEqual`.
+  Segredo anterior mal configurado → fail-closed. Rotação pode ser feita por
+  ambiente, sem mudança de código.
+- **Idempotência de reentregas (R20/R21)**: garantida pelas guardas de
+  `order-lifecycle` — reentrega de `PAYMENT_PAID`/`PAYMENT_FAILED` com a mesma
+  combinação fornecedor+referência devolve o estado atual (**200**) sem
+  segunda escrita nem segundo `OrderEvent`; perdedor concorrente do
+  *compare-and-set* recebe **409**. Testes em `order-lifecycle.test.ts`
+  ("é idempotente quando…", "não grava segundo evento quando a mesma
+  confirmação chega em paralelo") e `route.test.ts` (reentrega repetida → 200).
+- **Observabilidade (L7)**: rejeições 401/400/404/409/413 registadas com
+  `console.warn` e mensagens estáticas (sem eco de dados do emissor); 500
+  continua em `console.error`.
+
+**Testes novos (Vitest):** `payment-webhook.test.ts` — janela por ambiente
+(omissão, 600 s com trim, limite 86400, valores inválidos → config error) e
+rotação (anterior aceite, atual aceite, terceiro rejeitado, anterior curto
+→ fail-closed, overrides por opções); `route.signed.test.ts` — round-trips
+com verificação real: segredo anterior aceito, janela 600/120 por ambiente,
+janela inválida → 500; `route.test.ts` — timestamp expirado → 401 + warn,
+reentrega repetida → 200.
+
+**Bloqueado deliberadamente (ver §7 do doc de requisitos):** deduplicação
+durável por identificador de evento (tabela de dedupe, R27–R35) — depende de
+contrato real com fornecedor (R1–R5/M5: sem `eventId` estável o lado da loja
+não a pode implementar sem arriscar bloquear eventos legítimos). A limitação
+de taxa no webhook (L4, resposta 429) também continua por implementar e
+precisa de decisão de infraestrutura (limite em memória é per-instância).
+
+## 15. Fase 3 da migração de variantes: remoção definitiva de `Product.price` / `Product.stockQuantity` (tarefa de 2026-10-22)
+
+Estado da **etapa 2** do roadmap. Objetivo: terminar a migração da §7 — o
+`ProductVariant` passa a ser a única fonte de preço/stock, eliminando os
+campos e todos os consumidores legados.
+
+**Schema e base de dados:**
+- `prisma/schema.prisma`: `Product` perde `price` e `stockQuantity`.
+- Migração manual `prisma/migrations/20261022090000_drop_product_legacy_price_stock/migration.sql`
+  (`ALTER TABLE "Product" DROP COLUMN …`), criada à mão porque `migrate dev`
+  fica bloqueado por prompt nesta sessão; aplicada com `npx prisma migrate
+  deploy` e client regenerado (`npx prisma generate`).
+
+**Consumidores atualizados (todos variant-only):**
+- `cart.ts`, `guest-cart.ts`, `cart-merge.ts`, `stock.ts`,
+  `order-cancellation.ts`: branches por existência de delegate removidos;
+  helpers legados (`decrementStock`, fusão a nível de Produto) desaparecem;
+  a fusão `cart-merge` valida disponibilidade/stock **na variante** (elementos
+  antigos sem `productVariantId` resolvem-se na variante 'default') e escreve
+  `cartItem` com `productVariantId`.
+- `catalog.ts`: preço de listagem = variante ativa mais barata; `inStock` =
+  alguma variante ativa com stock; filtros de preço/stock no nível da
+  variante; `orderBy` SQL de preço substituído por `{name: 'asc'}` + re-sort
+  em JS (`sortCatalogProducts`); valores por defeito (0/false) quando não há
+  variantes ativas.
+- `products.ts` (CRUD básico): payload do formulário (`price`,
+  `stockQuantity`) escreve a variante 'default' via `productVariant.upsert`
+  (a criação cria sempre; em alteração, só o preço/stock enviados alteram e
+  o `isActive`/`sku` são sincronizados), seguido de re-leitura do Produto com
+  `mainlandShippingInclude` (agora inclui a variante 'default'); resposta
+  deriva da variante com *fallback* 0/0.
+- `admin-products.ts`: sem preço/stock no `select`/resposta; duplicação
+  recusa produto sem variantes.
+- `catalog-import-service.ts`: já não escreve/espelha stock no Produto (o
+  import mantém apenas o agregado das variantes).
+- `scripts/storefront-dev-data.mjs`: sem campos de `price`/`stockQuantity` de
+  produto; todos os 11 produtos DEV têm variantes.
+- `admin-validation.ts`: mantém `price`/`stockQuantity` no esquema do
+  formulário do produto básico (escrevem agora a variante 'default' — ver
+  `products.ts`).
+
+**Testes reescritos / adaptados (Vitest):** `cart.test.ts`,
+`guest-cart.test.ts` (reescrito variant-only), `catalog.test.ts` (fixtures
+sem cadeia de Produto; testes de ordenação por preço convertidos para
+comportamento em JS com desempate de nome e `orderBy` `{name:'asc'}`,
+facetas com `stockQuantity` propagado à variante), `products.test.ts`
+(mock duplo com `productVariant.upsert`; sequência `findUnique` agora tem
+3 chamadas na criação e refetch na alteração; *assertions* do `create`
+sem cadeia de Produto), `cart-merge.test.ts` (tx com `productVariant`,
+itens de `cartItem` pela variante), `order-cancellation.test.ts` (itens com
+`productVariantId`, reposição via `productVariant.updateMany`, teste da
+sincronização legado de stock do Produto no import removido),
+`admin-products.test.ts` (sem preço/stock de Produto na resposta/cadeia).
+
+**Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1836
+testes a passar, 118 ficheiros (+3 ignorados/escolhidos); eslint limpo;
+`next build` concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
+pré-existente e não quebra a build). Persistência confirmada em BD local
+(`pfautoparts`, 23 migrações).
+
+**Trabalho não commitado no ramo `design/storefront-foundation`** (a etapa 1
+do webhook da §14 também está por commitar).

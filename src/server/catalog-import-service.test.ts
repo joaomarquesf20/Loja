@@ -1808,46 +1808,4 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
       transaction.vehicleGeneration.create,
     ).toHaveBeenCalledTimes(1)
   })
-
-  test('stock do produto é sincronizado com a soma das variantes (create e update)', async () => {
-    const { client, transaction } =
-      setupVehicleTree()
-
-    transaction.productVariant.aggregate.mockResolvedValue(
-      { _sum: { stockQuantity: 6 } },
-    )
-
-    await commit(
-      client,
-      EXTERIOR_CSV,
-      { profile: 'exterior' },
-    )
-
-    // Create path: o resumo é escrito a partir do aggregate.
-    const productCreateCalls =
-      transaction.product.create
-        .mock
-        .calls as unknown as Array<[
-      { data?: { stockQuantity?: number } },
-    ]>
-
-    const createCall = productCreateCalls.find(
-      ([call]) =>
-        call?.data?.stockQuantity !== undefined,
-    )
-
-    expect(createCall).toBeDefined()
-
-    const syncUpdate = (
-      transaction.product.update
-        .mock
-        .calls as unknown as Array<[
-      { data?: { stockQuantity?: number } },
-    ]>
-    ).filter(
-      ([call]) => call?.data?.stockQuantity === 6,
-    )
-
-    expect(syncUpdate.length).toBeGreaterThan(0)
-  })
 })

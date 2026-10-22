@@ -21,8 +21,7 @@ type StockDelegate = {
 }
 
 export type StockClient = {
-  product: StockDelegate
-  productVariant?: StockDelegate
+  productVariant: StockDelegate
 }
 
 function validateQuantity(
@@ -68,35 +67,15 @@ async function decrementFromDelegate(
 }
 
 /**
- * Helper legado mantido durante a migração progressiva.
- * Os fluxos comerciais novos devem usar decrementVariantStock.
- */
-export async function decrementStock(
-  client: StockClient,
-  productId: string,
-  quantity: number,
-): Promise<void> {
-  return decrementFromDelegate(
-    client.product,
-    productId,
-    quantity,
-  )
-}
-
-/**
- * Decrementa atomicamente o stock da unidade vendável.
+ * Decrementa atomicamente o stock da unidade vendável
+ * (ProductVariant). A variante é a única fonte de verdade
+ * de inventário; o Product já não tem campos de stock.
  */
 export async function decrementVariantStock(
   client: StockClient,
   productVariantId: string,
   quantity: number,
 ): Promise<void> {
-  if (!client.productVariant) {
-    throw new Error(
-      'Stock de variantes indisponível',
-    )
-  }
-
   return decrementFromDelegate(
     client.productVariant,
     productVariantId,

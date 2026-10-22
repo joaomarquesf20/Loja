@@ -6,7 +6,6 @@ import {
   vi,
 } from 'vitest'
 import {
-  decrementStock,
   decrementVariantStock,
   type StockClient,
 } from './stock'
@@ -31,17 +30,10 @@ type UpdateManyFn = (
   count: number
 }>
 
-const productUpdateMany =
-  vi.fn<UpdateManyFn>()
-
 const variantUpdateMany =
   vi.fn<UpdateManyFn>()
 
 const client = {
-  product: {
-    updateMany:
-      productUpdateMany,
-  },
   productVariant: {
     updateMany:
       variantUpdateMany,
@@ -50,7 +42,6 @@ const client = {
 
 describe('stock', () => {
   beforeEach(() => {
-    productUpdateMany.mockReset()
     variantUpdateMany.mockReset()
   })
 
@@ -104,10 +95,6 @@ describe('stock', () => {
         },
       },
     })
-
-    expect(
-      productUpdateMany,
-    ).not.toHaveBeenCalled()
   })
 
   test('rejeita stock insuficiente da variante', async () => {
@@ -123,53 +110,6 @@ describe('stock', () => {
       ),
     ).rejects.toThrow(
       'Stock insuficiente',
-    )
-  })
-
-  test('mantém o helper legado de Product durante a transição', async () => {
-    productUpdateMany.mockResolvedValue({
-      count: 1,
-    })
-
-    await decrementStock(
-      client,
-      'product-1',
-      2,
-    )
-
-    expect(
-      productUpdateMany,
-    ).toHaveBeenCalledWith({
-      where: {
-        id: 'product-1',
-        stockQuantity: {
-          gte: 2,
-        },
-      },
-      data: {
-        stockQuantity: {
-          decrement: 2,
-        },
-      },
-    })
-  })
-
-  test('falha explicitamente sem delegate de variantes', async () => {
-    const legacyClient: StockClient = {
-      product: {
-        updateMany:
-          productUpdateMany,
-      },
-    }
-
-    await expect(
-      decrementVariantStock(
-        legacyClient,
-        'variant-1',
-        1,
-      ),
-    ).rejects.toThrow(
-      'Stock de variantes indisponível',
     )
   })
 })

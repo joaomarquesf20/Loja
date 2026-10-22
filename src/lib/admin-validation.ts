@@ -104,6 +104,15 @@ const productBaseSchema = z.object({
     .pipe(z.string().min(1)),
   sku: z.string().trim().min(1).max(100),
   description: z.string().optional(),
+  /**
+   * Preço/stock do formulário básico do produto.
+   *
+   * Depois da fase 3 da migração para variantes, o Product
+   * já não guarda estes campos: passam a escrever na
+   * variante 'default' do produto (ver src/server/products.ts).
+   * Variantes adicionais são geridas pelo editor de variantes,
+   * com validação própria.
+   */
   price: z.number().finite().min(0),
   stockQuantity: z.number().int().min(0),
   categoryId: z.string().trim().min(1),

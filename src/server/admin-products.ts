@@ -384,8 +384,6 @@ export type AdminProduct = {
   slug: string
   sku: string
   description: string | null
-  price: string
-  stockQuantity: number
   isActive: boolean
   images: string[]
   imageMetadata: AdminProductImage[]
@@ -519,8 +517,6 @@ const adminProductSelect = {
   slug: true,
   sku: true,
   description: true,
-  price: true,
-  stockQuantity: true,
   isActive: true,
   images: true,
   defaultFinish: true,
@@ -1149,38 +1145,6 @@ function validateCategoryFields(
     throw new AdminProductFieldValidationError(
       fieldErrors,
     )
-  }
-}
-
-function summarizeVariants(
-  variants: Array<{
-    price: number
-    stockQuantity: number
-    isActive: boolean
-  }>,
-) {
-  const activeVariants = variants.filter(
-    (variant) => variant.isActive,
-  )
-  const summaryVariants =
-    activeVariants.length > 0
-      ? activeVariants
-      : variants
-
-  return {
-    price:
-      summaryVariants.length > 0
-        ? Math.min(
-            ...summaryVariants.map(
-              (variant) => variant.price,
-            ),
-          )
-        : 0,
-    stockQuantity: summaryVariants.reduce(
-      (total, variant) =>
-        total + variant.stockQuantity,
-      0,
-    ),
   }
 }
 
@@ -2236,8 +2200,6 @@ function mapProduct(
     slug: product.slug,
     sku: product.sku,
     description: product.description,
-    price: product.price.toString(),
-    stockQuantity: product.stockQuantity,
     isActive: product.isActive,
     images: product.images,
     defaultFinish:
@@ -2482,9 +2444,6 @@ export async function createAdminProduct(
         productSku,
       )
 
-      const summary = summarizeVariants(
-        data.variants,
-      )
       const shippingRates =
         buildShippingRateUpdate(data)
 
@@ -2496,9 +2455,6 @@ export async function createAdminProduct(
             sku: productSku,
             description:
               data.description || null,
-            price: summary.price,
-            stockQuantity:
-              summary.stockQuantity,
             categoryId: data.categoryId,
             productBrandId:
               data.productBrandId ?? null,
@@ -2654,9 +2610,6 @@ export async function updateAdminProduct(
         }
       }
 
-      const summary = summarizeVariants(
-        data.variants,
-      )
       const shippingRates =
         buildShippingRateUpdate(data)
 
@@ -2668,9 +2621,6 @@ export async function updateAdminProduct(
           sku: productSku,
           description:
             data.description || null,
-          price: summary.price,
-          stockQuantity:
-            summary.stockQuantity,
           categoryId: data.categoryId,
           productBrandId:
             data.productBrandId ?? null,
@@ -3164,19 +3114,9 @@ export async function duplicateAdminProduct(
       }
 
       if (variants.length === 0) {
-        variants.push({
-          sku: await createCopyVariantSku(
-            transaction,
-            source.sku,
-          ),
-          price: Number(source.price),
-          stockQuantity:
-            source.stockQuantity,
-          isActive: true,
-          optionKey: undefined,
-          selections: {},
-          specifications: [],
-        })
+        throw new AdminProductValidationError(
+          'O produto não tem variantes para duplicar',
+        )
       }
 
       const slug =
@@ -3184,9 +3124,6 @@ export async function duplicateAdminProduct(
           transaction,
           `${source.name} cópia`,
         )
-      const summary = summarizeVariants(
-        variants,
-      )
       const shippingRates: {
         create?: {
           region: 'PORTUGAL_MAINLAND'
@@ -3213,9 +3150,6 @@ export async function duplicateAdminProduct(
             sku: productSku,
             description:
               source.description,
-            price: summary.price,
-            stockQuantity:
-              summary.stockQuantity,
             categoryId:
               source.category.id,
             productBrandId:

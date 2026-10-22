@@ -362,8 +362,6 @@ const products = [
     category: 'Jantes',
     brand: 'Japan Racing',
     shippingClass: 'STANDARD',
-    price: '169.90',
-    stockQuantity: 24,
     images: [wheelImage],
     defaultFinish: 'Satin Black',
     imageMetadata: buildWheelImageMetadata(
@@ -464,8 +462,6 @@ const products = [
     category: 'Jantes',
     brand: 'BBS',
     shippingClass: 'STANDARD',
-    price: '649.90',
-    stockQuantity: 12,
     images: [wheelImage],
     defaultFinish: 'Satin Black',
     imageMetadata: buildWheelImageMetadata(
@@ -520,8 +516,6 @@ const products = [
     category: 'Jantes',
     brand: 'OZ Racing',
     shippingClass: 'STANDARD',
-    price: '479.90',
-    stockQuantity: 10,
     images: [wheelImage],
     description:
       'Jante OZ Racing Ultraleggera inspirada no mundo das corridas, com várias combinações de diâmetro, largura e PCD disponíveis como variantes do mesmo modelo.',
@@ -568,8 +562,6 @@ const products = [
     category: 'Suspensão',
     brand: 'H&R',
     shippingClass: 'STANDARD',
-    price: '289.90',
-    stockQuantity: 14,
     images: [springImage],
     description:
       'Molas desportivas H&R para rebaixamento progressivo. Cada variante combina o rebaixo dianteiro/traseiro e a carga de eixo homologada para a configuração do veículo.',
@@ -660,8 +652,6 @@ const products = [
     category: 'Suspensão',
     brand: 'Eibach',
     shippingClass: 'STANDARD',
-    price: '269.90',
-    stockQuantity: 8,
     images: [springImage],
     description:
       'Kit de molas Eibach Pro-Kit com rebaixamento equilibrado entre estética e conforto, disponível por combinação de rebaixo dianteiro/traseiro e carga de eixo.',
@@ -702,8 +692,6 @@ const products = [
     category: 'Suspensão',
     brand: 'KW',
     shippingClass: 'STANDARD',
-    price: '1899.00',
-    stockQuantity: 3,
     images: [springImage],
     description:
       'Kit coilover KW Variant 3 com regulação independente de compressão e retorno, disponível por aplicação veicular (plataforma do veículo).',
@@ -738,8 +726,6 @@ const products = [
     category: 'Suspensão',
     brand: 'Bilstein',
     shippingClass: 'STANDARD',
-    price: '1099.00',
-    stockQuantity: 4,
     images: [springImage],
     description:
       'Kit coilover Bilstein B14 PSS com altura ajustável e amortecedores monotube gás. Aplicação por plataforma, sem seleção de opções na ficha do produto.',
@@ -760,8 +746,6 @@ const products = [
     category: 'Exterior',
     brand: 'Maxton Design',
     shippingClass: 'STANDARD',
-    price: '219.90',
-    stockQuantity: 7,
     images: [exteriorImage],
     description:
       'Splitter dianteiro Maxton Design V2 para reforçar visualmente a frente do automóvel.',
@@ -782,8 +766,6 @@ const products = [
     category: 'Exterior',
     brand: 'Maxton Design',
     shippingClass: 'STANDARD',
-    price: '289.90',
-    stockQuantity: 3,
     images: [exteriorImage],
     description:
       'Difusor traseiro Maxton Design Street Pro para acrescentar definição à traseira do automóvel.',
@@ -804,8 +786,6 @@ const products = [
     category: 'Acessórios',
     brand: 'Sparco',
     shippingClass: 'SMALL',
-    price: '74.90',
-    stockQuantity: 12,
     images: [accessoryImage],
     description:
       'Conjunto de pedais em alumínio Sparco para um detalhe de personalização no interior.',
@@ -826,8 +806,6 @@ const products = [
     category: 'Acessórios',
     brand: 'Eibach',
     shippingClass: 'SMALL',
-    price: '129.90',
-    stockQuantity: 9,
     images: [spacerImage],
     description:
       'Kit Eibach Pro-Spacer com espessuras selecionáveis por variante.',
@@ -1499,8 +1477,6 @@ async function seed() {
           name: definition.name,
           slug: definition.slug,
           description: definition.description,
-          price: definition.price,
-          stockQuantity: definition.stockQuantity,
           isActive: true,
           images: definition.images,
           defaultFinish:
@@ -1515,8 +1491,6 @@ async function seed() {
           slug: definition.slug,
           sku: definition.sku,
           description: definition.description,
-          price: definition.price,
-          stockQuantity: definition.stockQuantity,
           isActive: true,
           images: definition.images,
           defaultFinish:

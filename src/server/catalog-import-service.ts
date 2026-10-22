@@ -856,12 +856,6 @@ async function upsertImportedProduct({
             group.productName,
           ),
           images: [],
-          price: group.variants[0].price,
-          stockQuantity: group.variants.reduce(
-            (total, variant) =>
-              total + variant.stock,
-            0,
-          ),
           categoryId: category.id,
           productBrandId: brand?.id ?? null,
           description:
@@ -891,24 +885,9 @@ async function upsertImportedProduct({
       skuStrategy,
     })
 
-  // O stock do produto é sempre a soma das variantes reais
-  // (novas + existentes na BD): o filtro "Em stock" da loja
-  // avalia o produto E as variantes, por isso o resumo tem de
-  // ficar sincronizado mesmo quando o CSV traz só um
-  // subconjunto das variantes.
-  const stockAggregate =
-    await transaction.productVariant.aggregate({
-      where: { productId: product.id },
-      _sum: { stockQuantity: true },
-    })
-
-  await transaction.product.update({
-    where: { id: product.id },
-    data: {
-      stockQuantity: stockAggregate._sum.stockQuantity ?? 0,
-    },
-    select: { id: true },
-  })
+  // O stock de listagem é avaliado diretamente nas variantes
+  // (basta uma variante ativa com stock); o Product já não
+  // guarda um resumo de stock.
 
   const imageResult = await upsertImportedImages(
     transaction,

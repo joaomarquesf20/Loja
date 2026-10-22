@@ -40,7 +40,7 @@ type CancellationUpdateManyArgs = {
   }
 }
 
-type ProductRestockArgs = {
+type VariantRestockArgs = {
   where: {
     id: string
   }
@@ -78,16 +78,9 @@ export interface OrderCancellationTransactionClient {
       count: number
     }>
   }
-  productVariant?: {
+  productVariant: {
     updateMany(
-      args: ProductRestockArgs,
-    ): Promise<{
-      count: number
-    }>
-  }
-  product: {
-    updateMany(
-      args: ProductRestockArgs,
+      args: VariantRestockArgs,
     ): Promise<{
       count: number
     }>
@@ -109,7 +102,7 @@ export interface OrderCancellationClient {
   ): Promise<T>
 }
 
-const legacyCancellationOrderSelect = {
+const cancellationOrderSelect = {
   id: true,
   userId: true,
   status: true,
@@ -117,16 +110,6 @@ const legacyCancellationOrderSelect = {
   fulfillmentMethod: true,
   paymentProvider: true,
   paymentReference: true,
-  items: {
-    select: {
-      productId: true,
-      quantity: true,
-    },
-  },
-} as const
-
-const variantCancellationOrderSelect = {
-  ...legacyCancellationOrderSelect,
   items: {
     select: {
       productId: true,
@@ -299,44 +282,6 @@ function addQuantity(
   return next
 }
 
-function aggregateLegacyRestockQuantities(
-  items: CancellationOrderItem[],
-) {
-  const quantities =
-    new Map<string, number>()
-
-  for (const item of items) {
-    if (
-      typeof item.productId !==
-        'string' ||
-      !item.productId.trim()
-    ) {
-      throw new OrderLifecycleConflictError(
-        'Os artigos da encomenda não permitem repor o stock com segurança',
-      )
-    }
-
-    validateRestockQuantity(
-      item.quantity,
-    )
-
-    const productId =
-      item.productId.trim()
-
-    quantities.set(
-      productId,
-      addQuantity(
-        quantities.get(
-          productId,
-        ) ?? 0,
-        item.quantity,
-      ),
-    )
-  }
-
-  return quantities
-}
-
 function aggregateVariantRestockQuantities(
   items: CancellationOrderItem[],
 ) {
@@ -403,8 +348,8 @@ function aggregateVariantRestockQuantities(
  * Cancela uma encomenda e repõe o stock exatamente uma vez.
  *
  * A variante comprada é a unidade de inventário autoritativa.
- * Product.stockQuantity permanece apenas como campo legado durante
- * a migração e não é alterado por este fluxo variant-aware.
+ * O Product já não tem campos de stock: a reposição acontece
+ * exclusivamente nas variantes compradas.
  *
  * A alteração do estado e todos os incrementos de stock acontecem na
  * mesma transação. Um segundo cancelamento encontra CANCELLED e devolve
@@ -428,17 +373,13 @@ async function cancelOrderAndRestoreStockForOwner(
 
   return db.$transaction(
     async (tx) => {
-      const useVariants =
-        Boolean(tx.productVariant)
-
       const order =
         await tx.order.findUnique({
           where: {
             id: orderId,
           },
-          select: useVariants
-            ? variantCancellationOrderSelect
-            : legacyCancellationOrderSelect,
+          select:
+            cancellationOrderSelect,
         })
 
       if (
@@ -465,18 +406,9 @@ async function cancelOrderAndRestoreStockForOwner(
       }
 
       const variantQuantities =
-        tx.productVariant
-          ? aggregateVariantRestockQuantities(
-              order.items,
-            )
-          : null
-
-      const legacyQuantities =
-        tx.productVariant
-          ? null
-          : aggregateLegacyRestockQuantities(
-              order.items,
-            )
+        aggregateVariantRestockQuantities(
+          order.items,
+        )
 
       const updated =
         await tx.order.updateMany({
@@ -507,70 +439,34 @@ async function cancelOrderAndRestoreStockForOwner(
         )
       }
 
-      if (
-        tx.productVariant &&
-        variantQuantities
+      for (
+        const [
+          productVariantId,
+          item,
+        ] of variantQuantities
       ) {
-        for (
-          const [
-            productVariantId,
-            item,
-          ] of variantQuantities
-        ) {
-          const restoredVariant =
-            await tx.productVariant.updateMany(
-              {
-                where: {
-                  id:
-                    productVariantId,
-                },
-                data: {
-                  stockQuantity: {
-                    increment:
-                      item.quantity,
-                  },
-                },
-              },
-            )
-
-          if (
-            restoredVariant.count !== 1
-          ) {
-            throw new OrderLifecycleConflictError(
-              'Não foi possível repor todo o stock das variantes da encomenda',
-            )
-          }
-
-        }
-      } else if (
-        legacyQuantities
-      ) {
-        for (
-          const [
-            productId,
-            quantity,
-          ] of legacyQuantities
-        ) {
-          const restored =
-            await tx.product.updateMany({
+        const restoredVariant =
+          await tx.productVariant.updateMany(
+            {
               where: {
-                id: productId,
+                id:
+                  productVariantId,
               },
               data: {
                 stockQuantity: {
                   increment:
-                    quantity,
+                    item.quantity,
                 },
               },
-            })
+            },
+          )
 
-          if (
-            restored.count !== 1
-          ) {
-            throw new OrderLifecycleConflictError(
-              'Não foi possível repor todo o stock da encomenda',
-            )
-          }
+        if (
+          restoredVariant.count !== 1
+        ) {
+          throw new OrderLifecycleConflictError(
+            'Não foi possível repor todo o stock das variantes da encomenda',
+          )
         }
       }
 

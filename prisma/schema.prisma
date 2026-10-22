@@ -167,8 +167,6 @@ model Product {
   slug            String                        @unique
   sku             String                        @unique
   description     String?
-  price           Decimal                       @db.Decimal(10, 2)
-  stockQuantity   Int                           @default(0)
   isActive        Boolean                       @default(true)
   images          String[]                      @default([])
   defaultFinish   String?

@@ -42,8 +42,6 @@ type CatalogProductRecord = {
   name: string
   slug: string
   description: string | null
-  price: CatalogPrice
-  stockQuantity: number
   images: string[]
   defaultFinish?: string | null
   category: {
@@ -273,14 +271,6 @@ type CatalogProductOrderBy =
     }
   | [
       {
-        price: 'asc' | 'desc'
-      },
-      {
-        name: 'asc'
-      },
-    ]
-  | [
-      {
         createdAt: 'desc'
       },
       {
@@ -357,8 +347,6 @@ const catalogProductSelect = {
   name: true,
   slug: true,
   description: true,
-  price: true,
-  stockQuantity: true,
   images: true,
   defaultFinish: true,
   category: {
@@ -384,15 +372,8 @@ type CatalogProductFindManyArgs = {
     categoryId?: {
       in: string[]
     }
-    stockQuantity?: {
-      gt: number
-    }
     productBrandId?: {
       in: string[]
-    }
-    price?: {
-      gte?: number
-      lte?: number
     }
     variants?: {
       some: {
@@ -807,13 +788,17 @@ function toCatalogProduct(
   const hasVariants =
     sellableVariants.length > 0
 
+  // O preço de listagem é a variante ativa mais barata.
+  // Sem variantes ativas não há preço de listagem: usa-se 0
+  // para manter a forma da resposta (o produto não aparece
+  // como comprável no storefront).
   const price = hasVariants
     ? Math.min(
         ...sellableVariants.map((variant) =>
           Number(variant.price),
         ),
       )
-    : Number(product.price)
+    : 0
 
   return {
     id: product.id,
@@ -836,7 +821,7 @@ function toCatalogProduct(
           (variant) =>
             variant.stockQuantity > 0,
         )
-      : product.stockQuantity > 0,
+      : false,
     images: product.images,
     ...(imageMetadata.length > 0
       ? { imageMetadata }
@@ -1349,31 +1334,46 @@ function getCatalogProductOrderBy(
     }
   }
 
-  if (sort === 'price-asc') {
-    return [
-      {
-        price: 'asc',
-      },
-      {
-        name: 'asc',
-      },
-    ]
-  }
-
-  if (sort === 'price-desc') {
-    return [
-      {
-        price: 'desc',
-      },
-      {
-        name: 'asc',
-      },
-    ]
-  }
+  // A ordenação por preço já não usa a coluna legada do
+  // Product: as linhas são ordenadas em memória pelo preço
+  // de listagem calculado (ver sortCatalogProducts).
 
   return {
     name: 'asc',
   }
+}
+
+/**
+ * Ordena os produtos pelo preço de listagem calculado a
+ * partir das variantes ativas (a variante mais barata).
+ * O nome é usado como desempate para manter a ordem
+ * estável entre produtos com o mesmo preço.
+ */
+function sortCatalogProducts(
+  products: CatalogProduct[],
+  sort: CatalogSort | undefined,
+): CatalogProduct[] {
+  if (sort !== 'price-asc' && sort !== 'price-desc') {
+    return products
+  }
+
+  const direction =
+    sort === 'price-asc' ? 1 : -1
+
+  return products.slice().sort(
+    (first, second) => {
+      const priceDifference =
+        (first.price - second.price) * direction
+
+      if (priceDifference !== 0) {
+        return priceDifference
+      }
+
+      return first.name.localeCompare(
+        second.name,
+      )
+    },
+  )
 }
 
 function compareVehicleConfigurations(
@@ -1739,11 +1739,18 @@ export async function getCatalogCategoryPageBySlug(
       },
     }
 
+<<<<<<< HEAD
   if (filters.inStockOnly && !db.productVariant) {
     where.stockQuantity = {
       gt: 0,
     }
 
+=======
+  if (filters.inStockOnly) {
+    // O stock de listagem vem das variantes: basta uma
+    // variante ativa com stock para o produto estar
+    // disponível.
+>>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     where.variants = {
       some: {
         isActive: true,
@@ -1765,9 +1772,16 @@ export async function getCatalogCategoryPageBySlug(
     filters.priceMax,
   )
 
+<<<<<<< HEAD
   if (priceFilter && !db.productVariant) {
     where.price = priceFilter
 
+=======
+  if (priceFilter) {
+    // O preço de listagem de um produto é o da variante
+    // ativa mais barata: o filtro SQL é avaliado apenas nas
+    // variantes ativas.
+>>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
     where.variants = {
       ...where.variants,
       some: {
@@ -1980,12 +1994,23 @@ export async function getCatalogCategoryPageBySlug(
     )
 >>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
 
+  const mappedProducts = products.map(
+    (product) =>
+      toCatalogProduct(
+        product,
+        metadataByProductId.get(
+          product.id,
+        ),
+      ),
+  )
+
   return {
     category:
       toCatalogCategory(category),
     brands:
       brands.map(toCatalogBrand),
     vehicleConfigurations,
+<<<<<<< HEAD
 <<<<<<< HEAD
     products: mappedProducts,
 =======
@@ -1999,6 +2024,12 @@ export async function getCatalogCategoryPageBySlug(
         ),
       ),
 >>>>>>> 8f2dc5e (Move storefront, cart, checkout and admin catalog onto the variant model)
+=======
+    products: sortCatalogProducts(
+      mappedProducts,
+      filters.sort,
+    ),
+>>>>>>> 05257cf (refactor(catalog): complete final migration to product variant model)
   }
 }
 
@@ -2130,24 +2161,14 @@ function isPriceInRange(
 }
 
 /**
- * Espelha a consulta SQL do filtro de preço: o preço do
- * produto e o preço de alguma variante ativa têm de estar
- * no intervalo, para as contagens nunca divergirem dos
- * resultados.
+ * Espelha a consulta SQL do filtro de preço: alguma
+ * variante ativa tem de ter o preço no intervalo, para as
+ * contagens nunca divergirem dos resultados.
  */
 function getFacetProductPrice(
   product: CatalogProductRecord,
   filters: CatalogCategoryFilters,
 ) {
-  if (
-    !isPriceInRange(
-      Number(product.price),
-      filters,
-    )
-  ) {
-    return false
-  }
-
   return (product.variants ?? []).some(
     (variant) =>
       variant.isActive &&
@@ -2159,19 +2180,16 @@ function getFacetProductPrice(
 }
 
 /**
- * Espelha a consulta SQL do filtro de stock: stock no
- * produto e uma variante ativa com stock.
+ * Espelha a consulta SQL do filtro de stock: basta uma
+ * variante ativa com stock.
  */
 function getFacetProductInStock(
   product: CatalogProductRecord,
 ) {
-  return (
-    product.stockQuantity > 0 &&
-    (product.variants ?? []).some(
-      (variant) =>
-        variant.isActive &&
-        variant.stockQuantity > 0,
-    )
+  return (product.variants ?? []).some(
+    (variant) =>
+      variant.isActive &&
+      variant.stockQuantity > 0,
   )
 }
 

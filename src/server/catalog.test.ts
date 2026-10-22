@@ -110,8 +110,6 @@ const testProductSelect = {
   name: true,
   slug: true,
   description: true,
-  price: true,
-  stockQuantity: true,
   images: true,
   defaultFinish: true,
   category: {
@@ -154,21 +152,25 @@ function createVariantRecord({
   id,
   sku,
   selections,
+  price = '100.00',
+  stockQuantity = 5,
   isActive = true,
   position = 0,
 }: {
   id: string
   sku: string
   selections: Record<string, string>
+  price?: string
+  stockQuantity?: number
   isActive?: boolean
   position?: number
 }) {
   return {
     id,
     sku,
-    price: '100.00',
+    price,
     priceSet: null,
-    stockQuantity: 5,
+    stockQuantity,
     isActive,
     images: [],
     position,
@@ -200,8 +202,6 @@ function createVariantProduct(
     name: `Produto ${id}`,
     slug: `produto-${id}`,
     description: null,
-    price: '100.00',
-    stockQuantity: 5,
     images: [],
     category: {
       id: 'category-1',
@@ -229,9 +229,6 @@ function createFacetedProduct(
     name: `Produto ${id}`,
     slug: `produto-${id}`,
     description: null,
-    price: '100.00',
-    stockQuantity:
-      overrides?.stockQuantity ?? 5,
     images: [],
     category: {
       id: 'category-1',
@@ -243,10 +240,14 @@ function createFacetedProduct(
         ? null
         : overrides.brand,
     variants: [
+      // O stock que decide a disponibilidade é o da
+      // variante ativa ('default') deste produto.
       createVariantRecord({
         id: `${id}-variant`,
         sku: `${id}-SKU`,
         selections: {},
+        stockQuantity:
+          overrides?.stockQuantity ?? 5,
       }),
     ],
   }
@@ -328,8 +329,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: 'Descrição',
-          price: '19.99',
-          stockQuantity: 5,
           variants: [],
           images: [
             '/products/produto-1.jpg',
@@ -356,8 +355,10 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: 'Descrição',
-          price: 19.99,
-          inStock: true,
+          // Sem variantes ativas: sem preço de
+          // listagem e sem stock.
+          price: 0,
+          inStock: false,
           variants: [],
           images: [
             '/products/produto-1.jpg',
@@ -387,8 +388,6 @@ describe('Catalog', () => {
           name: 'Jante MF-Z7',
           slug: 'mf-z7',
           description: null,
-          price: '100.00',
-          stockQuantity: 5,
           images: ['/general.jpg'],
           defaultFinish: 'Satin Black',
           category: {
@@ -459,8 +458,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: null,
-          price: 10,
-          stockQuantity: 0,
           images: [],
           category: {
             id: 'category-1',
@@ -498,8 +495,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: null,
-          price: 10,
-          stockQuantity: 37,
           images: [],
           category: {
             id: 'category-1',
@@ -517,7 +512,9 @@ describe('Catalog', () => {
         'stockQuantity',
       )
 
-      expect(product?.inStock).toBe(true)
+      // Sem variantes ativas não há stock de
+      // listagem: o Product já não decide.
+      expect(product?.inStock).toBe(false)
     })
 
     test('deriva preço do variante mais barato e inStock dos variantes ativos', async () => {
@@ -531,8 +528,6 @@ describe('Catalog', () => {
           name: 'Jante JR11',
           slug: 'jante-jr11',
           description: 'Jante Japan Racing JR11',
-          price: '300.00',
-          stockQuantity: 0,
           images: ['/wheels/jr11.jpg'],
           category: {
             id: 'category-1',
@@ -624,8 +619,6 @@ describe('Catalog', () => {
           name: 'Mola H&R',
           slug: 'mola-hr',
           description: null,
-          price: '289.90',
-          stockQuantity: 5,
           images: ['/springs/hr.jpg'],
           category: {
             id: 'category-1',
@@ -724,7 +717,7 @@ describe('Catalog', () => {
       expect(product?.inStock).toBe(true)
     })
 
-    test('produto só com variantes inativas cai para preço/stock do produto', async () => {
+    test('produto só com variantes inativas devolve preço de listagem 0 e sem stock', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -735,8 +728,6 @@ describe('Catalog', () => {
           name: 'Produto antigo',
           slug: 'produto-antigo',
           description: null,
-          price: '99.00',
-          stockQuantity: 3,
           images: [],
           category: {
             id: 'category-1',
@@ -764,9 +755,12 @@ describe('Catalog', () => {
         await listCatalogProducts(client)
       )[0]
 
-      expect(product?.price).toBe(99)
+      // O Product já não tem preço/stock próprios:
+      // sem variantes ativas, o preço de listagem é 0
+      // e o produto deixa de estar disponível.
+      expect(product?.price).toBe(0)
 
-      expect(product?.inStock).toBe(true)
+      expect(product?.inStock).toBe(false)
 
       expect(product?.variants).toEqual([])
     })
@@ -852,8 +846,6 @@ describe('Catalog', () => {
         slug: 'produto-1',
         sku: 'SKU-001',
         description: 'Descrição',
-        price: '49.90',
-        stockQuantity: 2,
         variants: [],
         images: [
           '/products/produto-1.jpg',
@@ -882,8 +874,8 @@ describe('Catalog', () => {
         slug: 'produto-1',
         sku: 'SKU-001',
         description: 'Descrição',
-        price: 49.9,
-        inStock: true,
+        price: 0,
+        inStock: false,
         variants: [],
         images: [
           '/products/produto-1.jpg',
@@ -1138,8 +1130,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: null,
-          price: '25.50',
-          stockQuantity: 3,
           variants: [],
           images: [],
           category: {
@@ -1192,8 +1182,8 @@ describe('Catalog', () => {
             name: 'Produto 1',
             slug: 'produto-1',
             description: null,
-            price: 25.5,
-            inStock: true,
+            price: 0,
+            inStock: false,
             variants: [],
             images: [],
             category: {
@@ -1730,8 +1720,6 @@ describe('Catalog', () => {
           name: 'Produto B',
           slug: 'produto-b',
           description: null,
-          price: 30,
-          stockQuantity: 5,
           images: [],
           category: {
             id: 'category-1',
@@ -1833,9 +1821,6 @@ describe('Catalog', () => {
             isActive: true,
             categoryId: {
               in: ['category-1'],
-            },
-            stockQuantity: {
-              gt: 0,
             },
             productBrandId: {
               in: ['brand-a'],
@@ -1953,32 +1938,61 @@ describe('Catalog', () => {
         },
       ])
 
+      // A base de dados já não ordena por preço (a coluna
+      // legada foi eliminada): a ordenação acontece em
+      // memória pelo preço de listagem (a variante ativa
+      // mais barata), com o nome como desempate.
       vi.mocked(
         client.product.findMany,
-      ).mockResolvedValue([])
+      ).mockResolvedValue([
+        createVariantProduct('product-b', [
+          createVariantRecord({
+            id: 'variant-b-1',
+            sku: 'SKU-B',
+            selections: {},
+            price: '34.00',
+          }),
+        ]),
+        createVariantProduct('product-a', [
+          createVariantRecord({
+            id: 'variant-a-1',
+            sku: 'SKU-A',
+            selections: {},
+            price: '12.50',
+          }),
+        ]),
+      ])
 
-      await getCatalogCategoryPageBySlug(
-        'categoria-1',
-        {
-          sort: 'price-asc',
-        },
-        client,
-      )
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            sort: 'price-asc',
+          },
+          client,
+        )
 
       expect(
         client.product.findMany,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderBy: [
-            {
-              price: 'asc',
-            },
-            {
-              name: 'asc',
-            },
-          ],
+          orderBy: {
+            name: 'asc',
+          },
         }),
       )
+
+      expect(
+        result?.products.map(
+          (product) => [
+            product.slug,
+            product.price,
+          ],
+        ),
+      ).toEqual([
+        ['produto-product-a', 12.5],
+        ['produto-product-b', 34],
+      ])
     })
 
     test('ordena produtos por preço descendente com nome como desempate', async () => {
@@ -1999,32 +2013,68 @@ describe('Catalog', () => {
         },
       ])
 
+      // No sentido descendente, produtos com o mesmo preço
+      // de listagem mantêm a ordem por nome.
       vi.mocked(
         client.product.findMany,
-      ).mockResolvedValue([])
+      ).mockResolvedValue([
+        createVariantProduct('product-c', [
+          createVariantRecord({
+            id: 'variant-c-1',
+            sku: 'SKU-C',
+            selections: {},
+            price: '30.00',
+          }),
+        ]),
+        createVariantProduct('product-b', [
+          createVariantRecord({
+            id: 'variant-b-1',
+            sku: 'SKU-B',
+            selections: {},
+            price: '50.00',
+          }),
+        ]),
+        createVariantProduct('product-a', [
+          createVariantRecord({
+            id: 'variant-a-1',
+            sku: 'SKU-A',
+            selections: {},
+            price: '30.00',
+          }),
+        ]),
+      ])
 
-      await getCatalogCategoryPageBySlug(
-        'categoria-1',
-        {
-          sort: 'price-desc',
-        },
-        client,
-      )
+      const result =
+        await getCatalogCategoryPageBySlug(
+          'categoria-1',
+          {
+            sort: 'price-desc',
+          },
+          client,
+        )
 
       expect(
         client.product.findMany,
       ).toHaveBeenCalledWith(
         expect.objectContaining({
-          orderBy: [
-            {
-              price: 'desc',
-            },
-            {
-              name: 'asc',
-            },
-          ],
+          orderBy: {
+            name: 'asc',
+          },
         }),
       )
+
+      expect(
+        result?.products.map(
+          (product) => [
+            product.slug,
+            product.price,
+          ],
+        ),
+      ).toEqual([
+        ['produto-product-b', 50],
+        ['produto-product-a', 30],
+        ['produto-product-c', 30],
+      ])
     })
 
     test('filtra produtos por preço mínimo', async () => {
@@ -2065,9 +2115,6 @@ describe('Catalog', () => {
             isActive: true,
             categoryId: {
               in: ['category-1'],
-            },
-            price: {
-              gte: 25,
             },
             variants: {
               some: {
@@ -2120,9 +2167,6 @@ describe('Catalog', () => {
             isActive: true,
             categoryId: {
               in: ['category-1'],
-            },
-            price: {
-              lte: 75,
             },
             variants: {
               some: {
@@ -2191,15 +2235,8 @@ describe('Catalog', () => {
             categoryId: {
               in: ['category-1'],
             },
-            stockQuantity: {
-              gt: 0,
-            },
             productBrandId: {
               in: ['brand-a'],
-            },
-            price: {
-              gte: 20,
-              lte: 100,
             },
             variants: {
               some: {
@@ -2379,8 +2416,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: null,
-          price: 50,
-          stockQuantity: 3,
           images: [],
           category: {
             id: 'category-1',
@@ -2484,15 +2519,8 @@ describe('Catalog', () => {
             categoryId: {
               in: ['category-1'],
             },
-            stockQuantity: {
-              gt: 0,
-            },
             productBrandId: {
               in: ['brand-a'],
-            },
-            price: {
-              gte: 20,
-              lte: 100,
             },
             variants: {
               some: {
@@ -2637,8 +2665,6 @@ describe('Catalog', () => {
           name: 'Produto 1',
           slug: 'produto-1',
           description: null,
-          price: 20,
-          stockQuantity: 4,
           images: [],
           category: {
             id: 'category-1',
@@ -2646,6 +2672,13 @@ describe('Catalog', () => {
             slug: 'categoria-1',
           },
           brand: null,
+          variants: [
+            createVariantRecord({
+              id: 'product-1-variant',
+              sku: 'P1-SKU',
+              selections: {},
+            }),
+          ],
         },
       ])
 
@@ -2666,9 +2699,6 @@ describe('Catalog', () => {
             isActive: true,
             categoryId: {
               in: ['category-1'],
-            },
-            stockQuantity: {
-              gt: 0,
             },
             variants: {
               some: {
@@ -2951,12 +2981,6 @@ describe('Catalog', () => {
             isActive: true,
             categoryId: {
               in: ['category-1'],
-            },
-            stockQuantity: {
-              gt: 0,
-            },
-            price: {
-              lte: 500,
             },
             variants: {
               some: {

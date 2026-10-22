@@ -11,8 +11,6 @@ type CartProductRecord = {
   id: string
   name: string
   slug: string
-  price: CartPrice
-  stockQuantity: number
   isActive: boolean
   images: string[]
 }
@@ -38,20 +36,23 @@ type PurchasableVariantRecord =
 type CartItemRecord = {
   id: string
   productId: string
-  productVariantId?: string
+  productVariantId: string
   quantity: number
   product: CartProductRecord
-  variant?: CartVariantRecord
+  variant: CartVariantRecord
+}
+
+type ResolvedCartVariant = {
+  id: string
+  productId: string
+  stockQuantity: number
+  isActive: boolean
+  productActive: boolean
 }
 
 type ExistingCartItemRecord = {
   id: string
   quantity: number
-}
-
-type AddableProductRecord = {
-  id: string
-  stockQuantity: number
 }
 
 type RemovableCartItemRecord = {
@@ -68,7 +69,7 @@ export type CartTargetInput =
 export type CartItem = {
   id: string
   productId: string
-  productVariantId?: string
+  productVariantId: string
   quantity: number
   product: {
     id: string
@@ -77,7 +78,7 @@ export type CartItem = {
     price: number
     images: string[]
   }
-  variant?: {
+  variant: {
     id: string
     sku: string
   }
@@ -135,20 +136,18 @@ export class CartItemNotFoundError extends Error {
 type CartItemSelect = {
   id: true
   productId: true
-  productVariantId?: true
+  productVariantId: true
   quantity: true
   product: {
     select: {
       id: true
       name: true
       slug: true
-      price: true
-      stockQuantity: true
       isActive: true
       images: true
     }
   }
-  variant?: {
+  variant: {
     select: {
       id: true
       productId: true
@@ -159,6 +158,33 @@ type CartItemSelect = {
       images: true
     }
   }
+}
+
+const cartItemSelect: CartItemSelect = {
+  id: true,
+  productId: true,
+  productVariantId: true,
+  quantity: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      isActive: true,
+      images: true,
+    },
+  },
+  variant: {
+    select: {
+      id: true,
+      productId: true,
+      sku: true,
+      price: true,
+      stockQuantity: true,
+      isActive: true,
+      images: true,
+    },
+  },
 }
 
 type ProductVariantDelegate = {
@@ -183,20 +209,7 @@ type ProductVariantDelegate = {
 }
 
 export interface CartClient {
-  productVariant?: ProductVariantDelegate
-
-  product: {
-    findFirst(args: {
-      where: {
-        id: string
-        isActive: true
-      }
-      select: {
-        id: true
-        stockQuantity: true
-      }
-    }): Promise<AddableProductRecord | null>
-  }
+  productVariant: ProductVariantDelegate
 
   cartItem: {
     findMany(args: {
@@ -210,19 +223,12 @@ export interface CartClient {
     }): Promise<CartItemRecord[]>
 
     findUnique(args: {
-      where:
-        | {
-            userId_productId: {
-              userId: string
-              productId: string
-            }
-          }
-        | {
-            userId_productVariantId: {
-              userId: string
-              productVariantId: string
-            }
-          }
+      where: {
+        userId_productVariantId: {
+          userId: string
+          productVariantId: string
+        }
+      }
       select:
         | {
             id: true
@@ -241,7 +247,7 @@ export interface CartClient {
       data: {
         userId: string
         productId: string
-        productVariantId?: string
+        productVariantId: string
         quantity: number
       }
       select: CartItemSelect
@@ -268,39 +274,6 @@ export interface CartClient {
       id: string
     }>
   }
-}
-
-const legacyCartItemSelect: CartItemSelect = {
-  id: true,
-  productId: true,
-  quantity: true,
-  product: {
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      price: true,
-      stockQuantity: true,
-      isActive: true,
-      images: true,
-    },
-  },
-}
-
-const variantCartItemSelect: CartItemSelect = {
-  ...legacyCartItemSelect,
-  productVariantId: true,
-  variant: {
-    select: {
-      id: true,
-      productId: true,
-      sku: true,
-      price: true,
-      stockQuantity: true,
-      isActive: true,
-      images: true,
-    },
-  },
 }
 
 function getClient(
@@ -390,42 +363,14 @@ async function resolveVariant(
   db: CartClient,
   target: CartTargetInput,
   requirePurchasable = true,
-) {
+): Promise<ResolvedCartVariant> {
   const normalized =
     normalizeTarget(target)
 
-  if (!db.productVariant) {
-    if (!normalized.productId) {
-      throw new CartProductUnavailableError()
-    }
-
-    const product =
-      await db.product.findFirst({
-        where: {
-          id: normalized.productId,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          stockQuantity: true,
-        },
-      })
-
-    if (!product) {
-      throw new CartProductUnavailableError()
-    }
-
-    return {
-      id: `pv_default_${product.id}`,
-      productId: product.id,
-      stockQuantity:
-        product.stockQuantity,
-      isActive: true,
-      productActive: true,
-      legacy: true as const,
-    }
-  }
-
+  // Itens identificados apenas pelo produto são
+  // resolvidos contra a variante 'default': o modelo
+  // autêntico é variante-only e esta resolução mantém a
+  // compatibilidade com pedidos antigos.
   const where: Record<string, unknown> =
     normalized.productVariantId
       ? {
@@ -496,7 +441,6 @@ async function resolveVariant(
     isActive: variant.isActive,
     productActive:
       variant.product.isActive,
-    legacy: false as const,
   }
 }
 
@@ -507,18 +451,12 @@ function toCartItem(
 
   const sellableActive =
     item.product.isActive &&
-    (variant?.isActive ?? true)
+    variant.isActive
 
   const stockQuantity =
-    variant?.stockQuantity ??
-    item.product.stockQuantity
-
-  const price =
-    variant?.price ??
-    item.product.price
+    variant.stockQuantity
 
   const images =
-    variant &&
     variant.images.length > 0
       ? variant.images
       : item.product.images
@@ -540,30 +478,22 @@ function toCartItem(
   return {
     id: item.id,
     productId: item.productId,
-    ...(item.productVariantId
-      ? {
-          productVariantId:
-            item.productVariantId,
-        }
-      : {}),
+    productVariantId:
+      item.productVariantId,
     quantity: item.quantity,
     product: {
       id: item.product.id,
       name: item.product.name,
       slug: item.product.slug,
       price: Number(
-        price.toString(),
+        variant.price.toString(),
       ),
       images,
     },
-    ...(variant
-      ? {
-          variant: {
-            id: variant.id,
-            sku: variant.sku,
-          },
-        }
-      : {}),
+    variant: {
+      id: variant.id,
+      sku: variant.sku,
+    },
     inStock,
     isAvailable,
     canIncrease,
@@ -589,10 +519,7 @@ export async function listCartItems(
       orderBy: {
         id: 'asc',
       },
-      select:
-        db.productVariant
-          ? variantCartItemSelect
-          : legacyCartItemSelect,
+      select: cartItemSelect,
     })
 
   return items.map(toCartItem)
@@ -626,25 +553,15 @@ export async function addCartItem(
 
   const existingItem =
     await db.cartItem.findUnique({
-      where:
-        db.productVariant
-          ? {
-              userId_productVariantId:
-                {
-                  userId:
-                    normalizedUserId,
-                  productVariantId:
-                    variant.id,
-                },
-            }
-          : {
-              userId_productId: {
-                userId:
-                  normalizedUserId,
-                productId:
-                  variant.productId,
-              },
-            },
+      where: {
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
+      },
       select: {
         id: true,
         quantity: true,
@@ -676,10 +593,7 @@ export async function addCartItem(
         data: {
           quantity: nextQuantity,
         },
-        select:
-          db.productVariant
-            ? variantCartItemSelect
-            : legacyCartItemSelect,
+        select: cartItemSelect,
       })
 
     return toCartItem(updatedItem)
@@ -691,18 +605,11 @@ export async function addCartItem(
         userId: normalizedUserId,
         productId:
           variant.productId,
-        ...(db.productVariant
-          ? {
-              productVariantId:
-                variant.id,
-            }
-          : {}),
+        productVariantId:
+          variant.id,
         quantity,
       },
-      select:
-        db.productVariant
-          ? variantCartItemSelect
-          : legacyCartItemSelect,
+      select: cartItemSelect,
     })
 
   return toCartItem(createdItem)
@@ -732,25 +639,15 @@ export async function updateCartItemQuantity(
 
   const existingItem =
     await db.cartItem.findUnique({
-      where:
-        db.productVariant
-          ? {
-              userId_productVariantId:
-                {
-                  userId:
-                    normalizedUserId,
-                  productVariantId:
-                    variant.id,
-                },
-            }
-          : {
-              userId_productId: {
-                userId:
-                  normalizedUserId,
-                productId:
-                  variant.productId,
-              },
-            },
+      where: {
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
+      },
       select: {
         id: true,
         quantity: true,
@@ -776,10 +673,7 @@ export async function updateCartItemQuantity(
       data: {
         quantity,
       },
-      select:
-        db.productVariant
-          ? variantCartItemSelect
-          : legacyCartItemSelect,
+      select: cartItemSelect,
     })
 
   return toCartItem(updatedItem)
@@ -806,25 +700,15 @@ export async function removeCartItem(
 
   const existingItem =
     await db.cartItem.findUnique({
-      where:
-        db.productVariant
-          ? {
-              userId_productVariantId:
-                {
-                  userId:
-                    normalizedUserId,
-                  productVariantId:
-                    variant.id,
-                },
-            }
-          : {
-              userId_productId: {
-                userId:
-                  normalizedUserId,
-                productId:
-                  variant.productId,
-              },
-            },
+      where: {
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
+      },
       select: {
         id: true,
       },

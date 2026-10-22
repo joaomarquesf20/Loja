@@ -43,6 +43,29 @@ function createTransactionMock() {
       createMany: vi.fn(),
       findUnique: vi.fn(),
     },
+    productVariant: {
+      findMany: vi.fn(),
+    },
+  }
+}
+
+// Record devolvido pelo select de variantes da fusão:
+// disponibilidade e stock vivem na ProductVariant.
+function defaultVariantRecord(
+  id: string,
+  productId: string,
+  stockQuantity: number,
+) {
+  return {
+    id,
+    productId,
+    optionKey: 'default',
+    stockQuantity,
+    isActive: true,
+    product: {
+      id: productId,
+      isActive: true,
+    },
   }
 }
 
@@ -514,7 +537,7 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [],
       )
 
@@ -558,18 +581,18 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
-          {
-            id: 'product-2',
-            stockQuantity: 3,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
+          defaultVariantRecord(
+            'variant-2',
+            'product-2',
+            3,
+          ),
         ],
       )
 
@@ -579,12 +602,16 @@ describe(
             id: 'cart-1',
             productId:
               'product-1',
+            productVariantId:
+              'variant-1',
             quantity: 2,
           },
           {
             id: 'cart-2',
             productId:
               'product-2',
+            productVariantId:
+              'variant-2',
             quantity: 2,
           },
         ],
@@ -631,18 +658,18 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
-          {
-            id: 'product-2',
-            stockQuantity: 5,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
+          defaultVariantRecord(
+            'variant-2',
+            'product-2',
+            5,
+          ),
         ],
       )
 
@@ -652,6 +679,8 @@ describe(
             id: 'cart-1',
             productId:
               'product-1',
+            productVariantId:
+              'variant-1',
             quantity: 4,
           },
         ],
@@ -741,20 +770,33 @@ describe(
       })
 
       expect(
-        tx.product.findMany,
+        tx.productVariant.findMany,
       ).toHaveBeenCalledWith({
         where: {
-          id: {
-            in: [
-              'product-1',
-              'product-2',
-            ],
-          },
+          OR: [
+            {
+              productId: {
+                in: [
+                  'product-1',
+                  'product-2',
+                ],
+              },
+              optionKey: 'default',
+            },
+          ],
         },
         select: {
           id: true,
+          productId: true,
+          optionKey: true,
           stockQuantity: true,
           isActive: true,
+          product: {
+            select: {
+              id: true,
+              isActive: true,
+            },
+          },
         },
       })
 
@@ -763,16 +805,17 @@ describe(
       ).toHaveBeenCalledWith({
         where: {
           userId: 'user-1',
-          productId: {
+          productVariantId: {
             in: [
-              'product-1',
-              'product-2',
+              'variant-1',
+              'variant-2',
             ],
           },
         },
         select: {
           id: true,
           productId: true,
+          productVariantId: true,
           quantity: true,
         },
       })
@@ -798,6 +841,8 @@ describe(
           userId: 'user-1',
           productId:
             'product-2',
+          productVariantId:
+            'variant-2',
           quantity: 2,
         },
         select: {
@@ -817,13 +862,13 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
         ],
       )
 
@@ -833,6 +878,8 @@ describe(
             id: 'cart-1',
             productId:
               'product-1',
+            productVariantId:
+              'variant-1',
             quantity: 0,
           },
         ],
@@ -870,13 +917,13 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
         ],
       )
 
@@ -942,13 +989,13 @@ describe(
       prepareUser(tx)
       claimNewReceipt(tx)
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
         ],
       )
 
@@ -1025,13 +1072,13 @@ describe(
         null,
       )
 
-      tx.product.findMany.mockResolvedValue(
+      tx.productVariant.findMany.mockResolvedValue(
         [
-          {
-            id: 'product-1',
-            stockQuantity: 10,
-            isActive: true,
-          },
+          defaultVariantRecord(
+            'variant-1',
+            'product-1',
+            10,
+          ),
         ],
       )
 

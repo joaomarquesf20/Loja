@@ -7,16 +7,6 @@ type GuestCartPrice =
       toString(): string
     }
 
-type GuestCartProductRecord = {
-  id: string
-  name: string
-  slug: string
-  price: GuestCartPrice
-  stockQuantity: number
-  isActive: boolean
-  images: string[]
-}
-
 type GuestCartVariantRecord = {
   id: string
   productId: string
@@ -100,31 +90,7 @@ export class GuestCartServerValidationError extends Error {
 }
 
 export interface GuestCartClient {
-  productVariant?: ProductVariantDelegate
-
-  product: {
-    findMany(args: {
-      where: {
-        id: {
-          in: string[]
-        }
-      }
-      orderBy: {
-        name: 'asc'
-      }
-      select: {
-        id: true
-        name: true
-        slug: true
-        price: true
-        stockQuantity: true
-        isActive: true
-        images: true
-      }
-    }): Promise<
-      GuestCartProductRecord[]
-    >
-  }
+  productVariant: ProductVariantDelegate
 }
 
 function getClient(
@@ -283,99 +249,6 @@ export async function resolveGuestCartItems(
   }
 
   const db = getClient(client)
-
-  if (!db.productVariant) {
-    const products =
-      await db.product.findMany({
-        where: {
-          id: {
-            in: normalizedItems.map(
-              (item) =>
-                item.productId,
-            ),
-          },
-        },
-        orderBy: {
-          name: 'asc',
-        },
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          price: true,
-          stockQuantity: true,
-          isActive: true,
-          images: true,
-        },
-      })
-
-    const productsById =
-      new Map(
-        products.map(
-          (product) => [
-            product.id,
-            product,
-          ],
-        ),
-      )
-
-    return normalizedItems.map(
-      (item) => {
-        const product =
-          productsById.get(
-            item.productId,
-          )
-
-        if (!product) {
-          return {
-            productId:
-              item.productId,
-            quantity:
-              item.quantity,
-            product: null,
-            inStock: false,
-            isAvailable: false,
-            canIncrease: false,
-          }
-        }
-
-        const inStock =
-          product.isActive &&
-          product.stockQuantity >
-            0
-
-        const isAvailable =
-          product.isActive &&
-          product.stockQuantity >=
-            item.quantity
-
-        const canIncrease =
-          product.isActive &&
-          product.stockQuantity >
-            item.quantity
-
-        return {
-          productId:
-            item.productId,
-          quantity:
-            item.quantity,
-          product: {
-            id: product.id,
-            name: product.name,
-            slug: product.slug,
-            price: Number(
-              product.price.toString(),
-            ),
-            images:
-              product.images,
-          },
-          inStock,
-          isAvailable,
-          canIncrease,
-        }
-      },
-    )
-  }
 
   const explicitVariantIds =
     normalizedItems.flatMap(

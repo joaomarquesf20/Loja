@@ -24,6 +24,8 @@ import {
   type OrderCancellationClient,
 } from './order-cancellation'
 
+// A variante comprada é a unidade de inventário
+// autoritativa: o stock é reposto nela.
 function createOrder(
   overrides:
     Record<string, unknown> = {},
@@ -45,6 +47,8 @@ function createOrder(
       {
         productId:
           'product-1',
+        productVariantId:
+          'variant-1',
         quantity: 2,
       },
     ],
@@ -52,18 +56,11 @@ function createOrder(
   }
 }
 
-function createClient(
-  options?: {
-    withVariants?: boolean
-  },
-) {
+function createClient() {
   const findUnique =
     vi.fn()
 
   const orderUpdateMany =
-    vi.fn()
-
-  const productUpdateMany =
     vi.fn()
 
   const variantUpdateMany =
@@ -88,17 +85,9 @@ function createClient(
             updateMany:
               orderUpdateMany,
           },
-          ...(options?.withVariants
-            ? {
-                productVariant: {
-                  updateMany:
-                    variantUpdateMany,
-                },
-              }
-            : {}),
-          product: {
+          productVariant: {
             updateMany:
-              productUpdateMany,
+              variantUpdateMany,
           },
           orderEvent: {
             create:
@@ -116,7 +105,6 @@ function createClient(
     transaction,
     findUnique,
     orderUpdateMany,
-    productUpdateMany,
     variantUpdateMany,
     createEvent,
   }
@@ -130,13 +118,13 @@ describe(
     })
 
     test(
-      'cancela encomenda pendente e repõe o stock',
+      'cancela encomenda pendente e repõe o stock na variante',
       async () => {
         const {
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
           createEvent,
         } = createClient()
 
@@ -148,9 +136,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 1,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
 
         await expect(
           cancelOrderAndRestoreStock(
@@ -188,10 +178,10 @@ describe(
         })
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).toHaveBeenCalledWith({
           where: {
-            id: 'product-1',
+            id: 'variant-1',
           },
           data: {
             stockQuantity: {
@@ -218,17 +208,14 @@ describe(
     )
 
     test(
-      'repõe stock apenas na variante no fluxo variant-aware',
+      'agrega quantidades da mesma variante antes de repor stock',
       async () => {
         const {
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
           variantUpdateMany,
-        } = createClient({
-          withVariants: true,
-        })
+        } = createClient()
 
         findUnique.mockResolvedValue(
           createOrder({
@@ -240,68 +227,11 @@ describe(
                   'variant-1',
                 quantity: 2,
               },
-            ],
-          }),
-        )
-
-        orderUpdateMany.mockResolvedValue({
-          count: 1,
-        })
-
-        variantUpdateMany.mockResolvedValue({
-          count: 1,
-        })
-
-        await expect(
-          cancelOrderAndRestoreStock(
-            'order-1',
-            client,
-          ),
-        ).resolves.toMatchObject({
-          status:
-            'CANCELLED',
-        })
-
-        expect(
-          variantUpdateMany,
-        ).toHaveBeenCalledWith({
-          where: {
-            id: 'variant-1',
-          },
-          data: {
-            stockQuantity: {
-              increment: 2,
-            },
-          },
-        })
-
-        expect(
-          productUpdateMany,
-        ).not.toHaveBeenCalled()
-      },
-    )
-
-    test(
-      'agrega quantidades do mesmo produto antes de repor stock',
-      async () => {
-        const {
-          client,
-          findUnique,
-          orderUpdateMany,
-          productUpdateMany,
-        } = createClient()
-
-        findUnique.mockResolvedValue(
-          createOrder({
-            items: [
               {
                 productId:
                   'product-1',
-                quantity: 2,
-              },
-              {
-                productId:
-                  'product-1',
+                productVariantId:
+                  'variant-1',
                 quantity: 3,
               },
             ],
@@ -312,9 +242,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 1,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
 
         await cancelOrderAndRestoreStock(
           'order-1',
@@ -322,16 +254,16 @@ describe(
         )
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).toHaveBeenCalledTimes(
           1,
         )
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).toHaveBeenCalledWith({
           where: {
-            id: 'product-1',
+            id: 'variant-1',
           },
           data: {
             stockQuantity: {
@@ -349,7 +281,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -363,9 +295,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 1,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
 
         await expect(
           cancelOrderAndRestoreStock(
@@ -388,7 +322,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -406,9 +340,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 1,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
 
         await expect(
           cancelOrderAndRestoreStock(
@@ -433,7 +369,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -444,9 +380,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 1,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
 
         await expect(
           cancelUserOrderAndRestoreStock(
@@ -486,7 +424,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
           createEvent,
         } = createClient()
 
@@ -511,7 +449,7 @@ describe(
         ).not.toHaveBeenCalled()
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
 
         expect(
@@ -527,7 +465,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -552,7 +490,7 @@ describe(
         ).not.toHaveBeenCalled()
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
       },
     )
@@ -564,7 +502,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -591,7 +529,7 @@ describe(
         ).not.toHaveBeenCalled()
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
       },
     )
@@ -639,7 +577,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -664,7 +602,7 @@ describe(
         ).not.toHaveBeenCalled()
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
       },
     )
@@ -676,7 +614,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -698,19 +636,19 @@ describe(
         })
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
       },
     )
 
     test(
-      'falha com segurança quando não consegue repor um produto',
+      'falha com segurança quando não consegue repor uma variante',
       async () => {
         const {
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -721,9 +659,11 @@ describe(
           count: 1,
         })
 
-        productUpdateMany.mockResolvedValue({
-          count: 0,
-        })
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 0,
+          },
+        )
 
         await expect(
           cancelOrderAndRestoreStock(
@@ -732,8 +672,49 @@ describe(
           ),
         ).rejects.toMatchObject({
           message:
-            'Não foi possível repor todo o stock da encomenda',
+            'Não foi possível repor todo o stock das variantes da encomenda',
         })
+      },
+    )
+
+    test(
+      'rejeita itens sem variante antes de alterar encomenda ou stock',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          variantUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            items: [
+              {
+                productId:
+                  'product-1',
+                quantity: 2,
+              },
+            ],
+          }),
+        )
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          OrderLifecycleConflictError,
+        )
+
+        expect(
+          orderUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          variantUpdateMany,
+        ).not.toHaveBeenCalled()
       },
     )
 
@@ -744,7 +725,7 @@ describe(
           client,
           findUnique,
           orderUpdateMany,
-          productUpdateMany,
+          variantUpdateMany,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -753,6 +734,8 @@ describe(
               {
                 productId:
                   'product-1',
+                productVariantId:
+                  'variant-1',
                 quantity: 0,
               },
             ],
@@ -773,7 +756,7 @@ describe(
         ).not.toHaveBeenCalled()
 
         expect(
-          productUpdateMany,
+          variantUpdateMany,
         ).not.toHaveBeenCalled()
       },
     )

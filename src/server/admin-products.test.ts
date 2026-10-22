@@ -245,7 +245,7 @@ describe('admin products service', () => {
     vi.clearAllMocks()
   })
 
-  test('devolve nome de categoria, fabricante, variante e stock', async () => {
+  test('devolve nome de categoria, fabricante e variantes com stock', async () => {
     const { client } = createClient()
 
     const result = await listAdminProducts(
@@ -255,14 +255,13 @@ describe('admin products service', () => {
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({
       name: 'Japan Racing JR11',
-      price: '169.90',
-      stockQuantity: 8,
       category: { name: 'Jantes' },
       brand: { name: 'Japan Racing' },
       variants: [
         {
           sku: 'JR11-18',
           price: '169.90',
+          stockQuantity: 8,
           options: expect.arrayContaining([
             expect.objectContaining({
               code: 'diameter',
@@ -399,8 +398,6 @@ describe('admin products service', () => {
           name: 'Japan Racing JR11',
           categoryId: 'category-wheels',
           productBrandId: 'brand-jr',
-          price: 169.9,
-          stockQuantity: 8,
           isActive: true,
         }),
       }),
