@@ -5,6 +5,8 @@ import {
 } from 'node:fs/promises'
 import path from 'node:path'
 
+import { put } from '@vercel/blob'
+
 export const MAX_IMAGE_UPLOAD_BYTES =
   10 * 1024 * 1024
 
@@ -30,7 +32,7 @@ export type StoredImage = {
 export type ImageUpload = {
   originalName: string
   mimeType: string
-  bytes: Uint8Array
+  bytes: Uint8Array<ArrayBuffer>
 }
 
 export interface ImageStorageAdapter {
@@ -79,6 +81,35 @@ function getPublicPath() {
   return configured.replace(/\/$/, '')
 }
 
+function getImageExtension(
+  upload: ImageUpload,
+): string {
+  const extension =
+    MIME_EXTENSIONS[upload.mimeType]
+  if (!extension) {
+    throw new ImageStorageError(
+      'Formato de imagem não suportado. Usa JPG, PNG, WebP, AVIF ou GIF.',
+    )
+  }
+
+  if (upload.bytes.byteLength === 0) {
+    throw new ImageStorageError(
+      'O ficheiro de imagem está vazio.',
+    )
+  }
+
+  if (
+    upload.bytes.byteLength >
+    MAX_IMAGE_UPLOAD_BYTES
+  ) {
+    throw new ImageStorageError(
+      'A imagem excede o limite de 10 MB.',
+    )
+  }
+
+  return extension
+}
+
 /**
  * Development adapter. ProductImage rows only ever receive the
  * returned URL/path; bytes live in the configured upload directory.
@@ -92,27 +123,7 @@ class LocalImageStorage
     upload: ImageUpload,
   ): Promise<StoredImage> {
     const extension =
-      MIME_EXTENSIONS[upload.mimeType]
-    if (!extension) {
-      throw new ImageStorageError(
-        'Formato de imagem não suportado. Usa JPG, PNG, WebP, AVIF ou GIF.',
-      )
-    }
-
-    if (upload.bytes.byteLength === 0) {
-      throw new ImageStorageError(
-        'O ficheiro de imagem está vazio.',
-      )
-    }
-
-    if (
-      upload.bytes.byteLength >
-      MAX_IMAGE_UPLOAD_BYTES
-    ) {
-      throw new ImageStorageError(
-        'A imagem excede o limite de 10 MB.',
-      )
-    }
+      getImageExtension(upload)
 
     const directory = getUploadDirectory()
     const filename = `${randomUUID()}.${extension}`
@@ -142,15 +153,75 @@ class LocalImageStorage
   }
 }
 
+/**
+ * Production adapter for Vercel, which has no persistent local disk.
+ * Requires BLOB_READ_WRITE_TOKEN (provided by the Vercel Blob store).
+ */
+class VercelBlobImageStorage
+  implements ImageStorageAdapter
+{
+  async store(
+    upload: ImageUpload,
+  ): Promise<StoredImage> {
+    const extension =
+      getImageExtension(upload)
+
+    if (
+      !process.env
+        .BLOB_READ_WRITE_TOKEN
+    ) {
+      throw new ImageStorageError(
+        'O armazenamento de imagens na Vercel não está configurado (BLOB_READ_WRITE_TOKEN em falta).',
+        503,
+      )
+    }
+
+    const pathname = `products/${randomUUID()}.${extension}`
+    const blob = await put(
+      pathname,
+      new Blob([upload.bytes], {
+        type: upload.mimeType,
+      }),
+      {
+        access: 'public',
+        contentType:
+          upload.mimeType,
+        addRandomSuffix: false,
+      },
+    )
+
+    return {
+      url: blob.url,
+      path: blob.pathname,
+      originalName:
+        upload.originalName,
+      mimeType: upload.mimeType,
+      size: upload.bytes.byteLength,
+    }
+  }
+}
+
 export function getImageStorage(): ImageStorageAdapter {
   const provider =
     process.env.PRODUCT_IMAGE_STORAGE?.trim()
+
+  if (provider === 'vercel-blob') {
+    return new VercelBlobImageStorage()
+  }
+
   if (
     provider &&
     provider !== 'local'
   ) {
     throw new ImageStorageError(
       `O armazenamento de imagens "${provider}" ainda não está configurado.`,
+      503,
+    )
+  }
+
+  if (process.env.VERCEL) {
+    throw new ImageStorageError(
+      'Na Vercel o disco local não é persistente. Define PRODUCT_IMAGE_STORAGE=vercel-blob.',
       503,
     )
   }
