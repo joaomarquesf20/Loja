@@ -113,6 +113,62 @@ describe(
       ).toBeNull()
     })
 
+    test('usa a quantidade selecionada na página de produto', async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({
+          item: {
+            productId:
+              'product-1',
+            quantity: 2,
+          },
+        }),
+      )
+
+      render(
+        <AddToCartButton
+          productId="product-1"
+          inStock
+          variant="product"
+        />,
+      )
+
+      fireEvent.click(
+        screen.getByRole(
+          'button',
+          {
+            name:
+              'Aumentar quantidade',
+          },
+        ),
+      )
+
+      fireEvent.click(
+        screen.getByRole(
+          'button',
+          {
+            name:
+              'Adicionar ao carrinho',
+          },
+        ),
+      )
+
+      await waitFor(() => {
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/cart',
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({
+              productId:
+                'product-1',
+              quantity: 2,
+            }),
+          }),
+        )
+      })
+    })
+
     test('guarda produto no carrinho convidado quando API devolve 401', async () => {
       fetchMock.mockResolvedValueOnce(
         jsonResponse(

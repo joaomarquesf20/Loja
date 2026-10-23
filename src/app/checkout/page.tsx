@@ -1,8 +1,60 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
+
+import { listCartItems } from '@/server/cart'
+import {
+  requireActiveUserId,
+  UnauthorizedUserError,
+} from '@/server/user-auth'
 
 import { CheckoutClient } from './checkout-client'
 
-export default function CheckoutPage() {
+/**
+ * O checkout depende da sessão (getServerSession → headers()), por
+ * isso o segmento é declarado como dinâmico: o build deixa de tentar
+ * prerender estático, que gerava o aviso `DYNAMIC_SERVER_USAGE`
+ * apanhado pelo catch da verificação do carrinho vazio abaixo.
+ */
+export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Finalizar compra',
+}
+
+/**
+ * Verifica no servidor se o carrinho da sessão está vazio.
+ * Sem sessão devolve false: o cliente redireciona para o login.
+ */
+async function isAuthenticatedCartEmpty() {
+  try {
+    const userId =
+      await requireActiveUserId()
+
+    const items =
+      await listCartItems(userId)
+
+    return items.length === 0
+  } catch (error) {
+    if (
+      error instanceof
+      UnauthorizedUserError
+    ) {
+      return false
+    }
+
+    console.error(
+      'Checkout cart check failed:',
+      error,
+    )
+
+    return false
+  }
+}
+
+export default async function CheckoutPage() {
+  const cartIsEmpty =
+    await isAuthenticatedCartEmpty()
+
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
       <Link
@@ -24,7 +76,27 @@ export default function CheckoutPage() {
       </div>
 
       <div className="mt-8">
-        <CheckoutClient />
+        {cartIsEmpty ? (
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+            <h2 className="text-lg font-semibold text-gray-950">
+              O carrinho está vazio
+            </h2>
+
+            <p className="mt-2 text-sm text-gray-600">
+              Adiciona produtos ao carrinho antes de
+              finalizar a compra.
+            </p>
+
+            <Link
+              href="/"
+              className="mt-5 inline-flex rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
+            >
+              Ver produtos
+            </Link>
+          </div>
+        ) : (
+          <CheckoutClient />
+        )}
       </div>
     </main>
   )

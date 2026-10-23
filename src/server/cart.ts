@@ -11,17 +11,43 @@ type CartProductRecord = {
   id: string
   name: string
   slug: string
+  isActive: boolean
+  images: string[]
+}
+
+type CartVariantRecord = {
+  id: string
+  productId: string
+  sku: string
   price: CartPrice
   stockQuantity: number
   isActive: boolean
   images: string[]
 }
 
+type PurchasableVariantRecord =
+  CartVariantRecord & {
+    product: {
+      id: string
+      isActive: boolean
+    }
+  }
+
 type CartItemRecord = {
   id: string
   productId: string
+  productVariantId: string
   quantity: number
   product: CartProductRecord
+  variant: CartVariantRecord
+}
+
+type ResolvedCartVariant = {
+  id: string
+  productId: string
+  stockQuantity: number
+  isActive: boolean
+  productActive: boolean
 }
 
 type ExistingCartItemRecord = {
@@ -29,18 +55,21 @@ type ExistingCartItemRecord = {
   quantity: number
 }
 
-type AddableProductRecord = {
-  id: string
-  stockQuantity: number
-}
-
 type RemovableCartItemRecord = {
   id: string
 }
 
+export type CartTargetInput =
+  | string
+  | {
+      productId?: string
+      productVariantId?: string
+    }
+
 export type CartItem = {
   id: string
   productId: string
+  productVariantId: string
   quantity: number
   product: {
     id: string
@@ -48,6 +77,10 @@ export type CartItem = {
     slug: string
     price: number
     images: string[]
+  }
+  variant: {
+    id: string
+    sku: string
   }
   inStock: boolean
   isAvailable: boolean
@@ -68,6 +101,16 @@ export class CartProductUnavailableError extends Error {
     super(message)
     this.name =
       'CartProductUnavailableError'
+  }
+}
+
+export class CartVariantSelectionRequiredError extends Error {
+  constructor(
+    message = 'Esta combinação não está disponível. Escolha outra configuração.',
+  ) {
+    super(message)
+    this.name =
+      'CartVariantSelectionRequiredError'
   }
 }
 
@@ -93,12 +136,22 @@ export class CartItemNotFoundError extends Error {
 type CartItemSelect = {
   id: true
   productId: true
+  productVariantId: true
   quantity: true
   product: {
     select: {
       id: true
       name: true
       slug: true
+      isActive: true
+      images: true
+    }
+  }
+  variant: {
+    select: {
+      id: true
+      productId: true
+      sku: true
       price: true
       stockQuantity: true
       isActive: true
@@ -107,19 +160,56 @@ type CartItemSelect = {
   }
 }
 
-export interface CartClient {
+const cartItemSelect: CartItemSelect = {
+  id: true,
+  productId: true,
+  productVariantId: true,
+  quantity: true,
   product: {
-    findFirst(args: {
-      where: {
-        id: string
-        isActive: true
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      isActive: true,
+      images: true,
+    },
+  },
+  variant: {
+    select: {
+      id: true,
+      productId: true,
+      sku: true,
+      price: true,
+      stockQuantity: true,
+      isActive: true,
+      images: true,
+    },
+  },
+}
+
+type ProductVariantDelegate = {
+  findFirst(args: {
+    where: Record<string, unknown>
+    select: {
+      id: true
+      productId: true
+      sku: true
+      price: true
+      stockQuantity: true
+      isActive: true
+      images: true
+      product: {
+        select: {
+          id: true
+          isActive: true
+        }
       }
-      select: {
-        id: true
-        stockQuantity: true
-      }
-    }): Promise<AddableProductRecord | null>
-  }
+    }
+  }): Promise<PurchasableVariantRecord | null>
+}
+
+export interface CartClient {
+  productVariant: ProductVariantDelegate
 
   cartItem: {
     findMany(args: {
@@ -134,9 +224,9 @@ export interface CartClient {
 
     findUnique(args: {
       where: {
-        userId_productId: {
+        userId_productVariantId: {
           userId: string
-          productId: string
+          productVariantId: string
         }
       }
       select:
@@ -157,6 +247,7 @@ export interface CartClient {
       data: {
         userId: string
         productId: string
+        productVariantId: string
         quantity: number
       }
       select: CartItemSelect
@@ -185,23 +276,6 @@ export interface CartClient {
   }
 }
 
-const cartItemSelect: CartItemSelect = {
-  id: true,
-  productId: true,
-  quantity: true,
-  product: {
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      price: true,
-      stockQuantity: true,
-      isActive: true,
-      images: true,
-    },
-  },
-}
-
 function getClient(
   client?: CartClient,
 ): CartClient {
@@ -226,6 +300,52 @@ function normalizeId(
   return normalizedValue
 }
 
+function normalizeTarget(
+  target: CartTargetInput,
+) {
+  if (typeof target === 'string') {
+    return {
+      productId: normalizeId(
+        target,
+        'Produto',
+      ),
+      productVariantId:
+        undefined,
+    }
+  }
+
+  const productId =
+    target.productId === undefined
+      ? undefined
+      : normalizeId(
+          target.productId,
+          'Produto',
+        )
+
+  const productVariantId =
+    target.productVariantId ===
+    undefined
+      ? undefined
+      : normalizeId(
+          target.productVariantId,
+          'Variante',
+        )
+
+  if (
+    !productId &&
+    !productVariantId
+  ) {
+    throw new CartValidationError(
+      'Produto ou variante é obrigatório',
+    )
+  }
+
+  return {
+    productId,
+    productVariantId,
+  }
+}
+
 function validateQuantity(
   quantity: number,
 ) {
@@ -239,35 +359,140 @@ function validateQuantity(
   }
 }
 
+async function resolveVariant(
+  db: CartClient,
+  target: CartTargetInput,
+  requirePurchasable = true,
+): Promise<ResolvedCartVariant> {
+  const normalized =
+    normalizeTarget(target)
+
+  // Itens identificados apenas pelo produto são
+  // resolvidos contra a variante 'default': o modelo
+  // autêntico é variante-only e esta resolução mantém a
+  // compatibilidade com pedidos antigos.
+  const where: Record<string, unknown> =
+    normalized.productVariantId
+      ? {
+          id:
+            normalized.productVariantId,
+        }
+      : {
+          productId:
+            normalized.productId,
+          optionKey: 'default',
+        }
+
+  const variant =
+    await db.productVariant.findFirst({
+      where,
+      select: {
+        id: true,
+        productId: true,
+        sku: true,
+        price: true,
+        stockQuantity: true,
+        isActive: true,
+        images: true,
+        product: {
+          select: {
+            id: true,
+            isActive: true,
+          },
+        },
+      },
+    })
+
+  if (!variant) {
+    // Uma variante inexistente para o produto indica uma
+    // combinação de opções inválida (ex.: 19" + 5x100 que
+    // nunca foi criada) e não um produto indisponível.
+    if (normalized.productVariantId) {
+      throw new CartVariantSelectionRequiredError()
+    }
+
+    throw new CartProductUnavailableError()
+  }
+
+  if (
+    normalized.productId &&
+    variant.productId !==
+      normalized.productId
+  ) {
+    // A variante existe mas pertence a outro produto:
+    // o pedido é inconsistente, não uma combinação de
+    // opções do produto pedido.
+    throw new CartProductUnavailableError()
+  }
+
+  if (
+    requirePurchasable &&
+    (!variant.isActive ||
+      !variant.product.isActive)
+  ) {
+    throw new CartProductUnavailableError()
+  }
+
+  return {
+    id: variant.id,
+    productId: variant.productId,
+    stockQuantity:
+      variant.stockQuantity,
+    isActive: variant.isActive,
+    productActive:
+      variant.product.isActive,
+  }
+}
+
 function toCartItem(
   item: CartItemRecord,
 ): CartItem {
-  const inStock =
+  const variant = item.variant
+
+  const sellableActive =
     item.product.isActive &&
-    item.product.stockQuantity > 0
+    variant.isActive
+
+  const stockQuantity =
+    variant.stockQuantity
+
+  const images =
+    variant.images.length > 0
+      ? variant.images
+      : item.product.images
+
+  const inStock =
+    sellableActive &&
+    stockQuantity > 0
 
   const isAvailable =
-    item.product.isActive &&
-    item.product.stockQuantity >=
+    sellableActive &&
+    stockQuantity >=
       item.quantity
 
   const canIncrease =
-    item.product.isActive &&
-    item.product.stockQuantity >
+    sellableActive &&
+    stockQuantity >
       item.quantity
 
   return {
     id: item.id,
     productId: item.productId,
+    productVariantId:
+      item.productVariantId,
     quantity: item.quantity,
     product: {
       id: item.product.id,
       name: item.product.name,
       slug: item.product.slug,
       price: Number(
-        item.product.price.toString(),
+        variant.price.toString(),
       ),
-      images: item.product.images,
+      images,
+    },
+    variant: {
+      id: variant.id,
+      sku: variant.sku,
     },
     inStock,
     isAvailable,
@@ -302,7 +527,7 @@ export async function listCartItems(
 
 export async function addCartItem(
   userId: string,
-  productId: string,
+  target: CartTargetInput,
   quantity = 1,
   client?: CartClient,
 ): Promise<CartItem> {
@@ -311,44 +536,31 @@ export async function addCartItem(
     'Utilizador',
   )
 
-  const normalizedProductId =
-    normalizeId(
-      productId,
-      'Produto',
-    )
-
   validateQuantity(quantity)
 
   const db = getClient(client)
 
-  const product =
-    await db.product.findFirst({
-      where: {
-        id: normalizedProductId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        stockQuantity: true,
-      },
-    })
+  const variant =
+    await resolveVariant(
+      db,
+      target,
+      true,
+    )
 
-  if (!product) {
-    throw new CartProductUnavailableError()
-  }
-
-  if (product.stockQuantity <= 0) {
+  if (variant.stockQuantity <= 0) {
     throw new CartInsufficientStockError()
   }
 
   const existingItem =
     await db.cartItem.findUnique({
       where: {
-        userId_productId: {
-          userId: normalizedUserId,
-          productId:
-            normalizedProductId,
-        },
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
       },
       select: {
         id: true,
@@ -367,7 +579,7 @@ export async function addCartItem(
 
   if (
     nextQuantity >
-    product.stockQuantity
+    variant.stockQuantity
   ) {
     throw new CartInsufficientStockError()
   }
@@ -392,7 +604,9 @@ export async function addCartItem(
       data: {
         userId: normalizedUserId,
         productId:
-          normalizedProductId,
+          variant.productId,
+        productVariantId:
+          variant.id,
         quantity,
       },
       select: cartItemSelect,
@@ -403,7 +617,7 @@ export async function addCartItem(
 
 export async function updateCartItemQuantity(
   userId: string,
-  productId: string,
+  target: CartTargetInput,
   quantity: number,
   client?: CartClient,
 ): Promise<CartItem> {
@@ -412,24 +626,27 @@ export async function updateCartItemQuantity(
     'Utilizador',
   )
 
-  const normalizedProductId =
-    normalizeId(
-      productId,
-      'Produto',
-    )
-
   validateQuantity(quantity)
 
   const db = getClient(client)
 
+  const variant =
+    await resolveVariant(
+      db,
+      target,
+      true,
+    )
+
   const existingItem =
     await db.cartItem.findUnique({
       where: {
-        userId_productId: {
-          userId: normalizedUserId,
-          productId:
-            normalizedProductId,
-        },
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
       },
       select: {
         id: true,
@@ -441,25 +658,9 @@ export async function updateCartItemQuantity(
     throw new CartItemNotFoundError()
   }
 
-  const product =
-    await db.product.findFirst({
-      where: {
-        id: normalizedProductId,
-        isActive: true,
-      },
-      select: {
-        id: true,
-        stockQuantity: true,
-      },
-    })
-
-  if (!product) {
-    throw new CartProductUnavailableError()
-  }
-
   if (
     quantity >
-    product.stockQuantity
+    variant.stockQuantity
   ) {
     throw new CartInsufficientStockError()
   }
@@ -480,7 +681,7 @@ export async function updateCartItemQuantity(
 
 export async function removeCartItem(
   userId: string,
-  productId: string,
+  target: CartTargetInput,
   client?: CartClient,
 ): Promise<void> {
   const normalizedUserId = normalizeId(
@@ -488,22 +689,25 @@ export async function removeCartItem(
     'Utilizador',
   )
 
-  const normalizedProductId =
-    normalizeId(
-      productId,
-      'Produto',
-    )
-
   const db = getClient(client)
+
+  const variant =
+    await resolveVariant(
+      db,
+      target,
+      false,
+    )
 
   const existingItem =
     await db.cartItem.findUnique({
       where: {
-        userId_productId: {
-          userId: normalizedUserId,
-          productId:
-            normalizedProductId,
-        },
+        userId_productVariantId:
+          {
+            userId:
+              normalizedUserId,
+            productVariantId:
+              variant.id,
+          },
       },
       select: {
         id: true,

@@ -43,6 +43,26 @@ const mainlandInclude = {
       shippingCost: true,
     },
   },
+  // A leitura traz a variante 'default', fonte do
+  // preço e do stock apresentados.
+  variants: {
+    where: {
+      optionKey: 'default',
+    },
+    select: {
+      id: true,
+      price: true,
+      stockQuantity: true,
+    },
+  },
+}
+
+// A variante 'default' alimenta o preço e o stock
+// apresentados do produto (fonte única).
+const defaultVariant = {
+  id: 'variant-test',
+  price: '19.99',
+  stockQuantity: 10,
 }
 
 const product = {
@@ -53,13 +73,12 @@ const product = {
   slug: 'produto-teste',
   sku: 'SKU-TESTE-001',
   description: null,
-  price: 19.99,
-  stockQuantity: 10,
   isActive: true,
   images: [],
   shippingClass:
     'STANDARD' as const,
   shippingRates: [],
+  variants: [defaultVariant],
 }
 
 const productResponse = {
@@ -71,9 +90,8 @@ const productResponse = {
   slug: product.slug,
   sku: product.sku,
   description: product.description,
-  price: product.price,
-  stockQuantity:
-    product.stockQuantity,
+  price: 19.99,
+  stockQuantity: 10,
   isActive: product.isActive,
   images: product.images,
   shippingClass: 'STANDARD',
@@ -95,6 +113,8 @@ function bulkySettings(
           'PORTUGAL_MAINLAND' as const,
         checkoutEnabled: true,
         taxRatePercent: '23.00',
+        expressShippingCost:
+          null,
         shippingRules: [
           {
             id: 'bulky-rule',
@@ -118,6 +138,9 @@ function bulkySettings(
 function createClient():
   ProductClient {
   return {
+    productVariant: {
+      upsert: vi.fn(),
+    },
     product: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -410,7 +433,13 @@ describe('products service', () => {
     test('permite productBrandId null', async () => {
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(null)
+      )
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          ...product,
+          productBrandId: null,
+        })
 
       vi.mocked(
         client.category.findUnique,
@@ -455,7 +484,10 @@ describe('products service', () => {
     test('cria produto STANDARD válido', async () => {
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(null)
+      )
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(product)
 
       vi.mocked(
         client.category.findUnique,
@@ -497,6 +529,37 @@ describe('products service', () => {
         productResponse,
       )
 
+      // O preço e o stock do formulário básico
+      // passam a escrever a variante 'default'.
+      expect(
+        client.productVariant.upsert,
+      ).toHaveBeenCalledWith({
+        where: {
+          productId_optionKey: {
+            productId:
+              'product-test',
+            optionKey: 'default',
+          },
+        },
+        update: {
+          sku: 'SKU-TESTE-001',
+          price: 19.99,
+          stockQuantity: 10,
+          isActive: true,
+        },
+        create: {
+          productId:
+            'product-test',
+          sku: 'SKU-TESTE-001',
+          price: 19.99,
+          stockQuantity: 10,
+          isActive: true,
+          images: [],
+          position: 0,
+          optionKey: 'default',
+        },
+      })
+
       expect(
         mockGetCommercialSettings,
       ).not.toHaveBeenCalled()
@@ -513,7 +576,12 @@ describe('products service', () => {
 
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(null)
+      )
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(
+          productWithImages,
+        )
 
       vi.mocked(
         client.category.findUnique,
@@ -554,8 +622,6 @@ describe('products service', () => {
           name: 'Produto Teste',
           slug: 'produto-teste',
           sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
           categoryId:
             'category-test',
           shippingClass:
@@ -577,7 +643,10 @@ describe('products service', () => {
     test('isActive e images omitidos aplicam defaults', async () => {
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(null)
+      )
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue(product)
 
       vi.mocked(
         client.category.findUnique,
@@ -611,8 +680,6 @@ describe('products service', () => {
           name: 'Produto Teste',
           slug: 'produto-teste',
           sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
           categoryId:
             'category-test',
           shippingClass:
@@ -670,7 +737,13 @@ describe('products service', () => {
     test('cria BULKY com tarifa específica dentro dos limites configurados', async () => {
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(null)
+      )
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({
+          ...product,
+          shippingClass: 'BULKY',
+        })
 
       vi.mocked(
         client.category.findUnique,
@@ -710,8 +783,6 @@ describe('products service', () => {
           name: 'Produto Teste',
           slug: 'produto-teste',
           sku: 'SKU-TESTE-001',
-          price: 19.99,
-          stockQuantity: 10,
           categoryId:
             'category-test',
           shippingClass: 'BULKY',
@@ -992,7 +1063,9 @@ describe('products service', () => {
 
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(product)
+      )
+        .mockResolvedValueOnce(product)
+        .mockResolvedValue(updated)
 
       vi.mocked(
         client.product.update,
@@ -1039,7 +1112,9 @@ describe('products service', () => {
 
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(product)
+      )
+        .mockResolvedValueOnce(product)
+        .mockResolvedValue(updated)
 
       vi.mocked(
         client.product.update,
@@ -1085,7 +1160,9 @@ describe('products service', () => {
 
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(product)
+      )
+        .mockResolvedValueOnce(product)
+        .mockResolvedValue(updated)
 
       vi.mocked(
         client.product.update,
@@ -1118,6 +1195,107 @@ describe('products service', () => {
       )
     })
 
+    test('envia preço e stock do formulário à variante default', async () => {
+      vi.mocked(
+        client.product.findUnique,
+      )
+        .mockResolvedValueOnce(product)
+        .mockResolvedValue(product)
+
+      vi.mocked(
+        client.product.update,
+      ).mockResolvedValue(product)
+
+      await updateProduct(
+        'product-test',
+        {
+          price: 24.9,
+          stockQuantity: 7,
+        },
+        client,
+      )
+
+      // O preço e o stock do formulário básico
+      // passam a escrever a variante 'default',
+      // em vez de campos do Product.
+      expect(
+        client.productVariant.upsert,
+      ).toHaveBeenCalledWith({
+        where: {
+          productId_optionKey: {
+            productId:
+              'product-test',
+            optionKey: 'default',
+          },
+        },
+        update: {
+          sku: 'SKU-TESTE-001',
+          price: 24.9,
+          stockQuantity: 7,
+          isActive: true,
+        },
+        create: {
+          productId:
+            'product-test',
+          sku: 'SKU-TESTE-001',
+          price: 24.9,
+          stockQuantity: 7,
+          isActive: true,
+          images: [],
+          position: 0,
+          optionKey: 'default',
+        },
+      })
+    })
+
+    test('update sem preço não altera o preço da variante default', async () => {
+      vi.mocked(
+        client.product.findUnique,
+      )
+        .mockResolvedValueOnce(product)
+        .mockResolvedValue(product)
+
+      vi.mocked(
+        client.product.update,
+      ).mockResolvedValue(product)
+
+      await updateProduct(
+        'product-test',
+        {
+          stockQuantity: 3,
+        },
+        client,
+      )
+
+      expect(
+        client.productVariant.upsert,
+      ).toHaveBeenCalledWith({
+        where: {
+          productId_optionKey: {
+            productId:
+              'product-test',
+            optionKey: 'default',
+          },
+        },
+        update: {
+          sku: 'SKU-TESTE-001',
+          stockQuantity: 3,
+          isActive: true,
+        },
+        create: {
+          productId:
+            'product-test',
+          sku: 'SKU-TESTE-001',
+          price: 0,
+          stockQuantity: 3,
+          isActive: true,
+          images: [],
+          position: 0,
+          optionKey: 'default',
+        },
+      })
+    })
+
     test('permite corrigir produto histórico UNASSIGNED', async () => {
       const unassigned = {
         ...product,
@@ -1133,7 +1311,9 @@ describe('products service', () => {
 
       vi.mocked(
         client.product.findUnique,
-      ).mockResolvedValue(unassigned)
+      )
+        .mockResolvedValueOnce(unassigned)
+        .mockResolvedValue(updated)
 
       vi.mocked(
         client.product.update,

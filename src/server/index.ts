@@ -2,4 +2,4 @@
  * Exportação de todas as utilities do server
  */
 
-export { decrementStock } from './stock'
+export { decrementVariantStock } from './stock'

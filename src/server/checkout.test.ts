@@ -22,6 +22,7 @@ import {
   createCheckoutOrder,
   previewCheckout,
   type CheckoutClient,
+  type CheckoutFulfillmentInput,
   type CheckoutShippingInput,
 } from './checkout'
 
@@ -78,6 +79,11 @@ function createRegionRules() {
         region ===
         'PORTUGAL_MAINLAND'
           ? '23.00'
+          : null,
+      expressShippingCost:
+        region ===
+        'PORTUGAL_MAINLAND'
+          ? '9.90'
           : null,
     }),
   )
@@ -228,6 +234,34 @@ function createProduct(
   }
 }
 
+type TestCheckoutVariant = {
+  id: string
+  productId: string
+  sku: string
+  price: string | number | { toString(): string }
+  stockQuantity: number
+  isActive: boolean
+  selections: Array<{
+    optionValue: {
+      value: string
+      option: {
+        code: string
+        name: string
+        position: number
+      }
+    }
+  }>
+}
+
+type TestCheckoutCartItem = {
+  id: string
+  productId: string
+  productVariantId: string
+  quantity: number
+  product: ReturnType<typeof createProduct>
+  variant: TestCheckoutVariant
+}
+
 function createCartItem(
   overrides?: Partial<{
     id: string
@@ -238,22 +272,45 @@ function createCartItem(
         typeof createProduct
       >
   }>,
-) {
+): TestCheckoutCartItem {
   const product =
     overrides?.product ??
     createProduct()
+
+  const productId =
+    overrides?.productId ??
+    product.id
 
   return {
     id:
       overrides?.id ??
       'cart-1',
-    productId:
-      overrides?.productId ??
-      product.id,
+    productId,
+    productVariantId:
+      `variant-${productId}`,
     quantity:
       overrides?.quantity ??
       2,
     product,
+    variant: {
+      id: `variant-${productId}`,
+      productId,
+      sku: product.sku,
+      price: product.price,
+      stockQuantity:
+        product.stockQuantity,
+      isActive: true,
+      selections: [] as Array<{
+        optionValue: {
+          value: string
+          option: {
+            code: string
+            name: string
+            position: number
+          }
+        }
+      }>,
+    },
   }
 }
 
@@ -279,6 +336,9 @@ function createTransactionMock() {
     cartItem: {
       findMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    productVariant: {
+      updateMany: vi.fn(),
     },
     product: {
       updateMany: vi.fn(),
@@ -366,7 +426,7 @@ function prepareSuccessfulCheckout(
 
   prepareCommercialSettings(tx)
 
-  tx.product.updateMany.mockResolvedValue(
+  tx.productVariant.updateMany.mockResolvedValue(
     {
       count: 1,
     },
@@ -901,14 +961,12 @@ describe(
           select: {
             id: true,
             productId: true,
+            productVariantId: true,
             quantity: true,
             product: {
               select: {
                 id: true,
                 name: true,
-                sku: true,
-                price: true,
-                stockQuantity: true,
                 isActive: true,
                 shippingClass: true,
                 shippingRates: {
@@ -919,6 +977,32 @@ describe(
                   select: {
                     region: true,
                     shippingCost: true,
+                  },
+                },
+              },
+            },
+            variant: {
+              select: {
+                id: true,
+                productId: true,
+                sku: true,
+                price: true,
+                stockQuantity: true,
+                isActive: true,
+                selections: {
+                  select: {
+                    optionValue: {
+                      select: {
+                        value: true,
+                        option: {
+                          select: {
+                            code: true,
+                            name: true,
+                            position: true,
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -1001,6 +1085,146 @@ describe(
               in: ['cart-1'],
             },
           },
+        })
+      },
+    )
+
+    test(
+      'usa SKU, preço, stock e snapshot da variante no checkout',
+      async () => {
+        const baseTx =
+          createTransactionMock()
+
+        const variantUpdateMany =
+          vi.fn().mockResolvedValue({
+            count: 1,
+          })
+
+        const tx = {
+          ...baseTx,
+          productVariant: {
+            updateMany:
+              variantUpdateMany,
+          },
+        }
+
+        const product =
+          createProduct({
+            sku: 'LEGACY-SKU',
+            price: '999.00',
+            stockQuantity: 50,
+          })
+
+        const variantCartItem = {
+          ...createCartItem({
+            product,
+            quantity: 2,
+          }),
+          productVariantId:
+            'variant-1',
+          variant: {
+            id: 'variant-1',
+            productId:
+              product.id,
+            sku: 'VAR-SKU-19',
+            optionKey:
+              'default',
+            price: '25.50',
+            stockQuantity: 3,
+            isActive: true,
+            selections: [
+              {
+                optionValue: {
+                  value: '19"',
+                  option: {
+                    code:
+                      'diameter',
+                    name:
+                      'Diâmetro',
+                    position: 0,
+                  },
+                },
+              },
+            ],
+          },
+        }
+
+        prepareSuccessfulCheckout(
+          tx,
+          [variantCartItem],
+        )
+
+        const { client } =
+          createClient(tx)
+
+        const fingerprint =
+          await previewFingerprint(
+            tx,
+          )
+
+        const result =
+          await createCheckoutOrder(
+            'user-1',
+            shipping,
+            fingerprint,
+            client,
+          )
+
+        expect(
+          result.subtotal,
+        ).toBe(51)
+
+        expect(
+          variantUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'variant-1',
+            isActive: true,
+            stockQuantity: {
+              gte: 2,
+            },
+          },
+          data: {
+            stockQuantity: {
+              decrement: 2,
+            },
+          },
+        })
+
+        expect(
+          tx.product.updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          tx.orderItem.createMany,
+        ).toHaveBeenCalledWith({
+          data: [
+            expect.objectContaining({
+              productId:
+                'product-1',
+              productVariantId:
+                'variant-1',
+              productNameAtPurchase:
+                'Produto 1',
+              productSkuAtPurchase:
+                'VAR-SKU-19',
+              priceAtPurchase:
+                '25.50',
+              quantity: 2,
+              subtotalAtPurchase:
+                '51.00',
+              variantOptionsAtPurchase:
+                [
+                  {
+                    code:
+                      'diameter',
+                    name:
+                      'Diâmetro',
+                    value: '19"',
+                  },
+                ],
+            }),
+          ],
         })
       },
     )
@@ -1397,7 +1621,7 @@ describe(
 
         prepareSuccessfulCheckout(tx)
 
-        tx.product.updateMany.mockResolvedValue(
+        tx.productVariant.updateMany.mockResolvedValue(
           {
             count: 0,
           },
@@ -1613,6 +1837,7 @@ describe(
             order.shippingCost,
           tax: order.tax,
           total: order.total,
+          expressAvailable: true,
         })
 
         expect(preview).toEqual({
@@ -1621,6 +1846,7 @@ describe(
           shippingCost: 5.9,
           tax: 8.58,
           total: 45.88,
+          expressAvailable: true,
         })
 
         expect(order).not.toHaveProperty('fingerprint')
@@ -1720,6 +1946,7 @@ describe(
           shippingCost: 24.9,
           tax: 53.27,
           total: 284.9,
+          expressAvailable: true,
         })
 
         expect(
@@ -1806,6 +2033,7 @@ function checkoutScenario(cartItems = [createCartItem()]) {
 }
 
 function expectNoCheckoutWrites(tx: ReturnType<typeof createTransactionMock>) {
+  expect(tx.productVariant.updateMany).not.toHaveBeenCalled()
   expect(tx.product.updateMany).not.toHaveBeenCalled()
   expect(tx.order.create).not.toHaveBeenCalled()
   expect(tx.orderItem.createMany).not.toHaveBeenCalled()
@@ -1952,8 +2180,8 @@ describe('integridade do preview de checkout', () => {
     await expect(createCheckoutOrder(
       'user-1', shipping, accepted.fingerprint, client,
     )).resolves.toMatchObject({ total: accepted.total })
-    expect(orderTx.product.updateMany).toHaveBeenCalledWith({
-      where: { id: 'product-1', isActive: true, stockQuantity: { gte: 2 } },
+    expect(orderTx.productVariant.updateMany).toHaveBeenCalledWith({
+      where: { id: 'variant-product-1', isActive: true, stockQuantity: { gte: 2 } },
       data: { stockQuantity: { decrement: 2 } },
     })
   })
@@ -2077,5 +2305,192 @@ describe('integridade do preview de checkout', () => {
       'user-1', shipping, accepted.fingerprint, client,
     )).rejects.toEqual({ code: 'P2034' })
     expect(transaction).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('método de envio no checkout', () => {
+  const expressShipping: CheckoutFulfillmentInput = {
+    fulfillmentMethod: 'DELIVERY',
+    shipping,
+    shippingMethod: 'EXPRESS',
+  }
+
+  test('preview expresso soma o suplemento aos portes standard e muda o fingerprint', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    const standard = await previewCheckout('user-1', shipping, previewClient)
+    const express = await previewCheckout('user-1', expressShipping, previewClient)
+
+    expect(express).toMatchObject({
+      subtotal: 39.98,
+      shippingCost: 15.8,
+      total: 55.78,
+    })
+    expect(express.fingerprint).toMatch(/^[0-9a-f]{64}$/)
+    expect(express.fingerprint).not.toBe(standard.fingerprint)
+
+    expectNoCheckoutWrites(previewTx)
+  })
+
+  test('preview padrão assume o standard disponível com configuração de expresso', async () => {
+    const { previewClient } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    expect(preview.expressAvailable).toBe(true)
+  })
+
+  test('preview padrão indica expresso indisponível sem suplemento configurado', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    previewTx.checkoutRegionRule.findMany.mockResolvedValue(
+      createRegionRules().map(rule =>
+        rule.region === 'PORTUGAL_MAINLAND'
+          ? { ...rule, expressShippingCost: null }
+          : rule,
+      ),
+    )
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    expect(preview.expressAvailable).toBe(false)
+  })
+
+  test('expresso indisponível devolve CheckoutPricingError', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    previewTx.checkoutRegionRule.findMany.mockResolvedValue(
+      createRegionRules().map(rule =>
+        rule.region === 'PORTUGAL_MAINLAND'
+          ? { ...rule, expressShippingCost: null }
+          : rule,
+      ),
+    )
+
+    await expect(previewCheckout(
+      'user-1', expressShipping, previewClient,
+    )).rejects.toBeInstanceOf(CheckoutPricingError)
+  })
+
+  test('encomenda expressa guarda o método, os portes com suplemento e o total', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', expressShipping, previewClient)
+
+    const order = await createCheckoutOrder(
+      'user-1', expressShipping, preview.fingerprint, client,
+    )
+
+    expect(order).toMatchObject({
+      fulfillmentMethod: 'DELIVERY',
+      shippingMethod: 'EXPRESS',
+      shippingCost: 15.8,
+      total: 55.78,
+    })
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: 'EXPRESS',
+      shippingCost: '15.80',
+      total: '55.78',
+    })
+  })
+
+  test('encomenda de entrega sem método assume o standard', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    await createCheckoutOrder('user-1', shipping, preview.fingerprint, client)
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: 'STANDARD',
+      shippingCost: '5.90',
+    })
+  })
+
+  test('mais de um método com o mesmo preview é rejeitado', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const standard = await previewCheckout('user-1', shipping, previewClient)
+
+    await expect(createCheckoutOrder(
+      'user-1', expressShipping, standard.fingerprint, client,
+    )).rejects.toBeInstanceOf(CheckoutPreviewChangedError)
+
+    expectNoCheckoutWrites(orderTx)
+  })
+
+  test('rejeita método de envio desconhecido antes da transação', async () => {
+    const { previewTx, previewClient, transaction } = checkoutScenario()
+
+    await expect(previewCheckout('user-1', {
+      ...expressShipping,
+      shippingMethod: 'SENDAS',
+    } as unknown as CheckoutShippingInput, previewClient)).rejects.toBeInstanceOf(
+      CheckoutValidationError,
+    )
+
+    expectNoCheckoutWrites(previewTx)
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  test('rejeita levantamento com método de envio antes da transação', async () => {
+    const { previewTx, previewClient, transaction } = checkoutScenario()
+
+    await expect(previewCheckout('user-1', {
+      fulfillmentMethod: 'PICKUP',
+      shipping: {
+        name: 'Maria Silva',
+        phone: '+351 912 345 678',
+      },
+      shippingMethod: 'EXPRESS',
+    } as unknown as CheckoutShippingInput, previewClient)).rejects.toThrow(
+      'O levantamento em loja não tem método de envio',
+    )
+
+    expectNoCheckoutWrites(previewTx)
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  test('encomenda de levantamento guarda shippingMethod nulo e portes zero', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const pickupInput: CheckoutFulfillmentInput = {
+      fulfillmentMethod: 'PICKUP',
+      shipping: {
+        name: 'Maria Silva',
+        phone: '+351 912 345 678',
+      },
+    }
+
+    const preview = await previewCheckout('user-1', pickupInput, previewClient)
+
+    const order = await createCheckoutOrder(
+      'user-1', pickupInput, preview.fingerprint, client,
+    )
+
+    expect(order).toMatchObject({
+      fulfillmentMethod: 'PICKUP',
+      shippingMethod: null,
+      shippingCost: 0,
+      total: 39.98,
+    })
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: null,
+      shippingCost: '0.00',
+    })
   })
 })

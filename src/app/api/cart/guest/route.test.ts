@@ -259,7 +259,7 @@ describe('/api/cart/guest', () => {
       response.json(),
     ).resolves.toEqual({
       error:
-        'Erro interno do servidor',
+        'O carrinho convidado não está disponível neste momento. Tenta novamente.',
     })
 
     expect(

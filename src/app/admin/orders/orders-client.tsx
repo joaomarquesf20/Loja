@@ -43,6 +43,11 @@ type AdminOrderAction =
 
 type OrderItem = {
   id: string
+  variantOptionsAtPurchase?: Array<{
+    code: string
+    name: string
+    value: string
+  }>
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
@@ -850,9 +855,16 @@ export default function OrdersClient() {
                               className="border-b last:border-b-0"
                             >
                               <td className="py-2 pr-4">
-                                {
-                                  item.productNameAtPurchase
-                                }
+                                <span>{item.productNameAtPurchase}</span>
+                                {!!item.variantOptionsAtPurchase?.length && (
+                                  <span className="block text-xs text-gray-500">
+                                    {item.variantOptionsAtPurchase
+                                      .map((option) =>
+                                        `${option.name}: ${option.value}`,
+                                      )
+                                      .join(' · ')}
+                                  </span>
+                                )}
                               </td>
 
                               <td className="py-2 pr-4">

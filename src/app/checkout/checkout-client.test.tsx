@@ -68,6 +68,7 @@ function createPreview(
     shippingCost: number
     tax: number
     total: number
+    expressAvailable: boolean
   }>,
 ) {
   return {
@@ -76,6 +77,7 @@ function createPreview(
     shippingCost: 5.9,
     tax: 19.8,
     total: 105.9,
+    expressAvailable: true,
     ...overrides,
   }
 }
@@ -1474,6 +1476,8 @@ describe(
             region:
               'PORTUGAL_MAINLAND',
           },
+          shippingMethod:
+            'STANDARD',
         })
 
         expect(
@@ -1804,6 +1808,8 @@ describe(
             region:
               'PORTUGAL_MAINLAND',
           },
+          shippingMethod:
+            'STANDARD',
         })
       },
     )
@@ -2110,6 +2116,212 @@ describe(
         ).toEqual({
           orderId: 'order-1',
         })
+      },
+    )
+
+    test(
+      'apresenta velocidade de entrega e recalcula com o envio expresso',
+      async () => {
+        await requestDeliveryPreview()
+
+        const standardRadio =
+          await screen.findByLabelText(
+            'Envio standard',
+          )
+
+        expect(standardRadio).toBeChecked()
+
+        const expressRadio =
+          await screen.findByLabelText(
+            'Envio expresso',
+          )
+
+        expect(expressRadio).toBeEnabled()
+
+        fireEvent.click(
+          expressRadio,
+        )
+
+        expect(
+          screen.queryByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeNull()
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview: createPreview({
+                shippingCost: 15.8,
+                tax: 20.7,
+                total: 115.7,
+              }),
+            }),
+          )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        const previewOptions =
+          fetchMock.mock
+            .calls[2]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              previewOptions?.body,
+            ),
+          ),
+        ).toEqual({
+          fulfillmentMethod:
+            'DELIVERY',
+          paymentMethod: 'CARD',
+          installmentCount: null,
+          shipping: {
+            name: 'Maria Silva',
+            phone:
+              '910000000',
+            addressLine1:
+              'Rua Central 10',
+            addressLine2: null,
+            city: 'Porto',
+            postalCode:
+              '4000-001',
+            country:
+              'Portugal',
+            region:
+              'PORTUGAL_MAINLAND',
+          },
+          shippingMethod:
+            'EXPRESS',
+        })
+      },
+    )
+
+    test(
+      'desativa o envio expresso quando o preview indica indisponibilidade',
+      async () => {
+        await requestDeliveryPreview(
+          createPreview({
+            expressAvailable: false,
+          }),
+        )
+
+        expect(
+          await screen.findByLabelText(
+            'Envio expresso',
+          ),
+        ).toBeDisabled()
+
+        expect(
+          await screen.findByLabelText(
+            'Envio standard',
+          ),
+        ).toBeEnabled()
+      },
+    )
+
+    test(
+      'painel de sucesso mostra entrega expressa quando a encomenda foi expressa',
+      async () => {
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                addresses: [
+                  createAddress(),
+                ],
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                preview:
+                  createPreview(),
+              },
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                order: {
+                  ...createOrder(),
+                  shippingMethod:
+                    'EXPRESS',
+                },
+              },
+              201,
+            ),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse(
+              createPayment(),
+            ),
+          )
+
+        render(
+          <CheckoutClient />,
+        )
+
+        fireEvent.change(
+          await screen.findByLabelText(
+            'Telefone',
+          ),
+          {
+            target: {
+              value:
+                '910000000',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Calcular total',
+            },
+          ),
+        )
+
+        fireEvent.click(
+          await screen.findByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'Entrega expressa ao domicílio',
+          ),
+        ).toBeTruthy()
       },
     )
   },

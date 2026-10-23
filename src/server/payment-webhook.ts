@@ -13,25 +13,52 @@ export const PAYMENT_WEBHOOK_MAX_BODY_BYTES =
 export const PAYMENT_WEBHOOK_MAX_AGE_SECONDS =
   5 * 60
 
+/**
+ * Limite superior aceito para a janela configurada por ambiente. Impede que
+ * um erro de configuração desative de facto a proteção anti-replay.
+ */
+export const PAYMENT_WEBHOOK_MAX_AGE_SECONDS_LIMIT =
+  24 * 60 * 60
+
 const PAYMENT_WEBHOOK_SECRET_MIN_LENGTH =
   32
 
 const signaturePattern =
   /^sha256=([a-f0-9]{64})$/i
 
-export type PaymentWebhookEvent = {
-  type:
-    | 'PAYMENT_PAID'
-    | 'PAYMENT_FAILED'
+const paymentAmountPattern =
+  /^\d{1,8}(?:\.\d{1,2})?$/
+
+const currencyPattern =
+  /^[A-Z]{3}$/
+
+type PaymentWebhookEventBase = {
   orderId: string
   paymentProvider: string
   paymentReference: string
 }
 
+/**
+ * `amount` é uma string decimal (ex.: "129.90") para evitar erros de
+ * arredondamento de números de vírgula flutuante. `currency` é o código
+ * ISO 4217 em maiúsculas. A coerência com a encomenda é validada no serviço
+ * de encomendas.
+ */
 export type PaymentPaidWebhookEvent =
-  PaymentWebhookEvent & {
+  PaymentWebhookEventBase & {
     type: 'PAYMENT_PAID'
+    amount: string
+    currency: string
   }
+
+export type PaymentFailedWebhookEvent =
+  PaymentWebhookEventBase & {
+    type: 'PAYMENT_FAILED'
+  }
+
+export type PaymentWebhookEvent =
+  | PaymentPaidWebhookEvent
+  | PaymentFailedWebhookEvent
 
 export class PaymentWebhookAuthenticationError extends Error {
   constructor(
@@ -54,10 +81,10 @@ export class PaymentWebhookValidationError extends Error {
 }
 
 export class PaymentWebhookConfigurationError extends Error {
-  constructor() {
-    super(
-      'PAYMENT_WEBHOOK_SECRET não está configurado corretamente',
-    )
+  constructor(
+    message = 'Configuração do webhook de pagamento inválida (PAYMENT_WEBHOOK_SECRET / PAYMENT_WEBHOOK_MAX_AGE_SECONDS)',
+  ) {
+    super(message)
     this.name =
       'PaymentWebhookConfigurationError'
   }
@@ -65,6 +92,7 @@ export class PaymentWebhookConfigurationError extends Error {
 
 type VerifyPaymentWebhookOptions = {
   secret?: string
+  previousSecret?: string
   nowMs?: number
   maxBodyBytes?: number
   maxAgeSeconds?: number
@@ -191,22 +219,101 @@ async function readRawBody(
   return bytes
 }
 
-function resolveSecret(
+function isValidWebhookSecret(
+  value: unknown,
+): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length >=
+      PAYMENT_WEBHOOK_SECRET_MIN_LENGTH
+  )
+}
+
+/**
+ * Resolve os segredos aceites pelo verificador: o segredo ativo e,
+ * opcionalmente, o segredo anterior durante a rotação (R11/L3 do documento
+ * `payment-provider-webhook-requirements.md`). Ambos têm de cumprir o
+ * comprimento mínimo; um segredo anterior mal configurado falha em fechado.
+ */
+function resolveActiveSecrets(
   override?: string,
+  previousOverride?: string,
 ) {
-  const secret =
+  const current =
     override ??
     process.env.PAYMENT_WEBHOOK_SECRET
 
   if (
-    typeof secret !== 'string' ||
-    secret.length <
-      PAYMENT_WEBHOOK_SECRET_MIN_LENGTH
+    !isValidWebhookSecret(current)
   ) {
     throw new PaymentWebhookConfigurationError()
   }
 
-  return secret
+  const secrets = [current]
+
+  const previous =
+    previousOverride ??
+    process.env.PAYMENT_WEBHOOK_SECRET_PREVIOUS
+
+  if (
+    typeof previous === 'string' &&
+    previous.length > 0
+  ) {
+    if (
+      !isValidWebhookSecret(previous)
+    ) {
+      throw new PaymentWebhookConfigurationError(
+        'PAYMENT_WEBHOOK_SECRET_PREVIOUS não é um segredo válido para rotação',
+      )
+    }
+
+    if (!secrets.includes(previous)) {
+      secrets.push(previous)
+    }
+  }
+
+  return secrets
+}
+
+/**
+ * Janela temporal da assinatura, em segundos (R9/M1): usa por omissão
+ * `PAYMENT_WEBHOOK_MAX_AGE_SECONDS` (±5 minutos = 300 s) e pode ser
+ * configurada por ambiente. Valores inválidos falham em fechado —
+ * a proteção anti-replay nunca é rebaixada em silêncio.
+ */
+function resolveConfiguredMaxAgeSeconds(
+  override?: number,
+) {
+  if (override !== undefined) {
+    return override
+  }
+
+  const rawValue =
+    process.env.PAYMENT_WEBHOOK_MAX_AGE_SECONDS
+
+  const normalized =
+    typeof rawValue === 'string'
+      ? rawValue.trim()
+      : ''
+
+  if (!normalized) {
+    return PAYMENT_WEBHOOK_MAX_AGE_SECONDS
+  }
+
+  const value = Number(normalized)
+
+  if (
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    value >
+      PAYMENT_WEBHOOK_MAX_AGE_SECONDS_LIMIT
+  ) {
+    throw new PaymentWebhookConfigurationError(
+      'PAYMENT_WEBHOOK_MAX_AGE_SECONDS tem de ser um inteiro entre 1 e 86400',
+    )
+  }
+
+  return value
 }
 
 function normalizeTimestamp(
@@ -291,29 +398,39 @@ function getSignature(
 }
 
 function verifySignature(
-  secret: string,
+  secrets: string[],
   timestamp: string,
   body: Uint8Array,
   providedSignature: Buffer,
 ) {
-  const expectedSignature =
-    createHmac(
-      'sha256',
-      secret,
-    )
-      .update(timestamp)
-      .update('.')
-      .update(body)
-      .digest()
+  let signatureMatches = false
 
-  if (
-    providedSignature.length !==
-      expectedSignature.length ||
-    !timingSafeEqual(
-      providedSignature,
-      expectedSignature,
-    )
-  ) {
+  for (const secret of secrets) {
+    const expectedSignature =
+      createHmac(
+        'sha256',
+        secret,
+      )
+        .update(timestamp)
+        .update('.')
+        .update(body)
+        .digest()
+
+    if (
+      providedSignature.length ===
+        expectedSignature.length &&
+      timingSafeEqual(
+        providedSignature,
+        expectedSignature,
+      )
+    ) {
+      signatureMatches = true
+
+      break
+    }
+  }
+
+  if (!signatureMatches) {
     throw new PaymentWebhookAuthenticationError()
   }
 }
@@ -369,6 +486,24 @@ function normalizeRequiredString(
   return normalized
 }
 
+function normalizePattern(
+  value: unknown,
+  pattern: RegExp,
+) {
+  if (typeof value !== 'string') {
+    throw new PaymentWebhookValidationError()
+  }
+
+  const normalized =
+    value.trim()
+
+  if (!pattern.test(normalized)) {
+    throw new PaymentWebhookValidationError()
+  }
+
+  return normalized
+}
+
 function parseEvent(
   value: unknown,
 ): PaymentWebhookEvent {
@@ -387,8 +522,7 @@ function parseEvent(
     )
   }
 
-  return {
-    type: value.type,
+  const base: PaymentWebhookEventBase = {
     orderId:
       normalizeRequiredString(
         value.orderId,
@@ -405,15 +539,36 @@ function parseEvent(
         191,
       ),
   }
+
+  if (value.type === 'PAYMENT_FAILED') {
+    return {
+      ...base,
+      type: 'PAYMENT_FAILED',
+    }
+  }
+
+  return {
+    ...base,
+    type: 'PAYMENT_PAID',
+    amount: normalizePattern(
+      value.amount,
+      paymentAmountPattern,
+    ),
+    currency: normalizePattern(
+      value.currency,
+      currencyPattern,
+    ),
+  }
 }
 
 export async function verifyPaymentWebhookRequest(
   request: Request,
   options: VerifyPaymentWebhookOptions = {},
 ): Promise<PaymentWebhookEvent> {
-  const secret =
-    resolveSecret(
+  const secrets =
+    resolveActiveSecrets(
       options.secret,
+      options.previousSecret,
     )
 
   const nowMs =
@@ -421,8 +576,9 @@ export async function verifyPaymentWebhookRequest(
     Date.now()
 
   const maxAgeSeconds =
-    options.maxAgeSeconds ??
-    PAYMENT_WEBHOOK_MAX_AGE_SECONDS
+    resolveConfiguredMaxAgeSeconds(
+      options.maxAgeSeconds,
+    )
 
   if (
     !Number.isSafeInteger(
@@ -453,7 +609,7 @@ export async function verifyPaymentWebhookRequest(
     )
 
   verifySignature(
-    secret,
+    secrets,
     timestamp,
     body,
     providedSignature,

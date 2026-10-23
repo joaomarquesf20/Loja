@@ -1,5 +1,14 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { decrementStock } from './stock'
+import {
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest'
+import {
+  decrementVariantStock,
+  type StockClient,
+} from './stock'
 
 type UpdateManyArgs = {
   where: {
@@ -15,92 +24,92 @@ type UpdateManyArgs = {
   }
 }
 
-type UpdateManyFn = (args: UpdateManyArgs) => Promise<{ count: number }>
+type UpdateManyFn = (
+  args: UpdateManyArgs,
+) => Promise<{
+  count: number
+}>
 
-const mockUpdateMany = vi.fn<UpdateManyFn>()
+const variantUpdateMany =
+  vi.fn<UpdateManyFn>()
 
-const mockStockClient = {
-  product: {
-    updateMany: mockUpdateMany,
+const client = {
+  productVariant: {
+    updateMany:
+      variantUpdateMany,
   },
-}
+} satisfies StockClient
 
-describe('decrementStock', () => {
+describe('stock', () => {
   beforeEach(() => {
-    mockUpdateMany.mockReset()
+    variantUpdateMany.mockReset()
   })
 
-  describe('A - quantity = 0 (inválido)', () => {
-    test('lança erro e não chama updateMany', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 })
-
+  test.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+  ])(
+    'rejeita quantidade inválida na variante: %s',
+    async (quantity) => {
       await expect(
-        decrementStock(mockStockClient, 'product-1', 0)
-      ).rejects.toThrow('Quantidade inválida')
+        decrementVariantStock(
+          client,
+          'variant-1',
+          quantity,
+        ),
+      ).rejects.toThrow(
+        'Quantidade inválida',
+      )
 
-      expect(mockUpdateMany).not.toHaveBeenCalled()
+      expect(
+        variantUpdateMany,
+      ).not.toHaveBeenCalled()
+    },
+  )
+
+  test('decrementa stock da variante de forma condicional', async () => {
+    variantUpdateMany.mockResolvedValue({
+      count: 1,
+    })
+
+    await decrementVariantStock(
+      client,
+      'variant-1',
+      2,
+    )
+
+    expect(
+      variantUpdateMany,
+    ).toHaveBeenCalledWith({
+      where: {
+        id: 'variant-1',
+        stockQuantity: {
+          gte: 2,
+        },
+      },
+      data: {
+        stockQuantity: {
+          decrement: 2,
+        },
+      },
     })
   })
 
-  describe('B - quantity = -1 (inválido)', () => {
-    test('lança erro e não chama updateMany', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 })
-
-      await expect(
-        decrementStock(mockStockClient, 'product-1', -1)
-      ).rejects.toThrow('Quantidade inválida')
-
-      expect(mockUpdateMany).not.toHaveBeenCalled()
+  test('rejeita stock insuficiente da variante', async () => {
+    variantUpdateMany.mockResolvedValue({
+      count: 0,
     })
-  })
 
-  describe('C - quantity decimal', () => {
-    test('lança erro e não chama updateMany', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 })
-
-      await expect(
-        decrementStock(mockStockClient, 'product-1', 1.5)
-      ).rejects.toThrow('Quantidade inválida')
-
-      expect(mockUpdateMany).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('D - stock suficiente (updateMany devolve count: 1)', () => {
-    test('decrementStock resolve sem erro', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 1 })
-
-      await decrementStock(mockStockClient, 'product-1', 2)
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'product-1',
-          stockQuantity: { gte: 2 },
-        },
-        data: {
-          stockQuantity: { decrement: 2 },
-        },
-      })
-    })
-  })
-
-  describe('E - stock insuficiente (updateMany devolve count: 0)', () => {
-    test('lança erro "Stock insuficiente"', async () => {
-      mockUpdateMany.mockResolvedValue({ count: 0 })
-
-      await expect(
-        decrementStock(mockStockClient, 'product-1', 2)
-      ).rejects.toThrow('Stock insuficiente')
-
-      expect(mockUpdateMany).toHaveBeenCalledWith({
-        where: {
-          id: 'product-1',
-          stockQuantity: { gte: 2 },
-        },
-        data: {
-          stockQuantity: { decrement: 2 },
-        },
-      })
-    })
+    await expect(
+      decrementVariantStock(
+        client,
+        'variant-1',
+        3,
+      ),
+    ).rejects.toThrow(
+      'Stock insuficiente',
+    )
   })
 })

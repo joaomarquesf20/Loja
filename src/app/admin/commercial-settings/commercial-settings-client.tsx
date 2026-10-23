@@ -39,6 +39,7 @@ type CommercialRegionRule = {
   region: CheckoutRegion
   checkoutEnabled: boolean
   taxRatePercent: string | null
+  expressShippingCost: string | null
   shippingRules: CommercialShippingRule[]
 }
 
@@ -57,6 +58,7 @@ type StoreForm = {
 type RegionForm = {
   checkoutEnabled: boolean
   taxRatePercent: string
+  expressShippingCost: string
 }
 
 type ShippingForm = {
@@ -302,6 +304,9 @@ async function fetchCommercialForms(): Promise<LoadedForms> {
       taxRatePercent:
         mainland.taxRatePercent ??
         '',
+      expressShippingCost:
+        mainland.expressShippingCost ??
+        '',
     },
     shippingForms: {
       SMALL:
@@ -360,6 +365,7 @@ export default function CommercialSettingsClient() {
     useState<RegionForm>({
       checkoutEnabled: false,
       taxRatePercent: '',
+      expressShippingCost: '',
     })
 
   const [
@@ -540,6 +546,10 @@ export default function CommercialSettingsClient() {
       | number
       | null
 
+    let expressShippingCost:
+      | number
+      | null
+
     try {
       taxRatePercent =
         parseDecimal(
@@ -551,6 +561,17 @@ export default function CommercialSettingsClient() {
               !regionForm
                 .checkoutEnabled,
             maximum: 100,
+          },
+        )
+
+      // Vazio desativa o envio expresso (regra null na base de dados).
+      expressShippingCost =
+        parseDecimal(
+          regionForm
+            .expressShippingCost,
+          'O suplemento expresso',
+          {
+            allowEmpty: true,
           },
         )
     } catch (error) {
@@ -576,6 +597,9 @@ export default function CommercialSettingsClient() {
           taxRatePercent:
             | string
             | null
+          expressShippingCost:
+            | string
+            | null
         }>({
           target: 'region',
           region:
@@ -585,6 +609,7 @@ export default function CommercialSettingsClient() {
               regionForm
                 .checkoutEnabled,
             taxRatePercent,
+            expressShippingCost,
           },
         })
 
@@ -593,6 +618,9 @@ export default function CommercialSettingsClient() {
           result.checkoutEnabled,
         taxRatePercent:
           result.taxRatePercent ??
+          '',
+        expressShippingCost:
+          result.expressShippingCost ??
           '',
       })
 
@@ -949,6 +977,42 @@ export default function CommercialSettingsClient() {
               placeholder="23.00"
             />
           </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="font-medium">
+              Suplemento expresso (€)
+            </span>
+
+            <input
+              type="text"
+              inputMode="decimal"
+              value={
+                regionForm
+                  .expressShippingCost
+              }
+              disabled={
+                saving !== null
+              }
+              onChange={(
+                event,
+              ) => {
+                setRegionForm(
+                  (current) => ({
+                    ...current,
+                    expressShippingCost:
+                      event.target
+                        .value,
+                  }),
+                )
+              }}
+              className="rounded border px-3 py-2"
+              placeholder="9.90"
+            />
+          </label>
+
+          <p className="mt-1 text-sm text-gray-600">
+            Vazio = envio expresso desativado.
+          </p>
         </div>
 
         <button

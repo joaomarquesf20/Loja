@@ -7,23 +7,33 @@ type GuestCartPrice =
       toString(): string
     }
 
-type GuestCartProductRecord = {
+type GuestCartVariantRecord = {
   id: string
-  name: string
-  slug: string
+  productId: string
+  sku: string
+  optionKey: string
   price: GuestCartPrice
   stockQuantity: number
   isActive: boolean
   images: string[]
+  product: {
+    id: string
+    name: string
+    slug: string
+    isActive: boolean
+    images: string[]
+  }
 }
 
 export type GuestCartInputItem = {
   productId: string
+  productVariantId?: string
   quantity: number
 }
 
 export type ResolvedGuestCartItem = {
   productId: string
+  productVariantId?: string
   quantity: number
   product: {
     id: string
@@ -32,9 +42,43 @@ export type ResolvedGuestCartItem = {
     price: number
     images: string[]
   } | null
+  variant?: {
+    id: string
+    sku: string
+  }
   inStock: boolean
   isAvailable: boolean
   canIncrease: boolean
+}
+
+type ProductVariantDelegate = {
+  findMany(args: {
+    where: Record<string, unknown>
+    orderBy: Array<
+      | { product: { name: 'asc' } }
+      | { position: 'asc' }
+      | { id: 'asc' }
+    >
+    select: {
+      id: true
+      productId: true
+      sku: true
+      optionKey: true
+      price: true
+      stockQuantity: true
+      isActive: true
+      images: true
+      product: {
+        select: {
+          id: true
+          name: true
+          slug: true
+          isActive: true
+          images: true
+        }
+      }
+    }
+  }): Promise<GuestCartVariantRecord[]>
 }
 
 export class GuestCartServerValidationError extends Error {
@@ -46,29 +90,7 @@ export class GuestCartServerValidationError extends Error {
 }
 
 export interface GuestCartClient {
-  product: {
-    findMany(args: {
-      where: {
-        id: {
-          in: string[]
-        }
-      }
-      orderBy: {
-        name: 'asc'
-      }
-      select: {
-        id: true
-        name: true
-        slug: true
-        price: true
-        stockQuantity: true
-        isActive: true
-        images: true
-      }
-    }): Promise<
-      GuestCartProductRecord[]
-    >
-  }
+  productVariant: ProductVariantDelegate
 }
 
 function getClient(
@@ -95,6 +117,27 @@ function normalizeProductId(
   return normalizedProductId
 }
 
+function normalizeVariantId(
+  productVariantId:
+    | string
+    | undefined,
+) {
+  if (productVariantId === undefined) {
+    return undefined
+  }
+
+  const normalized =
+    productVariantId.trim()
+
+  if (!normalized) {
+    throw new GuestCartServerValidationError(
+      'Variante inválida',
+    )
+  }
+
+  return normalized
+}
+
 function validateQuantity(
   quantity: number,
 ) {
@@ -110,6 +153,14 @@ function validateQuantity(
   }
 }
 
+function getGuestItemKey(
+  item: GuestCartInputItem,
+) {
+  return item.productVariantId
+    ? `variant:${item.productVariantId}`
+    : `product:${item.productId}`
+}
+
 export function normalizeGuestCartInputItems(
   items: GuestCartInputItem[],
 ): GuestCartInputItem[] {
@@ -119,8 +170,8 @@ export function normalizeGuestCartInputItems(
     )
   }
 
-  const quantitiesByProductId =
-    new Map<string, number>()
+  const normalizedByKey =
+    new Map<string, GuestCartInputItem>()
 
   for (const item of items) {
     const productId =
@@ -128,17 +179,34 @@ export function normalizeGuestCartInputItems(
         item.productId,
       )
 
+    const productVariantId =
+      normalizeVariantId(
+        item.productVariantId,
+      )
+
     validateQuantity(
       item.quantity,
     )
 
-    const currentQuantity =
-      quantitiesByProductId.get(
+    const normalizedItem: GuestCartInputItem =
+      {
         productId,
-      ) ?? 0
+        ...(productVariantId
+          ? { productVariantId }
+          : {}),
+        quantity: item.quantity,
+      }
+
+    const key =
+      getGuestItemKey(
+        normalizedItem,
+      )
+
+    const current =
+      normalizedByKey.get(key)
 
     const nextQuantity =
-      currentQuantity +
+      (current?.quantity ?? 0) +
       item.quantity
 
     if (
@@ -151,18 +219,14 @@ export function normalizeGuestCartInputItems(
       )
     }
 
-    quantitiesByProductId.set(
-      productId,
-      nextQuantity,
-    )
+    normalizedByKey.set(key, {
+      ...normalizedItem,
+      quantity: nextQuantity,
+    })
   }
 
   return Array.from(
-    quantitiesByProductId,
-    ([productId, quantity]) => ({
-      productId,
-      quantity,
-    }),
+    normalizedByKey.values(),
   )
 }
 
@@ -186,94 +250,232 @@ export async function resolveGuestCartItems(
 
   const db = getClient(client)
 
-  const products =
-    await db.product.findMany({
+  const explicitVariantIds =
+    normalizedItems.flatMap(
+      (item) =>
+        item.productVariantId
+          ? [item.productVariantId]
+          : [],
+    )
+
+  const legacyProductIds =
+    normalizedItems
+      .filter(
+        (item) =>
+          !item.productVariantId,
+      )
+      .map(
+        (item) => item.productId,
+      )
+
+  const variants =
+    await db.productVariant.findMany({
       where: {
-        id: {
-          in: normalizedItems.map(
-            (item) =>
-              item.productId,
-          ),
+        OR: [
+          ...(explicitVariantIds.length
+            ? [
+                {
+                  id: {
+                    in:
+                      explicitVariantIds,
+                  },
+                },
+              ]
+            : []),
+          ...(legacyProductIds.length
+            ? [
+                {
+                  productId: {
+                    in:
+                      legacyProductIds,
+                  },
+                  optionKey:
+                    'default',
+                },
+              ]
+            : []),
+        ],
+      },
+      orderBy: [
+        {
+          product: {
+            name: 'asc',
+          },
         },
-      },
-      orderBy: {
-        name: 'asc',
-      },
+        {
+          position: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
       select: {
         id: true,
-        name: true,
-        slug: true,
+        productId: true,
+        sku: true,
+        optionKey: true,
         price: true,
         stockQuantity: true,
         isActive: true,
         images: true,
+        product: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            isActive: true,
+            images: true,
+          },
+        },
       },
     })
 
-  const productsById =
+  const variantsById =
     new Map(
-      products.map(
-        (product) => [
-          product.id,
-          product,
+      variants.map(
+        (variant) => [
+          variant.id,
+          variant,
         ],
       ),
     )
 
-  return normalizedItems.map(
-    (item) => {
-      const product =
-        productsById.get(
-          item.productId,
+  const defaultsByProductId =
+    new Map(
+      variants
+        .filter(
+          (variant) =>
+            variant.optionKey ===
+              'default' &&
+            legacyProductIds.includes(
+              variant.productId,
+            ),
         )
+        .map(
+          (variant) => [
+            variant.productId,
+            variant,
+          ],
+        ),
+    )
 
-      if (!product) {
-        return {
-          productId:
+  const resolvedItems: ResolvedGuestCartItem[] = []
+  const resolvedByVariantId = new Map<
+    string,
+    ResolvedGuestCartItem
+  >()
+
+  for (const item of normalizedItems) {
+    const variant =
+      item.productVariantId
+        ? variantsById.get(
+            item.productVariantId,
+          )
+        : defaultsByProductId.get(
             item.productId,
-          quantity:
-            item.quantity,
-          product: null,
-          inStock: false,
-          isAvailable: false,
-          canIncrease: false,
-        }
-      }
+          )
 
-      const inStock =
-        product.isActive &&
-        product.stockQuantity >
-          0
-
-      const isAvailable =
-        product.isActive &&
-        product.stockQuantity >=
-          item.quantity
-
-      const canIncrease =
-        product.isActive &&
-        product.stockQuantity >
-          item.quantity
-
-      return {
+    if (
+      !variant ||
+      variant.productId !==
+        item.productId
+    ) {
+      resolvedItems.push({
         productId:
           item.productId,
+        ...(item.productVariantId
+          ? {
+              productVariantId:
+                item.productVariantId,
+            }
+          : {}),
         quantity:
           item.quantity,
-        product: {
-          id: product.id,
-          name: product.name,
-          slug: product.slug,
-          price: Number(
-            product.price.toString(),
-          ),
-          images:
-            product.images,
-        },
-        inStock,
-        isAvailable,
-        canIncrease,
+        product: null,
+        inStock: false,
+        isAvailable: false,
+        canIncrease: false,
+      })
+      continue
+    }
+
+    const existing =
+      resolvedByVariantId.get(variant.id)
+
+    if (existing) {
+      const quantity =
+        existing.quantity + item.quantity
+
+      if (!Number.isSafeInteger(quantity)) {
+        throw new GuestCartServerValidationError(
+          'Quantidade inválida',
+        )
       }
-    },
-  )
+
+      existing.quantity = quantity
+      existing.isAvailable =
+        existing.inStock &&
+        variant.stockQuantity >= quantity
+      existing.canIncrease =
+        existing.inStock &&
+        variant.stockQuantity > quantity
+      continue
+    }
+
+    const active =
+      variant.product.isActive &&
+      variant.isActive
+
+    const inStock =
+      active &&
+      variant.stockQuantity > 0
+
+    const isAvailable =
+      active &&
+      variant.stockQuantity >=
+        item.quantity
+
+    const canIncrease =
+      active &&
+      variant.stockQuantity >
+        item.quantity
+
+    const resolvedItem: ResolvedGuestCartItem = {
+      productId:
+        variant.productId,
+      productVariantId:
+        variant.id,
+      quantity:
+        item.quantity,
+      product: {
+        id: variant.product.id,
+        name:
+          variant.product.name,
+        slug:
+          variant.product.slug,
+        price: Number(
+          variant.price.toString(),
+        ),
+        images:
+          variant.images.length > 0
+            ? variant.images
+            : variant.product.images,
+      },
+      variant: {
+        id: variant.id,
+        sku: variant.sku,
+      },
+      inStock,
+      isAvailable,
+      canIncrease,
+    }
+
+    resolvedItems.push(resolvedItem)
+    resolvedByVariantId.set(
+      variant.id,
+      resolvedItem,
+    )
+  }
+
+  return resolvedItems
 }

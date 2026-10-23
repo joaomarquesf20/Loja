@@ -36,6 +36,7 @@ type CheckoutApiErrorCode =
   | 'INVALID_REQUEST'
   | 'INVALID_FULFILLMENT_METHOD'
   | 'INVALID_SHIPPING'
+  | 'INVALID_SHIPPING_METHOD'
   | 'INVALID_PAYMENT'
   | 'INVALID_FINGERPRINT'
   | 'CHECKOUT_PREVIEW_CHANGED'
@@ -322,6 +323,24 @@ export async function POST(
       )
     }
 
+    const shippingMethod =
+      body.shippingMethod
+
+    if (
+      shippingMethod !==
+        undefined &&
+      shippingMethod !==
+        'STANDARD' &&
+      shippingMethod !==
+        'EXPRESS'
+    ) {
+      return errorResponse(
+        'Método de envio inválido',
+        400,
+        'INVALID_SHIPPING_METHOD',
+      )
+    }
+
     let fulfillment:
       CheckoutFulfillmentInput
 
@@ -346,8 +365,20 @@ export async function POST(
         fulfillmentMethod:
           'DELIVERY',
         shipping,
+        shippingMethod,
       }
     } else {
+      if (
+        shippingMethod !==
+        undefined
+      ) {
+        return errorResponse(
+          'O levantamento em loja não tem método de envio',
+          400,
+          'INVALID_SHIPPING_METHOD',
+        )
+      }
+
       const shipping =
         parseContactInput(
           body.shipping,

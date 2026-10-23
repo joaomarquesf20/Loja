@@ -11,6 +11,7 @@ import {
 
 type CancellationOrderItem = {
   productId: string
+  productVariantId?: string
   quantity: number
 }
 
@@ -26,22 +27,6 @@ type CancellationOrderRecord = {
   items: CancellationOrderItem[]
 }
 
-type CancellationOrderSelect = {
-  id: true
-  userId: true
-  status: true
-  paymentStatus: true
-  fulfillmentMethod: true
-  paymentProvider: true
-  paymentReference: true
-  items: {
-    select: {
-      productId: true
-      quantity: true
-    }
-  }
-}
-
 type CancellationUpdateManyArgs = {
   where: {
     id: string
@@ -55,7 +40,7 @@ type CancellationUpdateManyArgs = {
   }
 }
 
-type ProductRestockArgs = {
+type VariantRestockArgs = {
   where: {
     id: string
   }
@@ -83,7 +68,7 @@ export interface OrderCancellationTransactionClient {
         id: string
       }
       select:
-        CancellationOrderSelect
+        Record<string, unknown>
     }): Promise<
       CancellationOrderRecord | null
     >
@@ -93,9 +78,9 @@ export interface OrderCancellationTransactionClient {
       count: number
     }>
   }
-  product: {
+  productVariant: {
     updateMany(
-      args: ProductRestockArgs,
+      args: VariantRestockArgs,
     ): Promise<{
       count: number
     }>
@@ -117,8 +102,7 @@ export interface OrderCancellationClient {
   ): Promise<T>
 }
 
-const cancellationOrderSelect:
-  CancellationOrderSelect = {
+const cancellationOrderSelect = {
   id: true,
   userId: true,
   status: true,
@@ -129,10 +113,11 @@ const cancellationOrderSelect:
   items: {
     select: {
       productId: true,
+      productVariantId: true,
       quantity: true,
     },
   },
-}
+} as const
 
 const cancellableStatuses =
   new Set<LifecycleOrderStatus>([
@@ -264,49 +249,95 @@ function validateCancellation(
   }
 }
 
-function aggregateRestockQuantities(
+function validateRestockQuantity(
+  quantity: number,
+) {
+  if (
+    !Number.isSafeInteger(
+      quantity,
+    ) ||
+    quantity <= 0
+  ) {
+    throw new OrderLifecycleConflictError(
+      'Os artigos da encomenda não permitem repor o stock com segurança',
+    )
+  }
+}
+
+function addQuantity(
+  current: number,
+  quantity: number,
+) {
+  const next =
+    current + quantity
+
+  if (
+    !Number.isSafeInteger(next)
+  ) {
+    throw new OrderLifecycleConflictError(
+      'A quantidade a repor excede o limite suportado',
+    )
+  }
+
+  return next
+}
+
+function aggregateVariantRestockQuantities(
   items: CancellationOrderItem[],
 ) {
   const quantities =
-    new Map<string, number>()
+    new Map<
+      string,
+      {
+        productId: string
+        quantity: number
+      }
+    >()
 
   for (const item of items) {
+    const productId =
+      item.productId?.trim()
+
+    const productVariantId =
+      item.productVariantId?.trim()
+
     if (
-      typeof item.productId !==
-        'string' ||
-      !item.productId.trim() ||
-      !Number.isSafeInteger(
-        item.quantity,
-      ) ||
-      item.quantity <= 0
+      !productId ||
+      !productVariantId
     ) {
       throw new OrderLifecycleConflictError(
-        'Os artigos da encomenda não permitem repor o stock com segurança',
+        'Os artigos da encomenda não permitem repor a variante com segurança',
       )
     }
 
-    const productId =
-      item.productId.trim()
+    validateRestockQuantity(
+      item.quantity,
+    )
 
-    const nextQuantity =
-      (quantities.get(
-        productId,
-      ) ?? 0) +
-      item.quantity
+    const current =
+      quantities.get(
+        productVariantId,
+      )
 
     if (
-      !Number.isSafeInteger(
-        nextQuantity,
-      )
+      current &&
+      current.productId !==
+        productId
     ) {
       throw new OrderLifecycleConflictError(
-        'A quantidade a repor excede o limite suportado',
+        'Os artigos da encomenda têm dados de variante inconsistentes',
       )
     }
 
     quantities.set(
-      productId,
-      nextQuantity,
+      productVariantId,
+      {
+        productId,
+        quantity: addQuantity(
+          current?.quantity ?? 0,
+          item.quantity,
+        ),
+      },
     )
   }
 
@@ -315,6 +346,10 @@ function aggregateRestockQuantities(
 
 /**
  * Cancela uma encomenda e repõe o stock exatamente uma vez.
+ *
+ * A variante comprada é a unidade de inventário autoritativa.
+ * O Product já não tem campos de stock: a reposição acontece
+ * exclusivamente nas variantes compradas.
  *
  * A alteração do estado e todos os incrementos de stock acontecem na
  * mesma transação. Um segundo cancelamento encontra CANCELLED e devolve
@@ -370,8 +405,8 @@ async function cancelOrderAndRestoreStockForOwner(
         )
       }
 
-      const quantities =
-        aggregateRestockQuantities(
+      const variantQuantities =
+        aggregateVariantRestockQuantities(
           order.items,
         )
 
@@ -406,28 +441,31 @@ async function cancelOrderAndRestoreStockForOwner(
 
       for (
         const [
-          productId,
-          quantity,
-        ] of quantities
+          productVariantId,
+          item,
+        ] of variantQuantities
       ) {
-        const restored =
-          await tx.product.updateMany({
-            where: {
-              id: productId,
-            },
-            data: {
-              stockQuantity: {
-                increment:
-                  quantity,
+        const restoredVariant =
+          await tx.productVariant.updateMany(
+            {
+              where: {
+                id:
+                  productVariantId,
+              },
+              data: {
+                stockQuantity: {
+                  increment:
+                    item.quantity,
+                },
               },
             },
-          })
+          )
 
         if (
-          restored.count !== 1
+          restoredVariant.count !== 1
         ) {
           throw new OrderLifecycleConflictError(
-            'Não foi possível repor todo o stock da encomenda',
+            'Não foi possível repor todo o stock das variantes da encomenda',
           )
         }
       }

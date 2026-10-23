@@ -1,5 +1,10 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { CartClient } from './cart-client'
+
+export const metadata: Metadata = {
+  title: 'Carrinho de compras',
+}
 
 export default function CartPage() {
   return (

@@ -31,6 +31,18 @@ const mocks = vi.hoisted(
       }
     }
 
+    class CartVariantSelectionRequiredError
+      extends Error {
+      constructor(
+        message =
+          'Esta combinação não está disponível. Escolha outra configuração.',
+      ) {
+        super(message)
+        this.name =
+          'CartVariantSelectionRequiredError'
+      }
+    }
+
     class CartInsufficientStockError
       extends Error {
       constructor(
@@ -80,6 +92,7 @@ const mocks = vi.hoisted(
         vi.fn(),
       CartValidationError,
       CartProductUnavailableError,
+      CartVariantSelectionRequiredError,
       CartInsufficientStockError,
       CartItemNotFoundError,
       UnauthorizedUserError,
@@ -112,6 +125,8 @@ vi.mock(
       mocks.CartValidationError,
     CartProductUnavailableError:
       mocks.CartProductUnavailableError,
+    CartVariantSelectionRequiredError:
+      mocks.CartVariantSelectionRequiredError,
     CartInsufficientStockError:
       mocks.CartInsufficientStockError,
     CartItemNotFoundError:
@@ -310,7 +325,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Erro interno do servidor',
+            'Não foi possível atualizar o carrinho. Tenta novamente.',
         })
 
         expect(
@@ -415,7 +430,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await POST(
@@ -435,7 +450,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -453,8 +468,8 @@ describe('/api/cart', () => {
                 quantity:
                   '2',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
@@ -496,7 +511,9 @@ describe('/api/cart', () => {
           mocks.addCartItem,
         ).toHaveBeenCalledWith(
           'user-1',
-          'product-1',
+          {
+            productId: 'product-1',
+          },
           1,
         )
 
@@ -537,7 +554,9 @@ describe('/api/cart', () => {
           mocks.addCartItem,
         ).toHaveBeenCalledWith(
           'user-1',
-          'product-1',
+          {
+            productId: 'product-1',
+          },
           3,
         )
       },
@@ -595,6 +614,67 @@ describe('/api/cart', () => {
         expect(
           response.status,
         ).toBe(404)
+      },
+    )
+
+    test(
+      'devolve 400 controlado para combinação de variante inexistente',
+      async () => {
+        mocks.addCartItem
+          .mockRejectedValue(
+            new mocks
+              .CartVariantSelectionRequiredError(),
+          )
+
+        const response =
+          await POST(
+            createRequest(
+              'POST',
+              JSON.stringify({
+                productId:
+                  'product-1',
+                productVariantId:
+                  'variant-inexistente',
+                quantity: 1,
+              }),
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(400)
+
+        await expect(
+          response.json(),
+        ).resolves.toEqual({
+          error:
+            'Esta combinação não está disponível. Escolha outra configuração.',
+        })
+      },
+    )
+
+    test(
+      'rejeita quantidade zero com 400 em vez de 500',
+      async () => {
+        const response =
+          await POST(
+            createRequest(
+              'POST',
+              JSON.stringify({
+                productId:
+                  'product-1',
+                quantity: 0,
+              }),
+            ),
+          )
+
+        expect(
+          response.status,
+        ).toBe(400)
+
+        expect(
+          mocks.addCartItem,
+        ).not.toHaveBeenCalled()
       },
     )
 
@@ -762,7 +842,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await PATCH(
@@ -782,7 +862,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -798,8 +878,8 @@ describe('/api/cart', () => {
                 productId:
                   'product-1',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
@@ -850,7 +930,9 @@ describe('/api/cart', () => {
             .updateCartItemQuantity,
         ).toHaveBeenCalledWith(
           'user-1',
-          'product-1',
+          {
+            productId: 'product-1',
+          },
           4,
         )
 
@@ -1124,7 +1206,7 @@ describe('/api/cart', () => {
     )
 
     test(
-      'rejeita productId em falta',
+      'rejeita produto e variante em falta',
       async () => {
         const response =
           await DELETE(
@@ -1142,7 +1224,7 @@ describe('/api/cart', () => {
           response.json(),
         ).resolves.toEqual({
           error:
-            'Produto inválido',
+            'Produto ou variante inválido',
         })
       },
     )
@@ -1163,8 +1245,8 @@ describe('/api/cart', () => {
                 productId:
                   'product-1',
               }),
-            ),
-          )
+    ),
+    )
 
         expect(
           response.status,
@@ -1180,6 +1262,36 @@ describe('/api/cart', () => {
         expect(
           await response.text(),
         ).toBe('')
+      },
+    )
+
+    test(
+      'remove item por productVariantId sem exigir productId',
+      async () => {
+        mocks.removeCartItem.mockResolvedValue(
+          undefined,
+        )
+
+        const response = await DELETE(
+          createRequest(
+            'DELETE',
+            JSON.stringify({
+              productVariantId:
+                'variant-1',
+            }),
+          ),
+        )
+
+        expect(response.status).toBe(204)
+        expect(
+          mocks.removeCartItem,
+        ).toHaveBeenCalledWith(
+          'user-1',
+          {
+            productVariantId:
+              'variant-1',
+          },
+        )
       },
     )
 

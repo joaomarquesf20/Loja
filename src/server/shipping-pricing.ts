@@ -6,6 +6,11 @@ import type {
   CommercialShippingRule,
 } from './commercial-settings'
 
+import {
+  isShippingMethodCode,
+  type ShippingMethodCode,
+} from '@/lib/shipping-methods'
+
 type DecimalValue =
   | number
   | string
@@ -25,6 +30,7 @@ export type ShippingPricingInput = {
   settings: CommercialSettings
   region: CommercialCheckoutRegion
   items: ShippingPricingItem[]
+  shippingMethod?: ShippingMethodCode
 }
 
 export type ShippingPricingResult = {
@@ -40,6 +46,8 @@ export type ShippingPricingResult = {
   totalCents: number
   freeShippingApplied: boolean
   freeShippingThresholdCents: number | null
+  shippingMethod: ShippingMethodCode
+  expressSurchargeCents: number | null
 }
 
 export class ShippingPricingError extends Error {
@@ -428,9 +436,55 @@ function validateProductId(
   return normalized
 }
 
+/**
+ * Resolve o suplemento expresso da configuração da região. O envio expresso
+ * soma-se aos portes standard (mesmo quando estes são gratuídos pelo
+ * limite de portes grátis — nesse caso paga-se o suplemento isolado).
+ *
+ * Devolve `null` quando o método é o standard por omissão.
+ */
+function resolveExpressSurchargeCents(
+  regionRule: CommercialRegionRule,
+  shippingMethod: ShippingMethodCode,
+): number | null {
+  if (shippingMethod === 'STANDARD') {
+    return null
+  }
+
+  if (
+    regionRule.expressShippingCost ===
+    null
+  ) {
+    throw new ShippingPricingError(
+      'O envio expresso não está disponível nesta configuração',
+    )
+  }
+
+  return moneyToCents(
+    regionRule.expressShippingCost,
+    'Suplemento expresso',
+  )
+}
+
 export function calculateShippingPricing(
   input: ShippingPricingInput,
 ): ShippingPricingResult {
+  if (
+    input.shippingMethod !==
+      undefined &&
+    !isShippingMethodCode(
+      input.shippingMethod,
+    )
+  ) {
+    throw new ShippingPricingError(
+      'Método de envio inválido',
+    )
+  }
+
+  const shippingMethod:
+    ShippingMethodCode =
+    input.shippingMethod ?? 'STANDARD'
+
   if (
     input.settings.store
       .pricesIncludeTax !== true
@@ -686,10 +740,24 @@ export function calculateShippingPricing(
       bulkyShippingCents,
     )
 
+  const expressSurchargeCents =
+    resolveExpressSurchargeCents(
+      regionRule,
+      shippingMethod,
+    )
+
+  const shippingTotalWithSurchargeCents =
+    expressSurchargeCents === null
+      ? shippingTotalCents
+      : addCents(
+          shippingTotalCents,
+          expressSurchargeCents,
+        )
+
   const totalCents =
     addCents(
       productsSubtotalCents,
-      shippingTotalCents,
+      shippingTotalWithSurchargeCents,
     )
 
   const includedTaxCents =
@@ -710,10 +778,13 @@ export function calculateShippingPricing(
     nonVolumousSubtotalCents,
     nonVolumousShippingCents,
     bulkyShippingCents,
-    shippingTotalCents,
+    shippingTotalCents:
+      shippingTotalWithSurchargeCents,
     includedTaxCents,
     totalCents,
     freeShippingApplied,
     freeShippingThresholdCents,
+    shippingMethod,
+    expressSurchargeCents,
   }
 }

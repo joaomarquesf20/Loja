@@ -26,6 +26,8 @@ function createSettings(): CommercialSettings {
           'PORTUGAL_MAINLAND',
         checkoutEnabled: true,
         taxRatePercent: '23.00',
+        expressShippingCost:
+          '9.90',
         shippingRules: [
           {
             id: 'small-rule',
@@ -108,12 +110,14 @@ function createSettings(): CommercialSettings {
         region: 'MADEIRA',
         checkoutEnabled: false,
         taxRatePercent: null,
+        expressShippingCost: null,
         shippingRules: [],
       },
       {
         region: 'AZORES',
         checkoutEnabled: false,
         taxRatePercent: null,
+        expressShippingCost: null,
         shippingRules: [],
       },
       {
@@ -121,6 +125,7 @@ function createSettings(): CommercialSettings {
           'INTERNATIONAL',
         checkoutEnabled: false,
         taxRatePercent: null,
+        expressShippingCost: null,
         shippingRules: [],
       },
     ],
@@ -1022,6 +1027,211 @@ describe(
           }),
         ).toThrowError(
           /Preço do produto .* inválido/,
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'envio expresso',
+  () => {
+    test(
+      'por omissão usa o envio standard sem suplemento',
+      () => {
+        const result =
+          calculateShippingPricing({
+            settings:
+              createSettings(),
+            region:
+              'PORTUGAL_MAINLAND',
+            items: [
+              createItem({
+                productId:
+                  'small-1',
+                unitPrice:
+                  '19.99',
+                quantity: 2,
+              }),
+            ],
+          })
+
+        expect(result.shippingMethod)
+          .toBe('STANDARD')
+        expect(
+          result.expressSurchargeCents,
+        ).toBeNull()
+        expect(
+          result.shippingTotalCents,
+        ).toBe(590)
+        expect(result.totalCents)
+          .toBe(4588)
+      },
+    )
+
+    test(
+      'soma o suplemento expresso aos portes standard',
+      () => {
+        const result =
+          calculateShippingPricing({
+            settings:
+              createSettings(),
+            region:
+              'PORTUGAL_MAINLAND',
+            shippingMethod:
+              'EXPRESS',
+            items: [
+              createItem({
+                productId:
+                  'small-1',
+                unitPrice:
+                  '19.99',
+                quantity: 2,
+              }),
+            ],
+          })
+
+        expect(result.shippingMethod)
+          .toBe('EXPRESS')
+        expect(
+          result.expressSurchargeCents,
+        ).toBe(990)
+        // Portes standard 5,90 € + suplemento 9,90 € = 15,80 €.
+        expect(
+          result.shippingTotalCents,
+        ).toBe(1580)
+        // Subtotal 39,98 € + 15,80 € = 55,78 €.
+        expect(result.totalCents)
+          .toBe(5578)
+        expect(
+          result.freeShippingApplied,
+        ).toBe(false)
+      },
+    )
+
+    test(
+      'expresso paga apenas o suplemento quando os portes standard são gratuídos',
+      () => {
+        const result =
+          calculateShippingPricing({
+            settings:
+              createSettings(),
+            region:
+              'PORTUGAL_MAINLAND',
+            shippingMethod:
+              'EXPRESS',
+            items: [
+              createItem({
+                productId:
+                  'standard-1',
+                shippingClass:
+                  'STANDARD',
+                unitPrice:
+                  '150.00',
+                quantity: 1,
+              }),
+            ],
+          })
+
+        expect(
+          result.freeShippingApplied,
+        ).toBe(true)
+        expect(
+          result.expressSurchargeCents,
+        ).toBe(990)
+        expect(
+          result.shippingTotalCents,
+        ).toBe(990)
+        expect(result.totalCents)
+          .toBe(15990)
+      },
+    )
+
+    test(
+      'expresso soma o suplemento também sobre produtos volumosos',
+      () => {
+        const result =
+          calculateShippingPricing({
+            settings:
+              createSettings(),
+            region:
+              'PORTUGAL_MAINLAND',
+            shippingMethod:
+              'EXPRESS',
+            items: [
+              createItem({
+                productId:
+                  'bulky-1',
+                unitPrice:
+                  '200.00',
+                quantity: 1,
+                shippingClass: 'BULKY',
+                mainlandShippingCost:
+                  '25.00',
+              }),
+            ],
+          })
+
+        expect(
+          result.bulkyShippingCents,
+        ).toBe(2500)
+        expect(
+          result.nonVolumousShippingCents,
+        ).toBe(0)
+        // Tarifa volumosa 25,00 € + suplemento 9,90 € = 34,90 €.
+        expect(
+          result.shippingTotalCents,
+        ).toBe(3490)
+        expect(result.totalCents)
+          .toBe(23490)
+      },
+    )
+
+    test(
+      'rejeita o expresso quando a região não tem suplemento configurado',
+      () => {
+        const settings =
+          createSettings()
+
+        getMainland(
+          settings,
+        ).expressShippingCost =
+          null
+
+        expect(() =>
+          calculateShippingPricing({
+            settings,
+            region:
+              'PORTUGAL_MAINLAND',
+            shippingMethod:
+              'EXPRESS',
+            items: [
+              createItem(),
+            ],
+          }),
+        ).toThrowError(
+          'O envio expresso não está disponível nesta configuração',
+        )
+      },
+    )
+
+    test(
+      'rejeita método de envio desconhecido',
+      () => {
+        expect(() =>
+          calculateShippingPricing({
+            settings:
+              createSettings(),
+            region:
+              'PORTUGAL_MAINLAND',
+            shippingMethod:
+              'PICKUP' as 'STANDARD',
+            items: [
+              createItem(),
+            ],
+          }),
+        ).toThrowError(
+          'Método de envio inválido',
         )
       },
     )

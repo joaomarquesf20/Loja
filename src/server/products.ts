@@ -28,6 +28,12 @@ type ProductShippingRateRecord = {
   shippingCost: DecimalValue
 }
 
+type ProductVariantSummaryRecord = {
+  id: string
+  price: DecimalValue
+  stockQuantity: number
+}
+
 type ProductRecord = {
   id: string
   categoryId: string
@@ -36,18 +42,19 @@ type ProductRecord = {
   slug: string
   sku: string
   description: string | null
-  price: number
-  stockQuantity: number
   isActive: boolean
   images?: string[]
   shippingClass?: ProductShippingClass
   shippingRates?: ProductShippingRateRecord[]
+  variants?: ProductVariantSummaryRecord[]
 }
 
 export type ProductResponse = Omit<
   ProductRecord,
-  'shippingRates'
+  'shippingRates' | 'variants'
 > & {
+  price: number
+  stockQuantity: number
   mainlandShippingCost?: string | null
 }
 
@@ -61,8 +68,6 @@ type ProductCreateData = {
   slug: string
   sku: string
   description?: string
-  price: number
-  stockQuantity: number
   categoryId: string
   productBrandId?: string | null
   isActive?: boolean
@@ -78,8 +83,6 @@ type ProductUpdateData = {
   slug?: string
   sku?: string
   description?: string
-  price?: number
-  stockQuantity?: number
   categoryId?: string
   productBrandId?: string | null
   isActive?: boolean
@@ -103,9 +106,50 @@ const mainlandShippingInclude = {
       shippingCost: true,
     },
   },
+  // A variante 'default' fornece o preço e o stock
+  // apresentados na parcemiroda básica do produto.
+  variants: {
+    where: {
+      optionKey: 'default',
+    },
+    select: {
+      id: true,
+      price: true,
+      stockQuantity: true,
+    },
+  },
 } as const
 
 export interface ProductClient {
+  productVariant: {
+    upsert(args: {
+      where: {
+        productId_optionKey: {
+          productId: string
+          optionKey: string
+        }
+      }
+      update: {
+        sku: string
+        price?: number
+        stockQuantity?: number
+        isActive: boolean
+      }
+      create: {
+        productId: string
+        sku: string
+        price: number
+        stockQuantity: number
+        isActive: boolean
+        images: string[]
+        position: number
+        optionKey: string
+      }
+    }): Promise<{
+      id: string
+    }>
+  }
+
   product: {
     findMany(args: {
       orderBy: { name: 'asc' }
@@ -304,8 +348,15 @@ function mapProduct(
 ): ProductResponse {
   const {
     shippingRates,
+    variants,
     ...productData
   } = product
+
+  // O preço e o stock apresentados do produto vêm da
+  // variante 'default'; o Product já não guarda estes
+  // campos (fonte única: ProductVariant).
+  const defaultVariant =
+    variants?.[0] ?? null
 
   const storedRate =
     shippingRates?.find(
@@ -329,6 +380,12 @@ function mapProduct(
 
   return {
     ...productData,
+    price: Number(
+      defaultVariant?.price ?? 0,
+    ),
+    stockQuantity:
+      defaultVariant?.stockQuantity ??
+      0,
     shippingClass:
       product.shippingClass ??
       'UNASSIGNED',
@@ -522,8 +579,12 @@ export async function createProduct(
   }
 
   const {
-  mainlandShippingCost,
-  ...productData
+    mainlandShippingCost,
+    // O preço e o stock do formulário básico passam a
+    // escrever a variante 'default' (fonte única).
+    price: defaultVariantPrice,
+    stockQuantity: defaultVariantStockQuantity,
+    ...productData
 } = data
 
 let normalizedShippingCost:
@@ -575,8 +636,47 @@ if (
       data: createData,
     })
 
+  await db.productVariant.upsert({
+    where: {
+      productId_optionKey: {
+        productId: product.id,
+        optionKey: 'default',
+      },
+    },
+    update: {
+      sku: product.sku,
+      price: defaultVariantPrice,
+      stockQuantity:
+        defaultVariantStockQuantity,
+      isActive:
+        product.isActive,
+    },
+    create: {
+      productId: product.id,
+      sku: product.sku,
+      price: defaultVariantPrice,
+      stockQuantity:
+        defaultVariantStockQuantity,
+      isActive:
+        product.isActive,
+      images: [],
+      position: 0,
+      optionKey: 'default',
+    },
+  })
+
+  // Volta a ler o produto com a variante 'default'
+  // para a resposta refletir exatamente o que foi
+  // guardado.
+  const storedProduct =
+    await db.product.findUnique({
+      where: { id: product.id },
+      include:
+        mainlandShippingInclude,
+    })
+
   return mapProduct(
-    product,
+    storedProduct ?? product,
     normalizedShippingCost,
   )
 }
@@ -688,6 +788,10 @@ export async function updateProduct(
 
   const {
     mainlandShippingCost,
+    // O preço e o stock do formulário básico passam a
+    // escrever a variante 'default' (fonte única).
+    price: defaultVariantPrice,
+    stockQuantity: defaultVariantStockQuantity,
     ...productData
   } = data
 
@@ -805,8 +909,62 @@ export async function updateProduct(
       data: updateData,
     })
 
+  await db.productVariant.upsert({
+    where: {
+      productId_optionKey: {
+        productId: product.id,
+        optionKey: 'default',
+      },
+    },
+    update: {
+      sku: product.sku,
+      // Só o preço/stock explicitamente enviados alteram
+      // a variante 'default'; os restantes valores são
+      // geridos pelo editor de variantes.
+      ...(defaultVariantPrice !==
+        undefined
+        ? {
+            price:
+              defaultVariantPrice,
+          }
+        : {}),
+      ...(defaultVariantStockQuantity !==
+        undefined
+        ? {
+            stockQuantity:
+              defaultVariantStockQuantity,
+          }
+        : {}),
+      isActive:
+        product.isActive,
+    },
+    create: {
+      productId: product.id,
+      sku: product.sku,
+      price: defaultVariantPrice ?? 0,
+      stockQuantity:
+        defaultVariantStockQuantity ??
+        0,
+      isActive:
+        product.isActive,
+      images: [],
+      position: 0,
+      optionKey: 'default',
+    },
+  })
+
+  // Volta a ler o produto com a variante 'default'
+  // para a resposta refletir exatamente o que foi
+  // guardado.
+  const storedProduct =
+    await db.product.findUnique({
+      where: { id },
+      include:
+        mainlandShippingInclude,
+    })
+
   return mapProduct(
-    product,
+    storedProduct ?? product,
     responseShippingCost,
   )
 }

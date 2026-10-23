@@ -15,17 +15,78 @@ import {
   type GuestCartClient,
 } from './guest-cart'
 
-function createClient(): GuestCartClient {
+type VariantFindMany =
+  GuestCartClient['productVariant']['findMany']
+
+function createVariantRecord(
+  overrides?: {
+    isActive?: boolean
+    stockQuantity?: number
+    images?: string[]
+  },
+) {
   return {
+    id: 'variant-1',
+    productId: 'product-1',
+    sku: 'VAR-001',
+    optionKey: 'default',
+    price: '19.99',
+    stockQuantity:
+      overrides?.stockQuantity ?? 5,
+    isActive:
+      overrides?.isActive ?? true,
+    images:
+      overrides?.images ?? [],
     product: {
-      findMany: vi.fn(),
+      id: 'product-1',
+      name: 'Produto 1',
+      slug: 'produto-1',
+      isActive: true,
+      images: [
+        '/products/produto-1.jpg',
+      ],
     },
+  }
+}
+
+const variantSelect = {
+  id: true,
+  productId: true,
+  sku: true,
+  optionKey: true,
+  price: true,
+  stockQuantity: true,
+  isActive: true,
+  images: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      isActive: true,
+      images: true,
+    },
+  },
+}
+
+function createClient() {
+  const variantFindMany =
+    vi.fn<VariantFindMany>()
+
+  return {
+    client: {
+      productVariant: {
+        findMany: variantFindMany,
+      },
+    } satisfies GuestCartClient,
+    variantFindMany,
   }
 }
 
 describe('Guest cart server', () => {
   test('carrinho vazio não consulta a base de dados', async () => {
-    const client = createClient()
+    const { client, variantFindMany } =
+      createClient()
 
     const result =
       await resolveGuestCartItems(
@@ -36,16 +97,15 @@ describe('Guest cart server', () => {
     expect(result).toEqual([])
 
     expect(
-      client.product.findMany,
+      variantFindMany,
     ).not.toHaveBeenCalled()
   })
 
-  test('consulta produtos reais pelos ids do carrinho', async () => {
-    const client = createClient()
+  test('consulta variantes ativas/default pelos produtos do carrinho', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([])
+    variantFindMany.mockResolvedValue([])
 
     await resolveGuestCartItems(
       [
@@ -62,46 +122,44 @@ describe('Guest cart server', () => {
     )
 
     expect(
-      client.product.findMany,
+      variantFindMany,
     ).toHaveBeenCalledWith({
       where: {
-        id: {
-          in: [
-            'product-1',
-            'product-2',
-          ],
+        OR: [
+          {
+            productId: {
+              in: [
+                'product-1',
+                'product-2',
+              ],
+            },
+            optionKey: 'default',
+          },
+        ],
+      },
+      orderBy: [
+        {
+          product: {
+            name: 'asc',
+          },
         },
-      },
-      orderBy: {
-        name: 'asc',
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        price: true,
-        stockQuantity: true,
-        isActive: true,
-        images: true,
-      },
+        {
+          position: 'asc',
+        },
+        {
+          id: 'asc',
+        },
+      ],
+      select: variantSelect,
     })
   })
 
-  test('devolve dados públicos e disponibilidade atual', async () => {
-    const client = createClient()
+  test('devolve dados públicos e disponibilidade atual da variante', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([
-      {
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        price: '19.99',
-        stockQuantity: 5,
-        isActive: true,
-        images: [],
-      },
+    variantFindMany.mockResolvedValue([
+      createVariantRecord(),
     ])
 
     const result =
@@ -118,13 +176,20 @@ describe('Guest cart server', () => {
     expect(result).toEqual([
       {
         productId: 'product-1',
+        productVariantId: 'variant-1',
         quantity: 2,
         product: {
           id: 'product-1',
           name: 'Produto 1',
           slug: 'produto-1',
           price: 19.99,
-          images: [],
+          images: [
+            '/products/produto-1.jpg',
+          ],
+        },
+        variant: {
+          id: 'variant-1',
+          sku: 'VAR-001',
         },
         inStock: true,
         isAvailable: true,
@@ -133,21 +198,42 @@ describe('Guest cart server', () => {
     ])
   })
 
-  test('não expõe a quantidade exata de stock', async () => {
-    const client = createClient()
+  test('usa as imagens do produto quando a variante não tem', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([
-      {
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        price: 10,
-        stockQuantity: 37,
-        isActive: true,
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
         images: [],
-      },
+      }),
+    ])
+
+    const [item] =
+      await resolveGuestCartItems(
+        [
+          {
+            productId: 'product-1',
+            quantity: 1,
+          },
+        ],
+        client,
+      )
+
+    expect(
+      item?.product?.images,
+    ).toEqual([
+      '/products/produto-1.jpg',
+    ])
+  })
+
+  test('não expõe a quantidade exata de stock', async () => {
+    const { client, variantFindMany } =
+      createClient()
+
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
+        stockQuantity: 37,
+      }),
     ])
 
     const [item] =
@@ -170,23 +256,21 @@ describe('Guest cart server', () => {
     ).not.toHaveProperty(
       'stockQuantity',
     )
+
+    expect(item?.variant).toEqual({
+      id: 'variant-1',
+      sku: 'VAR-001',
+    })
   })
 
-  test('marca quantidade acima do stock como indisponível', async () => {
-    const client = createClient()
+  test('marca quantidade acima do stock da variante como indisponível', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([
-      {
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        price: 10,
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
         stockQuantity: 2,
-        isActive: true,
-        images: [],
-      },
+      }),
     ])
 
     const [item] =
@@ -207,21 +291,42 @@ describe('Guest cart server', () => {
     })
   })
 
-  test('marca produto inativo como indisponível', async () => {
-    const client = createClient()
+  test('marca variante inativa como indisponível', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([
-      {
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        price: 10,
-        stockQuantity: 5,
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
         isActive: false,
-        images: [],
-      },
+      }),
+    ])
+
+    const [item] =
+      await resolveGuestCartItems(
+        [
+          {
+            productId: 'product-1',
+            quantity: 1,
+          },
+        ],
+        client,
+      )
+
+    expect(item).toMatchObject({
+      inStock: false,
+      isAvailable: false,
+      canIncrease: false,
+    })
+  })
+
+  test('marca variante sem stock como indisponível', async () => {
+    const { client, variantFindMany } =
+      createClient()
+
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
+        stockQuantity: 0,
+      }),
     ])
 
     const [item] =
@@ -243,11 +348,10 @@ describe('Guest cart server', () => {
   })
 
   test('mantém item removido da base como indisponível', async () => {
-    const client = createClient()
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([])
+    variantFindMany.mockResolvedValue([])
 
     const result =
       await resolveGuestCartItems(
@@ -274,20 +378,13 @@ describe('Guest cart server', () => {
   })
 
   test('combina entradas duplicadas do mesmo produto', async () => {
-    const client = createClient()
+    const { client, variantFindMany } =
+      createClient()
 
-    vi.mocked(
-      client.product.findMany,
-    ).mockResolvedValue([
-      {
-        id: 'product-1',
-        name: 'Produto 1',
-        slug: 'produto-1',
-        price: 10,
+    variantFindMany.mockResolvedValue([
+      createVariantRecord({
         stockQuantity: 10,
-        isActive: true,
-        images: [],
-      },
+      }),
     ])
 
     const result =
@@ -310,11 +407,13 @@ describe('Guest cart server', () => {
     expect(result[0]).toMatchObject({
       productId: 'product-1',
       quantity: 5,
+      isAvailable: true,
     })
   })
 
-  test('rejeita produto vazio', async () => {
-    const client = createClient()
+  test('rejeita produto vazio sem consultar a base de dados', async () => {
+    const { client, variantFindMany } =
+      createClient()
 
     await expect(
       resolveGuestCartItems(
@@ -331,12 +430,13 @@ describe('Guest cart server', () => {
     )
 
     expect(
-      client.product.findMany,
+      variantFindMany,
     ).not.toHaveBeenCalled()
   })
 
   test('rejeita quantidade inválida', async () => {
-    const client = createClient()
+    const { client, variantFindMany } =
+      createClient()
 
     await expect(
       resolveGuestCartItems(
@@ -351,10 +451,15 @@ describe('Guest cart server', () => {
     ).rejects.toBeInstanceOf(
       GuestCartServerValidationError,
     )
+
+    expect(
+      variantFindMany,
+    ).not.toHaveBeenCalled()
   })
 
   test('rejeita mais de 100 entradas', async () => {
-    const client = createClient()
+    const { client, variantFindMany } =
+      createClient()
 
     const items = Array.from(
       {
@@ -376,7 +481,7 @@ describe('Guest cart server', () => {
     )
 
     expect(
-      client.product.findMany,
+      variantFindMany,
     ).not.toHaveBeenCalled()
   })
 })

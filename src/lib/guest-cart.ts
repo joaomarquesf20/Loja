@@ -8,6 +8,7 @@ const MAX_MERGE_KEY_LENGTH = 128
 
 export type GuestCartItem = {
   productId: string
+  productVariantId?: string
   quantity: number
 }
 
@@ -112,6 +113,12 @@ function isGuestCartItem(
       'string' &&
     candidate.productId.trim().length >
       0 &&
+    (candidate.productVariantId ===
+      undefined ||
+      (typeof candidate.productVariantId ===
+        'string' &&
+        candidate.productVariantId.trim().length >
+          0)) &&
     typeof candidate.quantity ===
       'number' &&
     Number.isSafeInteger(
@@ -126,6 +133,12 @@ function normalizeGuestCartItems(
 ): GuestCartItem[] {
   return items.map((item) => ({
     productId: item.productId.trim(),
+    ...(item.productVariantId
+      ? {
+          productVariantId:
+            item.productVariantId.trim(),
+        }
+      : {}),
     quantity: item.quantity,
   }))
 }
@@ -230,6 +243,12 @@ export function readGuestCart(): GuestCartItem[] {
     .filter(isGuestCartItem)
     .map((item) => ({
       productId: item.productId.trim(),
+      ...(item.productVariantId
+        ? {
+            productVariantId:
+              item.productVariantId.trim(),
+          }
+        : {}),
       quantity: item.quantity,
     }))
 }
@@ -385,19 +404,28 @@ export function writeGuestCart(
 export function addGuestCartItem(
   productId: string,
   quantity = 1,
+  productVariantId?: string,
 ): GuestCartItem[] {
   const normalizedProductId =
     normalizeProductId(productId)
 
   validateQuantity(quantity)
 
+  const normalizedVariantId =
+    productVariantId?.trim() ||
+    undefined
+
   const items = readGuestCart()
 
   const existingIndex =
     items.findIndex(
       (item) =>
-        item.productId ===
-        normalizedProductId,
+        normalizedVariantId
+          ? item.productVariantId ===
+            normalizedVariantId
+          : !item.productVariantId &&
+            item.productId ===
+              normalizedProductId,
     )
 
   if (existingIndex === -1) {
@@ -406,6 +434,12 @@ export function addGuestCartItem(
       {
         productId:
           normalizedProductId,
+        ...(normalizedVariantId
+          ? {
+              productVariantId:
+                normalizedVariantId,
+            }
+          : {}),
         quantity,
       },
     ]
@@ -441,20 +475,37 @@ export function addGuestCartItem(
 export function updateGuestCartItemQuantity(
   productId: string,
   quantity: number,
+  productVariantId?: string,
 ): GuestCartItem[] {
   const normalizedProductId =
     normalizeProductId(productId)
 
   validateQuantity(quantity)
 
+  const normalizedVariantId =
+    productVariantId?.trim() ||
+    undefined
+
   const items = readGuestCart()
 
-  const existingIndex =
-    items.findIndex(
-      (item) =>
-        item.productId ===
-        normalizedProductId,
-    )
+  let existingIndex =
+    normalizedVariantId
+      ? items.findIndex(
+          (item) =>
+            item.productVariantId ===
+            normalizedVariantId,
+        )
+      : -1
+
+  if (existingIndex === -1) {
+    existingIndex =
+      items.findIndex(
+        (item) =>
+          !item.productVariantId &&
+          item.productId ===
+            normalizedProductId,
+      )
+  }
 
   if (existingIndex === -1) {
     throw new GuestCartItemNotFoundError()
@@ -477,27 +528,45 @@ export function updateGuestCartItemQuantity(
 
 export function removeGuestCartItem(
   productId: string,
+  productVariantId?: string,
 ): GuestCartItem[] {
   const normalizedProductId =
     normalizeProductId(productId)
 
+  const normalizedVariantId =
+    productVariantId?.trim() ||
+    undefined
+
   const items = readGuestCart()
 
-  const exists = items.some(
-    (item) =>
-      item.productId ===
-      normalizedProductId,
-  )
+  let existingIndex =
+    normalizedVariantId
+      ? items.findIndex(
+          (item) =>
+            item.productVariantId ===
+            normalizedVariantId,
+        )
+      : -1
 
-  if (!exists) {
+  if (existingIndex === -1) {
+    existingIndex =
+      items.findIndex(
+        (item) =>
+          !item.productVariantId &&
+          item.productId ===
+            normalizedProductId,
+      )
+  }
+
+  if (existingIndex === -1) {
     throw new GuestCartItemNotFoundError()
   }
 
-  const nextItems = items.filter(
-    (item) =>
-      item.productId !==
-      normalizedProductId,
-  )
+  const nextItems =
+    items.filter(
+      (_item, index) =>
+        index !== existingIndex,
+    )
 
   writeGuestCart(nextItems)
 

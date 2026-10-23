@@ -83,6 +83,13 @@ function createOrder(
           'Produto Teste',
         productSkuAtPurchase:
           'SKU-1',
+        variantOptionsAtPurchase: [
+          {
+            code: 'cor',
+            name: 'Cor',
+            value: 'Preto',
+          },
+        ],
         priceAtPurchase:
           '100.00',
         quantity: 1,
@@ -141,6 +148,10 @@ describe(
           screen.getByText(
             'Produto Teste',
           ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText('Cor: Preto'),
         ).toBeInTheDocument()
 
         expect(

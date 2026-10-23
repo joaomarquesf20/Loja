@@ -5,12 +5,34 @@ import {
   useState,
 } from 'react'
 
+import {
+  OrderStatusBadge,
+  PaymentStatusBadge,
+} from '@/components/storefront/order-status-badge'
+import {
+  getOrderStatusLabel,
+  getPaymentStatusLabel,
+} from '@/lib/order-status-labels'
+import {
+  getShippingMethodEstimate,
+  getShippingMethodLabel,
+} from '@/lib/shipping-methods'
+
 type FulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+type ShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
+
 type OrderItem = {
   id: string
+  variantOptionsAtPurchase?: Array<{
+    code: string
+    name: string
+    value: string
+  }>
   productNameAtPurchase: string
   productSkuAtPurchase: string
   priceAtPurchase: string
@@ -43,6 +65,8 @@ type Order = {
   paymentStatus: string
   fulfillmentMethod:
     FulfillmentMethod
+  shippingMethod:
+    ShippingMethod | null
   shippingName: string
   shippingEmail: string
   shippingPhone: string
@@ -105,6 +129,15 @@ function isOrderItem(
       'string' &&
     typeof value.productSkuAtPurchase ===
       'string' &&
+    (value.variantOptionsAtPurchase === undefined ||
+      (Array.isArray(value.variantOptionsAtPurchase) &&
+        value.variantOptionsAtPurchase.every(
+          (option) =>
+            isRecord(option) &&
+            typeof option.code === 'string' &&
+            typeof option.name === 'string' &&
+            typeof option.value === 'string',
+        ))) &&
     isMoney(
       value.priceAtPurchase,
     ) &&
@@ -176,6 +209,15 @@ function isFulfillmentMethod(
   )
 }
 
+function isShippingMethod(
+  value: unknown,
+): value is ShippingMethod {
+  return (
+    value === 'STANDARD' ||
+    value === 'EXPRESS'
+  )
+}
+
 function hasValidDeliveryAddress(
   value: Record<string, unknown>,
 ) {
@@ -224,6 +266,17 @@ function isOrder(
   if (
     !isFulfillmentMethod(
       value.fulfillmentMethod,
+    )
+  ) {
+    return false
+  }
+
+  if (
+    value.shippingMethod !== null &&
+    value.shippingMethod !==
+      undefined &&
+    !isShippingMethod(
+      value.shippingMethod,
     )
   ) {
     return false
@@ -421,50 +474,6 @@ function formatDateTime(
       timeZone: 'Europe/Lisbon',
     },
   ).format(new Date(value))
-}
-
-function getOrderStatusLabel(
-  status: string,
-) {
-  switch (status) {
-    case 'PENDING':
-      return 'Pendente'
-    case 'CONFIRMED':
-      return 'Confirmada'
-    case 'PROCESSING':
-      return 'Em processamento'
-    case 'SHIPPED':
-      return 'Enviada'
-    case 'DELIVERED':
-      return 'Entregue'
-    case 'READY_FOR_PICKUP':
-      return 'Pronta para levantamento'
-    case 'PICKED_UP':
-      return 'Levantada'
-    case 'CANCELLED':
-      return 'Cancelada'
-    default:
-      return status
-  }
-}
-
-function getPaymentStatusLabel(
-  status: string,
-) {
-  switch (status) {
-    case 'PENDING':
-      return 'Pendente'
-    case 'AUTHORIZED':
-      return 'Autorizado'
-    case 'PAID':
-      return 'Pago'
-    case 'FAILED':
-      return 'Falhou'
-    case 'REFUNDED':
-      return 'Reembolsado'
-    default:
-      return status
-  }
 }
 
 function getOrderEventTitle(
@@ -916,22 +925,25 @@ export function OrdersClient() {
                     </div>
 
                     <div className="text-sm sm:text-right">
-                      <p>
-                        Estado:{' '}
-                        <span className="font-semibold">
-                          {getOrderStatusLabel(
-                            order.status,
-                          )}
-                        </span>
-                      </p>
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
+                        <OrderStatusBadge
+                          status={
+                            order.status
+                          }
+                        />
 
-                      <p className="mt-1">
-                        Pagamento:{' '}
-                        <span className="font-semibold">
-                          {getPaymentStatusLabel(
-                            order.paymentStatus,
-                          )}
-                        </span>
+                        <PaymentStatusBadge
+                          status={
+                            order.paymentStatus
+                          }
+                        />
+                      </div>
+
+                      <p className="mt-2 font-semibold">
+                        Total:{' '}
+                        {formatMoney(
+                          order.total,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -1090,6 +1102,17 @@ export function OrdersClient() {
                                 }
                               </p>
 
+                              {!!item.variantOptionsAtPurchase?.length && (
+                                <p className="mt-1 text-neutral-600 dark:text-neutral-400">
+                                  Opções:{' '}
+                                  {item.variantOptionsAtPurchase
+                                    .map((option) =>
+                                      `${option.name}: ${option.value}`,
+                                    )
+                                    .join(' · ')}
+                                </p>
+                              )}
+
                               <p className="mt-1 text-neutral-600 dark:text-neutral-400">
                                 Quantidade:{' '}
                                 {
@@ -1120,10 +1143,18 @@ export function OrdersClient() {
                   <div className="mt-5 grid gap-5 border-t pt-5 sm:grid-cols-2">
                     <div>
                       <h4 className="font-semibold">
-                        {isPickup
-                          ? 'Levantamento em loja'
-                          : 'Entrega'}
+                        {getShippingMethodLabel(
+                          order.fulfillmentMethod,
+                          order.shippingMethod,
+                        )}
                       </h4>
+
+                      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                        {getShippingMethodEstimate(
+                          order.fulfillmentMethod,
+                          order.shippingMethod,
+                        )}
+                      </p>
 
                       {isPickup ? (
                         <div className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">

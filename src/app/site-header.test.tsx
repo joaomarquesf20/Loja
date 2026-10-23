@@ -39,6 +39,17 @@ vi.mock(
 
 import SiteHeader from './site-header'
 
+function openAccountMenu() {
+  fireEvent.click(
+    screen.getByRole(
+      'button',
+      {
+        name: 'Conta',
+      },
+    ),
+  )
+}
+
 describe('SiteHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -144,7 +155,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('mostra utilizador autenticado com acesso à conta e logout', () => {
+  test('mostra utilizador autenticado dentro do menu de conta', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -162,10 +173,11 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Maria',
         },
@@ -177,7 +189,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Maria',
         },
@@ -189,30 +201,12 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
       ),
     ).toBeInTheDocument()
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
-          name: 'Criar conta',
-        },
-      ),
-    ).not.toBeInTheDocument()
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
-          name: 'Entrar',
-        },
-      ),
-    ).not.toBeInTheDocument()
 
     expect(
       screen.queryByRole(
@@ -225,7 +219,7 @@ describe('SiteHeader', () => {
     ).not.toBeInTheDocument()
   })
 
-  test('mostra acesso à administração apenas para ADMIN', () => {
+  test('mostra acesso à administração apenas no menu de conta de ADMIN', () => {
     mocks.useSession.mockReturnValue(
       {
         status:
@@ -243,9 +237,10 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     expect(
-      screen.getByRole('link', {
+      screen.getByRole('menuitem', {
         name:
           'Administração',
       }),
@@ -256,7 +251,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole(
-        'link',
+        'menuitem',
         {
           name: 'Admin',
         },
@@ -265,15 +260,6 @@ describe('SiteHeader', () => {
       'href',
       '/conta',
     )
-
-    expect(
-      screen.queryByRole(
-        'link',
-        {
-          name: 'Criar conta',
-        },
-      ),
-    ).not.toBeInTheDocument()
   })
 
   test('não mostra o cabeçalho público dentro do admin', () => {
@@ -308,10 +294,11 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     fireEvent.click(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
@@ -349,10 +336,11 @@ describe('SiteHeader', () => {
     )
 
     render(<SiteHeader />)
+    openAccountMenu()
 
     fireEvent.click(
       screen.getByRole(
-        'button',
+        'menuitem',
         {
           name: 'Sair',
         },
@@ -366,5 +354,57 @@ describe('SiteHeader', () => {
     ).toHaveTextContent(
       'Não foi possível terminar a sessão.',
     )
+  })
+
+  test('fecha o menu de conta com Escape ou clique fora e devolve o foco ao gatilho', () => {
+    mocks.useSession.mockReturnValue({
+      status: 'authenticated',
+      data: {
+        user: {
+          id: 'user-1',
+          name: 'Maria',
+          email: 'maria@example.com',
+          role: 'BUYER',
+        },
+      },
+    })
+
+    render(<SiteHeader />)
+
+    const trigger = screen.getByRole('button', {
+      name: 'Conta',
+    })
+
+    openAccountMenu()
+
+    expect(
+      screen.getByRole('menu'),
+    ).toBeInTheDocument()
+    expect(document.activeElement).not.toBe(
+      trigger,
+    )
+
+    fireEvent.keyDown(window, {
+      key: 'Escape',
+    })
+
+    expect(
+      screen.queryByRole('menu'),
+    ).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(
+      trigger,
+    )
+
+    // Reabre e fecha ao clicar fora do menu.
+    fireEvent.click(trigger)
+    expect(
+      screen.getByRole('menu'),
+    ).toBeInTheDocument()
+
+    fireEvent.pointerDown(document.body)
+
+    expect(
+      screen.queryByRole('menu'),
+    ).not.toBeInTheDocument()
   })
 })

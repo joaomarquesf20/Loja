@@ -17,6 +17,21 @@ import {
 
 export const runtime = 'nodejs'
 
+/**
+ * Registo de rejeições (L7 do `payment-provider-webhook-requirements.md`):
+ * permite detetar padrões anómalos de reentrega (R31) sem expor dados do
+ * pedido — as mensagens são estáticas para não fazer eco de conteúdo
+ * controlado pelo emissor.
+ */
+function logRejectedWebhook(
+  status: number,
+  reason: string,
+) {
+  console.warn(
+    `Webhook de pagamento rejeitado (${status}): ${reason}`,
+  )
+}
+
 function handleError(
   error: unknown,
 ) {
@@ -24,6 +39,11 @@ function handleError(
     error instanceof
     PaymentWebhookAuthenticationError
   ) {
+    logRejectedWebhook(
+      401,
+      'Assinatura ausente, malformada, inválida ou timestamp expirado',
+    )
+
     return Response.json(
       {
         error:
@@ -39,6 +59,11 @@ function handleError(
     error instanceof
       OrderLifecycleValidationError
   ) {
+    logRejectedWebhook(
+      400,
+      'Evento de pagamento com dados inválidos',
+    )
+
     return Response.json(
       {
         error:
@@ -52,6 +77,11 @@ function handleError(
     error instanceof
     RequestPayloadTooLargeError
   ) {
+    logRejectedWebhook(
+      413,
+      'Payload acima do limite',
+    )
+
     return Response.json(
       {
         error:
@@ -65,6 +95,11 @@ function handleError(
     error instanceof
     OrderLifecycleNotFoundError
   ) {
+    logRejectedWebhook(
+      404,
+      'Encomenda não encontrada',
+    )
+
     return Response.json(
       {
         error:
@@ -78,6 +113,11 @@ function handleError(
     error instanceof
     OrderLifecycleConflictError
   ) {
+    logRejectedWebhook(
+      409,
+      'Conflito de estado da encomenda',
+    )
+
     return Response.json(
       {
         error:
@@ -143,9 +183,13 @@ export async function POST(
         ? await recordVerifiedPaymentFailure(
             paymentInput,
           )
-        : await recordVerifiedPayment(
-            paymentInput,
-          )
+        : await recordVerifiedPayment({
+            ...paymentInput,
+            amount:
+              event.amount,
+            currency:
+              event.currency,
+          })
 
     return Response.json(
       {

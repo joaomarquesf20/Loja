@@ -108,6 +108,13 @@ function createOrder(
           'Pastilhas de travão',
         productSkuAtPurchase:
           'BRAKE-001',
+        variantOptionsAtPurchase: [
+          {
+            code: 'lado',
+            name: 'Lado',
+            value: 'Esquerdo',
+          },
+        ],
         priceAtPurchase:
           '50.00',
         quantity: 2,
@@ -166,6 +173,10 @@ describe(
           screen.getByText(
             'BRAKE-001',
           ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(/Lado: Esquerdo/),
         ).toBeInTheDocument()
 
         expect(

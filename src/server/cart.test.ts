@@ -14,6 +14,7 @@ import {
   CartInsufficientStockError,
   CartItemNotFoundError,
   CartProductUnavailableError,
+  CartVariantSelectionRequiredError,
   CartValidationError,
   listCartItems,
   removeCartItem,
@@ -21,17 +22,25 @@ import {
   type CartClient,
 } from './cart'
 
-function createClient(): CartClient {
+function createPurchasableVariant(
+  overrides?: {
+    isActive?: boolean
+    stockQuantity?: number
+  },
+) {
   return {
+    id: 'variant-1',
+    productId: 'product-1',
+    sku: 'VAR-001',
+    price: '12.50',
+    stockQuantity:
+      overrides?.stockQuantity ?? 5,
+    isActive:
+      overrides?.isActive ?? true,
+    images: ['/variant-1.jpg'],
     product: {
-      findFirst: vi.fn(),
-    },
-    cartItem: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      create: vi.fn(),
-      update: vi.fn(),
-      delete: vi.fn(),
+      id: 'product-1',
+      isActive: true,
     },
   }
 }
@@ -41,27 +50,95 @@ function createCartItemRecord(
     quantity?: number
     stockQuantity?: number
     isActive?: boolean
-    price?: number | string
+    productIsActive?: boolean
   },
 ) {
   return {
     id: 'cart-item-1',
     productId: 'product-1',
+    productVariantId:
+      'variant-1',
     quantity:
       overrides?.quantity ?? 2,
     product: {
       id: 'product-1',
       name: 'Produto 1',
       slug: 'produto-1',
-      price:
-        overrides?.price ?? '12.50',
+      isActive:
+        overrides?.productIsActive ??
+        true,
+      images: [
+        '/products/produto-1.jpg',
+      ],
+    },
+    variant: {
+      id: 'variant-1',
+      productId: 'product-1',
+      sku: 'VAR-001',
+      price: '12.50',
       stockQuantity:
         overrides?.stockQuantity ?? 5,
       isActive:
         overrides?.isActive ?? true,
-      images: [
-        '/products/produto-1.jpg',
-      ],
+      images: ['/variant-1.jpg'],
+    },
+  }
+}
+
+const cartItemSelect = {
+  id: true,
+  productId: true,
+  productVariantId: true,
+  quantity: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      isActive: true,
+      images: true,
+    },
+  },
+  variant: {
+    select: {
+      id: true,
+      productId: true,
+      sku: true,
+      price: true,
+      stockQuantity: true,
+      isActive: true,
+      images: true,
+    },
+  },
+}
+
+const variantSelect = {
+  id: true,
+  productId: true,
+  sku: true,
+  price: true,
+  stockQuantity: true,
+  isActive: true,
+  images: true,
+  product: {
+    select: {
+      id: true,
+      isActive: true,
+    },
+  },
+}
+
+function createClient(): CartClient {
+  return {
+    productVariant: {
+      findFirst: vi.fn(),
+    },
+    cartItem: {
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
     },
   }
 }
@@ -89,26 +166,11 @@ describe('Cart', () => {
         orderBy: {
           id: 'asc',
         },
-        select: {
-          id: true,
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              price: true,
-              stockQuantity: true,
-              isActive: true,
-              images: true,
-            },
-          },
-        },
+        select: cartItemSelect,
       })
     })
 
-    test('transforma itens para o modelo público do carrinho', async () => {
+    test('transforma itens para o modelo público do carrinho, com preço e stock da variante', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -127,6 +189,8 @@ describe('Cart', () => {
         {
           id: 'cart-item-1',
           productId: 'product-1',
+          productVariantId:
+            'variant-1',
           quantity: 2,
           product: {
             id: 'product-1',
@@ -134,8 +198,12 @@ describe('Cart', () => {
             slug: 'produto-1',
             price: 12.5,
             images: [
-              '/products/produto-1.jpg',
+              '/variant-1.jpg',
             ],
+          },
+          variant: {
+            id: 'variant-1',
+            sku: 'VAR-001',
           },
           inStock: true,
           isAvailable: true,
@@ -144,7 +212,40 @@ describe('Cart', () => {
       ])
     })
 
-    test('marca item como indisponível quando a quantidade excede o stock atual', async () => {
+    test('usa as imagens do produto quando a variante não tem', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.cartItem.findMany,
+      ).mockResolvedValue([
+        createCartItemRecord(),
+      ])
+
+      const record =
+        createCartItemRecord()
+      record.variant.images = []
+
+      vi.mocked(
+        client.cartItem.findMany,
+      ).mockReset()
+      vi.mocked(
+        client.cartItem.findMany,
+      ).mockResolvedValue([record])
+
+      const [item] =
+        await listCartItems(
+          'user-1',
+          client,
+        )
+
+      expect(
+        item?.product.images,
+      ).toEqual([
+        '/products/produto-1.jpg',
+      ])
+    })
+
+    test('marca item como indisponível quando a quantidade excede o stock da variante', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -169,7 +270,7 @@ describe('Cart', () => {
       })
     })
 
-    test('marca produto inativo como indisponível', async () => {
+    test('marca variante inativa como indisponível', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -218,12 +319,16 @@ describe('Cart', () => {
     ])(
       'rejeita quantidade inválida: %s',
       async (quantity) => {
-        const client = createClient()
+        const client =
+          createClient()
 
         await expect(
           addCartItem(
             'user-1',
-            'product-1',
+            {
+              productVariantId:
+                'variant-1',
+            },
             quantity,
             client,
           ),
@@ -232,18 +337,19 @@ describe('Cart', () => {
         )
 
         expect(
-          client.product.findFirst,
+          client.productVariant
+            .findFirst,
         ).not.toHaveBeenCalled()
       },
     )
 
-    test('rejeita produto vazio sem consultar a base de dados', async () => {
+    test('rejeita alvo vazio sem consultar a base de dados', async () => {
       const client = createClient()
 
       await expect(
         addCartItem(
           'user-1',
-          '   ',
+          { productId: '   ' },
           1,
           client,
         ),
@@ -252,15 +358,16 @@ describe('Cart', () => {
       )
 
       expect(
-        client.product.findFirst,
+        client.productVariant
+          .findFirst,
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita produto inexistente ou inativo', async () => {
+    test('rejeita produto sem variante default ou inativo', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
+        client.productVariant.findFirst,
       ).mockResolvedValue(null)
 
       await expect(
@@ -275,16 +382,13 @@ describe('Cart', () => {
       )
 
       expect(
-        client.product.findFirst,
+        client.productVariant.findFirst,
       ).toHaveBeenCalledWith({
         where: {
-          id: 'product-1',
-          isActive: true,
+          productId: 'product-1',
+          optionKey: 'default',
         },
-        select: {
-          id: true,
-          stockQuantity: true,
-        },
+        select: variantSelect,
       })
 
       expect(
@@ -292,15 +396,70 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita produto sem stock', async () => {
+    test('rejeita combinação de variante inexistente com erro de seleção', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 0,
-      })
+        client.productVariant.findFirst,
+      ).mockResolvedValue(null)
+
+      await expect(
+        addCartItem(
+          'user-1',
+          {
+            productId: 'product-1',
+            productVariantId:
+              'variant-oms',
+          },
+          1,
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartVariantSelectionRequiredError,
+      )
+
+      expect(
+        client.cartItem.findUnique,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita variante inativa', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          isActive: false,
+        }),
+      )
+
+      await expect(
+        addCartItem(
+          'user-1',
+          'product-1',
+          1,
+          client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CartProductUnavailableError,
+      )
+
+      expect(
+        client.cartItem.findUnique,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('rejeita variante sem stock', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 0,
+        }),
+      )
 
       await expect(
         addCartItem(
@@ -318,15 +477,14 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('cria novo item quando produto ainda não está no carrinho', async () => {
+    test('cria novo item quando a variante ainda não está no carrinho', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 5,
-      })
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -336,7 +494,6 @@ describe('Cart', () => {
         client.cartItem.create,
       ).mockResolvedValue(
         createCartItemRecord({
-          quantity: 2,
           stockQuantity: 5,
         }),
       )
@@ -344,7 +501,7 @@ describe('Cart', () => {
       const result =
         await addCartItem(
           ' user-1 ',
-          ' product-1 ',
+          { productId: ' product-1 ' },
           2,
           client,
         )
@@ -355,29 +512,18 @@ describe('Cart', () => {
         data: {
           userId: 'user-1',
           productId: 'product-1',
+          productVariantId:
+            'variant-1',
           quantity: 2,
         },
-        select: {
-          id: true,
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              price: true,
-              stockQuantity: true,
-              isActive: true,
-              images: true,
-            },
-          },
-        },
+        select: cartItemSelect,
       })
 
       expect(result).toMatchObject({
         id: 'cart-item-1',
         productId: 'product-1',
+        productVariantId:
+          'variant-1',
         quantity: 2,
         isAvailable: true,
       })
@@ -387,15 +533,16 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('incrementa quantidade quando produto já está no carrinho', async () => {
+    test('incrementa quantidade quando a variante já está no carrinho', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 10,
-      })
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 10,
+        }),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -430,22 +577,7 @@ describe('Cart', () => {
         data: {
           quantity: 5,
         },
-        select: {
-          id: true,
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              price: true,
-              stockQuantity: true,
-              isActive: true,
-              images: true,
-            },
-          },
-        },
+        select: cartItemSelect,
       })
 
       expect(result.quantity).toBe(5)
@@ -455,15 +587,16 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('permite quantidade final exatamente igual ao stock', async () => {
+    test('permite quantidade final exatamente igual ao stock da variante', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 5,
-      })
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 5,
+        }),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -496,15 +629,16 @@ describe('Cart', () => {
       })
     })
 
-    test('rejeita incremento que ultrapassa o stock disponível', async () => {
+    test('rejeita incremento que ultrapassa o stock da variante', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 5,
-      })
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 5,
+        }),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -544,7 +678,8 @@ describe('Cart', () => {
     ])(
       'rejeita quantidade inválida: %s',
       async (quantity) => {
-        const client = createClient()
+        const client =
+          createClient()
 
         await expect(
           updateCartItemQuantity(
@@ -567,6 +702,12 @@ describe('Cart', () => {
       const client = createClient()
 
       vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
+
+      vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue(null)
 
@@ -582,29 +723,24 @@ describe('Cart', () => {
       )
 
       expect(
-        client.product.findFirst,
-      ).not.toHaveBeenCalled()
-
-      expect(
         client.cartItem.update,
       ).not.toHaveBeenCalled()
     })
 
-    test('procura item pela combinação de utilizador e produto', async () => {
+    test('procura item pela combinação de utilizador e variante', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue({
         id: 'cart-item-1',
         quantity: 1,
-      })
-
-      vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 5,
       })
 
       vi.mocked(
@@ -627,9 +763,10 @@ describe('Cart', () => {
         client.cartItem.findUnique,
       ).toHaveBeenCalledWith({
         where: {
-          userId_productId: {
+          userId_productVariantId: {
             userId: 'user-1',
-            productId: 'product-1',
+            productVariantId:
+              'variant-1',
           },
         },
         select: {
@@ -639,18 +776,11 @@ describe('Cart', () => {
       })
     })
 
-    test('rejeita produto que ficou inativo ou deixou de existir', async () => {
+    test('rejeita variante que ficou inativa ou deixou de existir', async () => {
       const client = createClient()
 
       vi.mocked(
-        client.cartItem.findUnique,
-      ).mockResolvedValue({
-        id: 'cart-item-1',
-        quantity: 1,
-      })
-
-      vi.mocked(
-        client.product.findFirst,
+        client.productVariant.findFirst,
       ).mockResolvedValue(null)
 
       await expect(
@@ -669,21 +799,22 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita quantidade superior ao stock atual', async () => {
+    test('rejeita quantidade superior ao stock atual da variante', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 3,
+        }),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue({
         id: 'cart-item-1',
         quantity: 2,
-      })
-
-      vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 3,
       })
 
       await expect(
@@ -706,17 +837,18 @@ describe('Cart', () => {
       const client = createClient()
 
       vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 10,
+        }),
+      )
+
+      vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue({
         id: 'cart-item-1',
         quantity: 4,
-      })
-
-      vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 10,
       })
 
       vi.mocked(
@@ -745,22 +877,7 @@ describe('Cart', () => {
         data: {
           quantity: 2,
         },
-        select: {
-          id: true,
-          productId: true,
-          quantity: true,
-          product: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-              price: true,
-              stockQuantity: true,
-              isActive: true,
-              images: true,
-            },
-          },
-        },
+        select: cartItemSelect,
       })
 
       expect(result.quantity).toBe(2)
@@ -770,17 +887,18 @@ describe('Cart', () => {
       const client = createClient()
 
       vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          stockQuantity: 5,
+        }),
+      )
+
+      vi.mocked(
         client.cartItem.findUnique,
       ).mockResolvedValue({
         id: 'cart-item-1',
         quantity: 2,
-      })
-
-      vi.mocked(
-        client.product.findFirst,
-      ).mockResolvedValue({
-        id: 'product-1',
-        stockQuantity: 5,
       })
 
       vi.mocked(
@@ -827,13 +945,16 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita produto vazio', async () => {
+    test('rejeita alvo vazio', async () => {
       const client = createClient()
 
       await expect(
         removeCartItem(
           'user-1',
-          '   ',
+          {
+            productId: '   ',
+            productVariantId: '',
+          },
           client,
         ),
       ).rejects.toBeInstanceOf(
@@ -847,6 +968,12 @@ describe('Cart', () => {
 
     test('rejeita item que não pertence ao utilizador ou não existe', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -867,8 +994,14 @@ describe('Cart', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('procura item pela combinação de utilizador e produto', async () => {
+    test('procura item pela combinação de utilizador e variante', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -892,9 +1025,10 @@ describe('Cart', () => {
         client.cartItem.findUnique,
       ).toHaveBeenCalledWith({
         where: {
-          userId_productId: {
+          userId_productVariantId: {
             userId: 'user-1',
-            productId: 'product-1',
+            productVariantId:
+              'variant-1',
           },
         },
         select: {
@@ -905,6 +1039,12 @@ describe('Cart', () => {
 
     test('remove o item encontrado', async () => {
       const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant(),
+      )
 
       vi.mocked(
         client.cartItem.findUnique,
@@ -918,11 +1058,13 @@ describe('Cart', () => {
         id: 'cart-item-1',
       })
 
-      await removeCartItem(
-        'user-1',
-        'product-1',
-        client,
-      )
+      await expect(
+        removeCartItem(
+          'user-1',
+          'product-1',
+          client,
+        ),
+      ).resolves.toBeUndefined()
 
       expect(
         client.cartItem.delete,
@@ -934,6 +1076,38 @@ describe('Cart', () => {
           id: true,
         },
       })
+    })
+
+    test('permite remover item de variante inativa (não exige que esteja comprável)', async () => {
+      const client = createClient()
+
+      vi.mocked(
+        client.productVariant.findFirst,
+      ).mockResolvedValue(
+        createPurchasableVariant({
+          isActive: false,
+        }),
+      )
+
+      vi.mocked(
+        client.cartItem.findUnique,
+      ).mockResolvedValue({
+        id: 'cart-item-1',
+      })
+
+      vi.mocked(
+        client.cartItem.delete,
+      ).mockResolvedValue({
+        id: 'cart-item-1',
+      })
+
+      await expect(
+        removeCartItem(
+          'user-1',
+          'product-1',
+          client,
+        ),
+      ).resolves.toBeUndefined()
     })
   })
 })

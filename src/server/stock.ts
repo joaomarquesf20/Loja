@@ -1,62 +1,84 @@
-// Tipo mínimo para o cliente de stock - INJETÁVEL (NÃO depende de @prisma/client)
-type StockClient = {
-  product: {
-    updateMany(args: {
+type StockUpdateManyArgs = {
+  where: {
+    id: string
+    stockQuantity: {
+      gte: number
+    }
+  }
+  data: {
+    stockQuantity: {
+      decrement: number
+    }
+  }
+}
+
+type StockDelegate = {
+  updateMany(
+    args: StockUpdateManyArgs,
+  ): Promise<{
+    count: number
+  }>
+}
+
+export type StockClient = {
+  productVariant: StockDelegate
+}
+
+function validateQuantity(
+  quantity: number,
+) {
+  if (
+    !Number.isInteger(quantity) ||
+    quantity <= 0
+  ) {
+    throw new Error(
+      'Quantidade inválida',
+    )
+  }
+}
+
+async function decrementFromDelegate(
+  delegate: StockDelegate,
+  id: string,
+  quantity: number,
+) {
+  validateQuantity(quantity)
+
+  const result =
+    await delegate.updateMany({
       where: {
-        id: string
+        id,
         stockQuantity: {
-          gte: number
-        }
-      }
+          gte: quantity,
+        },
+      },
       data: {
         stockQuantity: {
-          decrement: number
-        }
-      }
-    }): Promise<{ count: number }>
+          decrement: quantity,
+        },
+      },
+    })
+
+  if (result.count !== 1) {
+    throw new Error(
+      'Stock insuficiente',
+    )
   }
 }
 
 /**
- * Função para decrementar stock de forma segura usando atualização condicional
- * 
- * Utiliza UPDATE com WHERE que inclui:
- * - id do produto
- * - stockQuantity >= quantity (verifica stock suficiente)
- * 
- * Validações:
- * - quantity deve ser inteiro positivo (Number.isInteger && > 0)
- * 
- * Se inválido: throw new Error("Quantidade inválida")
- * 
- * Se result.count !== 1: throw new Error("Stock insuficiente")
+ * Decrementa atomicamente o stock da unidade vendável
+ * (ProductVariant). A variante é a única fonte de verdade
+ * de inventário; o Product já não tem campos de stock.
  */
-export async function decrementStock(
+export async function decrementVariantStock(
   client: StockClient,
-  productId: string,
-  quantity: number
+  productVariantId: string,
+  quantity: number,
 ): Promise<void> {
-  // Validar quantidade antes da operação
-  if (!Number.isInteger(quantity) || quantity <= 0) {
-    throw new Error("Quantidade inválida")
-  }
-
-  const result = await client.product.updateMany({
-    where: {
-      id: productId,
-      stockQuantity: {
-        gte: quantity,
-      },
-    },
-    data: {
-      stockQuantity: {
-        decrement: quantity,
-      },
-    },
-  })
-
-  // Verificar se exatamente um produto foi atualizado
-  if (result.count !== 1) {
-    throw new Error("Stock insuficiente")
-  }
+  return decrementFromDelegate(
+    client.productVariant,
+    productVariantId,
+    quantity,
+  )
 }

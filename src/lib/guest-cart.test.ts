@@ -770,6 +770,75 @@ describe('Guest cart', () => {
           ])
         },
       )
+      test('atualiza carrinho legado quando o servidor já resolveu a variante default', () => {
+        window.localStorage.setItem(
+          GUEST_CART_STORAGE_KEY,
+          JSON.stringify([
+            {
+              productId:
+                'product-1',
+              quantity: 2,
+            },
+          ]),
+        )
+
+        const result =
+          updateGuestCartItemQuantity(
+            'product-1',
+            4,
+            'variant-default-1',
+          )
+
+        expect(result).toEqual([
+          {
+            productId:
+              'product-1',
+            quantity: 4,
+          },
+        ])
+      })
+
+      test('prefere a linha de variante explícita quando também existe uma linha legada', () => {
+        window.localStorage.setItem(
+          GUEST_CART_STORAGE_KEY,
+          JSON.stringify([
+            {
+              productId:
+                'product-1',
+              quantity: 2,
+            },
+            {
+              productId:
+                'product-1',
+              productVariantId:
+                'variant-2',
+              quantity: 1,
+            },
+          ]),
+        )
+
+        const result =
+          updateGuestCartItemQuantity(
+            'product-1',
+            3,
+            'variant-2',
+          )
+
+        expect(result).toEqual([
+          {
+            productId:
+              'product-1',
+            quantity: 2,
+          },
+          {
+            productId:
+              'product-1',
+            productVariantId:
+              'variant-2',
+            quantity: 3,
+          },
+        ])
+      })
     },
   )
 
@@ -846,6 +915,59 @@ describe('Guest cart', () => {
         ).toThrow(
           GuestCartValidationError,
         )
+      })
+
+      test('remove carrinho legado quando o servidor já resolveu a variante default', () => {
+        window.localStorage.setItem(
+          GUEST_CART_STORAGE_KEY,
+          JSON.stringify([
+            {
+              productId:
+                'product-1',
+              quantity: 2,
+            },
+          ]),
+        )
+
+        expect(
+          removeGuestCartItem(
+            'product-1',
+            'variant-default-1',
+          ),
+        ).toEqual([])
+      })
+
+      test('remove apenas a variante explícita quando existe também uma linha legada', () => {
+        window.localStorage.setItem(
+          GUEST_CART_STORAGE_KEY,
+          JSON.stringify([
+            {
+              productId:
+                'product-1',
+              quantity: 2,
+            },
+            {
+              productId:
+                'product-1',
+              productVariantId:
+                'variant-2',
+              quantity: 1,
+            },
+          ]),
+        )
+
+        expect(
+          removeGuestCartItem(
+            'product-1',
+            'variant-2',
+          ),
+        ).toEqual([
+          {
+            productId:
+              'product-1',
+            quantity: 2,
+          },
+        ])
       })
     },
   )

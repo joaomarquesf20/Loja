@@ -24,6 +24,7 @@ type CartProduct = {
 type CartItem = {
   id?: string
   productId: string
+  productVariantId?: string
   quantity: number
   product: CartProduct | null
   inStock: boolean
@@ -159,7 +160,48 @@ async function fetchGuestCart() {
     )
   }
 
-  return parseCartItems(response)
+  const resolvedItems =
+    await parseCartItems(response)
+
+  // Temporary migration path for legacy localStorage entries that only
+  // contain productId. Once the server resolves every line to the explicit
+  // default variant, persist the canonical variant-based guest cart.
+  if (
+    guestItems.length > 0 &&
+    resolvedItems.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    ) ===
+      guestItems.reduce(
+        (total, item) => total + item.quantity,
+        0,
+      ) &&
+    resolvedItems.every(
+      (item) =>
+        typeof item.productVariantId ===
+        'string',
+    )
+  ) {
+    try {
+      writeGuestCart(
+        resolvedItems.map(
+          (item) => ({
+            productId:
+              item.productId,
+            productVariantId:
+              item.productVariantId as string,
+            quantity:
+              item.quantity,
+          }),
+        ),
+      )
+    } catch {
+      // Rendering the resolved cart must not fail only because localStorage
+      // cannot be rewritten. The next request can still resolve productId.
+    }
+  }
+
+  return resolvedItems
 }
 
 function restoreGuestCart(
@@ -288,7 +330,8 @@ export function CartClient() {
     }
 
     setPendingProductId(
-      item.productId,
+      item.productVariantId ??
+        item.productId,
     )
     setError(null)
 
@@ -306,6 +349,12 @@ export function CartClient() {
             body: JSON.stringify({
               productId:
                 item.productId,
+              ...(item.productVariantId
+                ? {
+                    productVariantId:
+                      item.productVariantId,
+                  }
+                : {}),
               quantity,
             }),
           })
@@ -330,6 +379,7 @@ export function CartClient() {
         updateGuestCartItemQuantity(
           item.productId,
           quantity,
+          item.productVariantId,
         )
 
         const nextItems =
@@ -365,7 +415,8 @@ export function CartClient() {
     }
 
     setPendingProductId(
-      item.productId,
+      item.productVariantId ??
+        item.productId,
     )
     setError(null)
 
@@ -383,6 +434,12 @@ export function CartClient() {
             body: JSON.stringify({
               productId:
                 item.productId,
+              ...(item.productVariantId
+                ? {
+                    productVariantId:
+                      item.productVariantId,
+                  }
+                : {}),
             }),
           })
 
@@ -405,6 +462,7 @@ export function CartClient() {
       try {
         removeGuestCartItem(
           item.productId,
+          item.productVariantId,
         )
 
         const nextItems =
@@ -527,7 +585,8 @@ export function CartClient() {
 
               const isPending =
                 pendingProductId ===
-                item.productId
+                (item.productVariantId ??
+                  item.productId)
 
               const canDecrease =
                 Boolean(
@@ -540,6 +599,7 @@ export function CartClient() {
               return (
                 <article
                   key={
+                    item.productVariantId ??
                     item.productId
                   }
                   className="rounded-xl border border-gray-200 bg-white p-5"
@@ -689,7 +749,7 @@ export function CartClient() {
             })}
           </div>
 
-          <aside className="h-fit rounded-xl border border-gray-200 bg-white p-5">
+          <aside aria-live="polite" className="h-fit rounded-xl border border-gray-200 bg-white p-5">
             <h2 className="text-lg font-semibold text-gray-950">
               Resumo
             </h2>

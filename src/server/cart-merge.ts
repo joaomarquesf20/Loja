@@ -10,15 +10,22 @@ import {
   type GuestCartInputItem,
 } from './guest-cart'
 
-type MergeProductRecord = {
+type MergeVariantRecord = {
   id: string
+  productId: string
+  optionKey: string
   stockQuantity: number
   isActive: boolean
+  product: {
+    id: string
+    isActive: boolean
+  }
 }
 
 type ExistingCartItemRecord = {
   id: string
   productId: string
+  productVariantId?: string
   quantity: number
 }
 
@@ -30,6 +37,7 @@ type MergeReceiptRecord = {
 
 type PreparedMergeItem = {
   productId: string
+  productVariantId: string
   quantity: number
   existingItemId: string | null
 }
@@ -86,20 +94,24 @@ type CartMergeTransactionClient = {
     >
   }
 
-  product: {
+  productVariant: {
     findMany(args: {
-      where: {
-        id: {
-          in: string[]
-        }
-      }
+      where: Record<string, unknown>
       select: {
         id: true
+        productId: true
+        optionKey: true
         stockQuantity: true
         isActive: true
+        product: {
+          select: {
+            id: true
+            isActive: true
+          }
+        }
       }
     }): Promise<
-      MergeProductRecord[]
+      MergeVariantRecord[]
     >
   }
 
@@ -107,13 +119,14 @@ type CartMergeTransactionClient = {
     findMany(args: {
       where: {
         userId: string
-        productId: {
+        productVariantId: {
           in: string[]
         }
       }
       select: {
         id: true
         productId: true
+        productVariantId: true
         quantity: true
       }
     }): Promise<
@@ -138,6 +151,7 @@ type CartMergeTransactionClient = {
       data: {
         userId: string
         productId: string
+        productVariantId: string
         quantity: number
       }
       select: {
@@ -239,15 +253,21 @@ function createPayloadHash(
   const canonicalItems = [
     ...items,
   ].sort((left, right) => {
-    if (
-      left.productId ===
-      right.productId
-    ) {
+    const leftKey =
+      left.productVariantId
+        ? `variant:${left.productVariantId}`
+        : `product:${left.productId}`
+
+    const rightKey =
+      right.productVariantId
+        ? `variant:${right.productVariantId}`
+        : `product:${right.productId}`
+
+    if (leftKey === rightKey) {
       return 0
     }
 
-    return left.productId <
-      right.productId
+    return leftKey < rightKey
       ? -1
       : 1
   })
@@ -441,177 +461,324 @@ export async function mergeGuestCartIntoUserCart(
         }
       }
 
-      const productIds =
-        normalizedItems.map(
-          (item) =>
-            item.productId,
-        )
-
-      const products =
-        await tx.product.findMany({
-          where: {
-            id: {
-              in: productIds,
-            },
-          },
-          select: {
-            id: true,
-            stockQuantity: true,
-            isActive: true,
-          },
-        })
-
-      const existingItems =
-        await tx.cartItem.findMany({
-          where: {
-            userId: user.id,
-            productId: {
-              in: productIds,
-            },
-          },
-          select: {
-            id: true,
-            productId: true,
-            quantity: true,
-          },
-        })
-
-      const productsById =
-        new Map(
-          products.map(
-            (product) => [
-              product.id,
-              product,
-            ],
-          ),
-        )
-
-      const existingItemsByProductId =
-        new Map(
-          existingItems.map(
-            (item) => [
-              item.productId,
-              item,
-            ],
-          ),
-        )
-
-      const preparedItems:
-        PreparedMergeItem[] = []
-
-      for (
-        const item of
-        normalizedItems
-      ) {
-        const product =
-          productsById.get(
-            item.productId,
-          )
-
-        if (
-          !product ||
-          !product.isActive
-        ) {
-          throw new CartProductUnavailableError()
-        }
-
-        const existingItem =
-          existingItemsByProductId.get(
-            item.productId,
-          )
-
-        const existingQuantity =
-          existingItem?.quantity ?? 0
-
-        if (
-          existingItem &&
-          (
-            !Number.isSafeInteger(
-              existingQuantity,
-            ) ||
-            existingQuantity <= 0
-          )
-        ) {
-          throw new CartValidationError(
-            'Quantidade do carrinho inválida',
-          )
-        }
-
-        const nextQuantity =
-          existingQuantity +
-          item.quantity
-
-        if (
-          !Number.isSafeInteger(
-            nextQuantity,
-          )
-        ) {
-          throw new CartValidationError(
-            'Quantidade inválida',
-          )
-        }
-
-        if (
-          nextQuantity >
-          product.stockQuantity
-        ) {
-          throw new CartInsufficientStockError()
-        }
-
-        preparedItems.push({
-          productId:
-            item.productId,
-          quantity:
-            nextQuantity,
-          existingItemId:
-            existingItem?.id ??
-            null,
-        })
-      }
-
-      for (
-        const item of
-        preparedItems
-      ) {
-        if (
-          item.existingItemId
-        ) {
-          await tx.cartItem.update(
-            {
-              where: {
-                id: item.existingItemId,
-              },
-              data: {
-                quantity:
-                  item.quantity,
-              },
-              select: {
-                id: true,
-              },
-            },
-          )
-
-          continue
-        }
-
-        await tx.cartItem.create({
-          data: {
-            userId: user.id,
-            productId:
-              item.productId,
-            quantity:
-              item.quantity,
-          },
-          select: {
-            id: true,
-          },
-        })
-      }
+      await processVariantMerge(
+        tx,
+        user,
+        normalizedItems,
+      )
 
       return {
         mergedItemCount:
-          preparedItems.length,
+          normalizedItems.length,
       }
     },
   )
+}
+
+/**
+ * Junta os itens do carrinho de convidado ao do
+ * utilizador. Os itens identificados apenas pelo produto
+ * são resolvidos contra a variante 'default'; o carrinho
+ * é variant-only e toda a validação de disponibilidade e
+ * stock acontece ao nível da variante.
+ */
+async function processVariantMerge(
+  tx: CartMergeTransactionClient,
+  user: { id: string },
+  normalizedItems: GuestCartInputItem[],
+) {
+  const explicitVariantIds =
+    normalizedItems.flatMap(
+      (item) =>
+        item.productVariantId
+          ? [
+              item.productVariantId,
+            ]
+          : [],
+    )
+
+  // Itens sem productVariantId provenientes de carrinhos
+  // antigos: resolvem-se contra a variante 'default' do
+  // produto (a fórmula continua a existir).
+  const legacyProductIds =
+    normalizedItems
+      .filter(
+        (item) =>
+          !item.productVariantId,
+      )
+      .map(
+        (item) =>
+          item.productId,
+      )
+
+  const variants =
+    await tx.productVariant.findMany(
+      {
+        where: {
+          OR: [
+            ...(explicitVariantIds.length
+              ? [
+                  {
+                    id: {
+                      in:
+                        explicitVariantIds,
+                    },
+                  },
+                ]
+              : []),
+            ...(legacyProductIds.length
+              ? [
+                  {
+                    productId: {
+                      in:
+                        legacyProductIds,
+                    },
+                    optionKey:
+                      'default',
+                  },
+                ]
+              : []),
+          ],
+        },
+        select: {
+          id: true,
+          productId: true,
+          optionKey: true,
+          stockQuantity: true,
+          isActive: true,
+          product: {
+            select: {
+              id: true,
+              isActive: true,
+            },
+          },
+        },
+      },
+    )
+
+  const variantsById =
+    new Map(
+      variants.map(
+        (variant) => [
+          variant.id,
+          variant,
+        ],
+      ),
+    )
+
+  const defaultsByProductId =
+    new Map(
+      variants
+        .filter(
+          (variant) =>
+            variant.optionKey ===
+              'default' &&
+            legacyProductIds.includes(
+              variant.productId,
+            ),
+        )
+        .map(
+          (variant) => [
+            variant.productId,
+            variant,
+          ],
+        ),
+    )
+
+  const quantitiesByVariantId =
+    new Map<
+      string,
+      {
+        productId: string
+        productVariantId: string
+        quantity: number
+        stockQuantity: number
+      }
+    >()
+
+  for (const item of normalizedItems) {
+    const variant =
+      item.productVariantId
+        ? variantsById.get(
+            item.productVariantId,
+          )
+        : defaultsByProductId.get(
+            item.productId,
+          )
+
+    if (
+      !variant ||
+      variant.productId !==
+        item.productId ||
+      !variant.isActive ||
+      !variant.product.isActive
+    ) {
+      throw new CartProductUnavailableError()
+    }
+
+    const existing =
+      quantitiesByVariantId.get(
+        variant.id,
+      )
+
+    const nextQuantity =
+      (existing?.quantity ?? 0) +
+      item.quantity
+
+    if (
+      !Number.isSafeInteger(
+        nextQuantity,
+      )
+    ) {
+      throw new CartValidationError(
+        'Quantidade inválida',
+      )
+    }
+
+    quantitiesByVariantId.set(
+      variant.id,
+      {
+        productId:
+          variant.productId,
+        productVariantId:
+          variant.id,
+        quantity:
+          nextQuantity,
+        stockQuantity:
+          variant.stockQuantity,
+      },
+    )
+  }
+
+  const resolvedItems =
+    Array.from(
+      quantitiesByVariantId.values(),
+    )
+
+  const variantIds =
+    resolvedItems.map(
+      (item) =>
+        item.productVariantId,
+    )
+
+  const existingItems =
+    await tx.cartItem.findMany({
+      where: {
+        userId: user.id,
+        productVariantId: {
+          in: variantIds,
+        },
+      },
+      select: {
+        id: true,
+        productId: true,
+        productVariantId: true,
+        quantity: true,
+      },
+    })
+
+  const existingByVariantId =
+    new Map(
+      existingItems.map(
+        (item) => [
+          item.productVariantId,
+          item,
+        ],
+      ),
+    )
+
+  const preparedItems:
+    PreparedMergeItem[] = []
+
+  for (const item of resolvedItems) {
+    const existingItem =
+      existingByVariantId.get(
+        item.productVariantId,
+      )
+
+    const existingQuantity =
+      existingItem?.quantity ?? 0
+
+    if (
+      existingItem &&
+      (
+        !Number.isSafeInteger(
+          existingQuantity,
+        ) ||
+        existingQuantity <= 0
+      )
+    ) {
+      throw new CartValidationError(
+        'Quantidade do carrinho inválida',
+      )
+    }
+
+    const nextQuantity =
+      existingQuantity +
+      item.quantity
+
+    if (
+      !Number.isSafeInteger(
+        nextQuantity,
+      )
+    ) {
+      throw new CartValidationError(
+        'Quantidade inválida',
+      )
+    }
+
+    if (
+      nextQuantity >
+      item.stockQuantity
+    ) {
+      throw new CartInsufficientStockError()
+    }
+
+    preparedItems.push({
+      productId:
+        item.productId,
+      productVariantId:
+        item.productVariantId,
+      quantity:
+        nextQuantity,
+      existingItemId:
+        existingItem?.id ??
+        null,
+    })
+  }
+
+  for (const item of preparedItems) {
+    if (item.existingItemId) {
+      await tx.cartItem.update({
+        where: {
+          id:
+            item.existingItemId,
+        },
+        data: {
+          quantity:
+            item.quantity,
+        },
+        select: {
+          id: true,
+        },
+      })
+
+      continue
+    }
+
+    await tx.cartItem.create({
+      data: {
+        userId: user.id,
+        productId:
+          item.productId,
+        productVariantId:
+          item.productVariantId,
+        quantity:
+          item.quantity,
+      },
+      select: {
+        id: true,
+      },
+    })
+  }
 }

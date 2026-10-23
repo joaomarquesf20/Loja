@@ -66,6 +66,11 @@ enum CheckoutRegion {
   INTERNATIONAL
 }
 
+enum ShippingMethod {
+  STANDARD
+  EXPRESS
+}
+
 model User {
   id                         String           @id @default(cuid())
   email                      String           @unique
@@ -167,10 +172,9 @@ model Product {
   slug            String                        @unique
   sku             String                        @unique
   description     String?
-  price           Decimal                       @db.Decimal(10, 2)
-  stockQuantity   Int                           @default(0)
   isActive        Boolean                       @default(true)
-  images          String[]
+  images          String[]                      @default([])
+  defaultFinish   String?
   shippingClass   ShippingClass                 @default(UNASSIGNED)
   category        Category                      @relation(fields: [categoryId], references: [id])
   brand           ProductBrand?                 @relation(fields: [productBrandId], references: [id])
@@ -178,9 +182,104 @@ model Product {
   cartItems       CartItem[]
   orderItems      OrderItem[]
   shippingRates   ProductShippingRate[]
+  variants        ProductVariant[]
+  options         ProductOption[]
+  imageMetadata   ProductImage[]
+  createdAt       DateTime                       @default(now())
 
   @@index([categoryId])
   @@index([shippingClass])
+  @@index([createdAt])
+}
+
+model ProductVariant {
+  id             String                          @id @default(cuid())
+  productId      String
+  sku            String                          @unique
+  supplierSku    String?
+  price          Decimal                         @db.Decimal(10, 2)
+  priceSet       Decimal?                        @db.Decimal(10, 2)
+  stockQuantity  Int                             @default(0)
+  isActive       Boolean                         @default(true)
+  images         String[]
+  position       Int                             @default(0)
+  optionKey      String
+  product        Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  selections     ProductVariantOptionSelection[]
+  specifications ProductVariantSpecification[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+
+  @@unique([productId, optionKey])
+  @@index([productId, position])
+  @@index([productId, isActive, position])
+}
+
+model ProductOption {
+  id        String               @id @default(cuid())
+  productId String
+  name      String
+  code      String
+  position  Int                  @default(0)
+  product   Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values    ProductOptionValue[]
+
+  @@unique([productId, code])
+  @@index([productId, position])
+}
+
+model ProductOptionValue {
+  id         String                          @id @default(cuid())
+  optionId   String
+  value      String
+  position   Int                             @default(0)
+  option     ProductOption                   @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  selections ProductVariantOptionSelection[]
+  productImages ProductImage[]                 @relation("ProductImageFinishValue")
+
+  @@unique([optionId, value])
+  @@unique([id, optionId])
+  @@index([optionId, position])
+}
+
+model ProductImage {
+  id            String               @id @default(cuid())
+  productId     String
+  url           String
+  altText       String?
+  sortOrder     Int                  @default(0)
+  isPrimary     Boolean              @default(false)
+  finishValueId String?
+  product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  finishValue   ProductOptionValue?  @relation("ProductImageFinishValue", fields: [finishValueId], references: [id], onDelete: SetNull)
+
+  @@index([productId, sortOrder])
+  @@index([finishValueId])
+}
+
+model ProductVariantOptionSelection {
+  variantId     String
+  optionId      String
+  optionValueId String
+  variant       ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  optionValue   ProductOptionValue @relation(fields: [optionValueId, optionId], references: [id, optionId], onDelete: Cascade)
+
+  @@id([variantId, optionId])
+  @@index([optionValueId, optionId])
+}
+
+model ProductVariantSpecification {
+  id        String         @id @default(cuid())
+  variantId String
+  key       String
+  label     String
+  value     String
+  unit      String?
+  position  Int            @default(0)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, key])
+  @@index([variantId, position])
 }
 
 model ProductVehicleCompatibility {
@@ -205,14 +304,18 @@ model ProductVehicleCompatibility {
 }
 
 model CartItem {
-  id        String  @id @default(cuid())
-  userId    String
-  productId String
-  quantity  Int     @default(1)
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  id               String         @id @default(cuid())
+  userId           String
+  productId        String
+  productVariantId String
+  quantity         Int            @default(1)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product          Product        @relation(fields: [productId], references: [id])
+  variant          ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  @@unique([userId, productId])
+  @@unique([userId, productVariantId])
+  @@index([productId])
+  @@index([productVariantId])
 }
 
 model GuestCartMerge {
@@ -250,12 +353,13 @@ model StoreSettings {
 }
 
 model CheckoutRegionRule {
-  region          CheckoutRegion @id
-  checkoutEnabled Boolean        @default(false)
-  taxRatePercent  Decimal?       @db.Decimal(5, 2)
-  shippingRules   ShippingRule[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  region              CheckoutRegion @id
+  checkoutEnabled     Boolean        @default(false)
+  taxRatePercent      Decimal?       @db.Decimal(5, 2)
+  expressShippingCost Decimal?       @db.Decimal(10, 2)
+  shippingRules       ShippingRule[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 model ShippingRule {
@@ -302,6 +406,7 @@ model Order {
   paymentProvider         String?
   paymentReference        String?
   fulfillmentMethod       FulfillmentMethod @default(DELIVERY)
+  shippingMethod          ShippingMethod?
   shippingName            String
   shippingEmail           String
   shippingPhone           String
@@ -330,20 +435,25 @@ model Order {
 }
 
 model OrderItem {
-  id                      String         @id @default(cuid())
-  orderId                 String
-  productId               String
-  productNameAtPurchase   String
-  productSkuAtPurchase    String
-  priceAtPurchase         Decimal        @db.Decimal(10, 2)
-  quantity                Int
-  subtotalAtPurchase      Decimal        @db.Decimal(10, 2)
-  shippingClassAtPurchase ShippingClass?
-  shippingCostAtPurchase  Decimal?       @db.Decimal(10, 2)
-  order                   Order          @relation(fields: [orderId], references: [id])
-  product                 Product        @relation(fields: [productId], references: [id])
+  id                       String         @id @default(cuid())
+  orderId                  String
+  productId                String
+  productVariantId         String
+  productNameAtPurchase    String
+  productSkuAtPurchase     String
+  priceAtPurchase          Decimal        @db.Decimal(10, 2)
+  quantity                 Int
+  subtotalAtPurchase       Decimal        @db.Decimal(10, 2)
+  variantOptionsAtPurchase Json
+  shippingClassAtPurchase  ShippingClass?
+  shippingCostAtPurchase   Decimal?       @db.Decimal(10, 2)
+  order                    Order          @relation(fields: [orderId], references: [id])
+  product                  Product        @relation(fields: [productId], references: [id])
+  variant                  ProductVariant @relation(fields: [productVariantId], references: [id])
 
-  @@unique([orderId, productId])
+  @@unique([orderId, productVariantId])
+  @@index([productId])
+  @@index([productVariantId])
 }
 
 model OrderEvent {
@@ -358,4 +468,29 @@ model OrderEvent {
   order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
+}
+
+model ProductImport {
+  id               String    @id @default(cuid())
+  fileName         String
+  mode             String
+  failureMode      String    @default("abort")
+  status           String
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  createdBy        String?
+  createdProducts  Int       @default(0)
+  updatedProducts  Int       @default(0)
+  createdVariants  Int       @default(0)
+  updatedVariants  Int       @default(0)
+  /** Imagens novas criadas pelo import. */
+  createdImages    Int       @default(0)
+  /** Imagens já existentes e reutilizadas (dedupe por produto+finish+URL). */
+  matchedImages    Int       @default(0)
+  errorCount       Int       @default(0)
+  errors           Json      @default("[]")
+  warnings         Json      @default("[]")
+  changes          Json      @default("[]")
+
+  @@index([startedAt])
 }

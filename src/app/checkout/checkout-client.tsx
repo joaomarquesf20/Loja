@@ -8,6 +8,10 @@ import {
   useState,
 } from 'react'
 
+import {
+  getShippingMethodOptions,
+} from '@/lib/shipping-methods'
+
 type Address = {
   id: string
   name: string
@@ -44,18 +48,24 @@ type PaymentMethod =
   | 'CARD'
   | 'INSTALLMENTS'
 
+type ShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
+
 type CheckoutPreview = {
   subtotal: number
   shippingCost: number
   tax: number
   total: number
   fingerprint: string
+  expressAvailable: boolean
 }
 
 type CheckoutOrder = {
   id: string
   orderNumber: string
   fulfillmentMethod: FulfillmentMethod
+  shippingMethod?: ShippingMethod | null
   paymentMethod?: PaymentMethod
   installmentCount?: number | null
   subtotal: number
@@ -102,6 +112,7 @@ type CheckoutFulfillmentRequestInput =
         country: string
         region: 'PORTUGAL_MAINLAND'
       }
+      shippingMethod?: ShippingMethod
     }
   | {
       fulfillmentMethod: 'PICKUP'
@@ -184,7 +195,9 @@ function isCheckoutPreview(
     isMoneyValue(value.total) &&
     typeof value.fingerprint === 'string' &&
     value.fingerprint.length === 64 &&
-    /^[0-9a-f]{64}$/.test(value.fingerprint)
+    /^[0-9a-f]{64}$/.test(value.fingerprint) &&
+    typeof value.expressAvailable ===
+      'boolean'
   )
 }
 
@@ -194,6 +207,15 @@ function isFulfillmentMethod(
   return (
     value === 'DELIVERY' ||
     value === 'PICKUP'
+  )
+}
+
+function isShippingMethodValue(
+  value: unknown,
+): value is ShippingMethod {
+  return (
+    value === 'STANDARD' ||
+    value === 'EXPRESS'
   )
 }
 
@@ -219,6 +241,15 @@ function isCheckoutOrder(
       'string' &&
     isFulfillmentMethod(
       value.fulfillmentMethod,
+    ) &&
+    (
+      value.shippingMethod ===
+        undefined ||
+      value.shippingMethod ===
+        null ||
+      isShippingMethodValue(
+        value.shippingMethod,
+      )
     ) &&
     (
       value.paymentMethod === undefined ||
@@ -487,6 +518,13 @@ export function CheckoutClient() {
     setFulfillmentMethod,
   ] = useState<FulfillmentMethod>(
     'DELIVERY',
+  )
+
+  const [
+    shippingMethod,
+    setShippingMethod,
+  ] = useState<ShippingMethod>(
+    'STANDARD',
   )
 
   const [
@@ -888,6 +926,13 @@ export function CheckoutClient() {
     invalidatePreview()
   }
 
+  function changeShippingMethod(
+    nextMethod: ShippingMethod,
+  ) {
+    setShippingMethod(nextMethod)
+    invalidatePreview()
+  }
+
   function changePaymentMethod(
     nextMethod: PaymentMethod,
   ) {
@@ -991,6 +1036,7 @@ export function CheckoutClient() {
           selectedAddress,
           normalizedPhone,
         ),
+      shippingMethod,
     }
   }
 
@@ -1305,7 +1351,10 @@ export function CheckoutClient() {
             {order.fulfillmentMethod ===
             'PICKUP'
               ? 'Levantamento em loja'
-              : 'Entrega ao domicílio'}
+              : order.shippingMethod ===
+                  'EXPRESS'
+                ? 'Entrega expressa ao domicílio'
+                : 'Entrega ao domicílio'}
           </strong>
         </p>
 
@@ -1492,6 +1541,83 @@ export function CheckoutClient() {
             </label>
           </div>
         </fieldset>
+
+        {fulfillmentMethod ===
+        'DELIVERY' ? (
+          <fieldset>
+            <legend className="text-lg font-semibold text-gray-950">
+              Velocidade de entrega
+            </legend>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {getShippingMethodOptions(
+                'DELIVERY',
+              ).map((option) => {
+                const expressUnavailable =
+                  option.id ===
+                    'EXPRESS' &&
+                  preview !==
+                    null &&
+                  preview.expressAvailable ===
+                    false
+
+                return (
+                  <label
+                    key={option.id}
+                    className="flex cursor-pointer gap-3 rounded-lg border border-gray-200 p-4"
+                  >
+                    <input
+                      type="radio"
+                      name="shipping-method"
+                      value={option.id}
+                      aria-label={
+                        option.label
+                      }
+                      checked={
+                        shippingMethod ===
+                        option.id
+                      }
+                      disabled={
+                        pendingAction !==
+                          null ||
+                        expressUnavailable
+                      }
+                      onChange={() => {
+                        if (
+                          option.shippingMethodCode !==
+                          null
+                        ) {
+                          changeShippingMethod(
+                            option.shippingMethodCode,
+                          )
+                        }
+                      }}
+                    />
+
+                    <span>
+                      <span className="block text-sm font-semibold text-gray-950">
+                        {option.label}
+                      </span>
+
+                      <span className="mt-1 block text-xs text-gray-600">
+                        {option.estimate}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+
+            <p className="mt-3 text-xs text-gray-600">
+              O envio expresso soma um
+              suplemento aos portes
+              standard. Quando os
+              portes standard forem
+              grátis, o expresso cobra
+              apenas o suplemento.
+            </p>
+          </fieldset>
+        ) : null}
 
         <h2 className="mt-7 text-lg font-semibold text-gray-950">
           {fulfillmentMethod ===
@@ -2125,7 +2251,22 @@ export function CheckoutClient() {
           {fulfillmentMethod ===
           'PICKUP'
             ? 'Levantamento em loja'
-            : 'Entrega ao domicílio'}
+            : shippingMethod ===
+                'EXPRESS'
+              ? 'Envio expresso'
+              : 'Envio standard'}
+        </p>
+
+        <p className="mt-1 text-xs text-gray-500">
+          {fulfillmentMethod ===
+          'DELIVERY' ? (
+            <>
+              {shippingMethod ===
+              'EXPRESS'
+                ? 'Entrega estimada em 1–2 dias úteis.'
+                : 'Entrega estimada em 2–5 dias úteis.'}
+            </>
+          ) : null}
         </p>
 
         <p className="mt-1 text-xs text-gray-500">

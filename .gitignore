@@ -19,6 +19,7 @@
 
 # production
 /build
+/public/uploads/
 
 # misc
 .DS_Store
@@ -40,6 +41,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Estado local da ferramenta (BD SQLite e logs), não é código
+.freebuff/

@@ -35,6 +35,8 @@ function createOrder(
     paymentStatus: 'PAID',
     fulfillmentMethod:
       'DELIVERY',
+    shippingMethod:
+      'STANDARD',
     shippingName:
       'Maria Silva',
     shippingEmail:
@@ -60,6 +62,13 @@ function createOrder(
           'Filtro de óleo',
         productSkuAtPurchase:
           'FLT-001',
+        variantOptionsAtPurchase: [
+          {
+            code: 'cor',
+            name: 'Cor',
+            value: 'Preto',
+          },
+        ],
         priceAtPurchase:
           '50.00',
         quantity: 2,
@@ -81,6 +90,7 @@ function createPickupOrder(
   return createOrder({
     fulfillmentMethod:
       'PICKUP',
+    shippingMethod: null,
     shippingCost:
       '0.00',
     shippingAddressLine1:
@@ -223,8 +233,18 @@ describe(
         ).toBeInTheDocument()
 
         expect(
+          screen.getByText(/Cor: Preto/),
+        ).toBeInTheDocument()
+
+        expect(
           screen.getByText(
-            'Entrega',
+            'Envio standard',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Entrega estimada em 2–5 dias úteis.',
           ),
         ).toBeInTheDocument()
 
@@ -394,6 +414,72 @@ describe(
         expect(
           screen.queryByText(
             'Portugal',
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'identifica encomendas com envio expresso e a estimativa correspondente',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                shippingMethod:
+                  'EXPRESS',
+                shippingCost:
+                  '15.40',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Envio expresso',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Entrega estimada em 1–2 dias úteis.',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'apresenta envio standard para encomendas de entrega sem método guardado',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                shippingMethod:
+                  null,
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Envio standard',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'Entrega',
           ),
         ).not.toBeInTheDocument()
       },
@@ -831,7 +917,7 @@ describe(
         ).toBeInTheDocument()
         expect(
           screen.getByText(
-            'Pendente → Falhou',
+            'Pendente → Falhado',
           ),
         ).toBeInTheDocument()
         expect(
@@ -841,7 +927,7 @@ describe(
         ).toBeInTheDocument()
         expect(
           screen.getByText(
-            'Falhou → Pendente',
+            'Falhado → Pendente',
           ),
         ).toBeInTheDocument()
         expect(
@@ -1636,6 +1722,156 @@ describe(
             ),
           ).toBeInTheDocument()
         })
+      },
+    )
+
+    test(
+      'apresenta badges de estado e pagamento no cartão',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        const orderBadge =
+          screen.getByText(
+            'Confirmada',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          orderBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'info',
+        )
+
+        const paymentBadge =
+          screen.getByText(
+            'Pago',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          paymentBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'success',
+        )
+      },
+    )
+
+    test(
+      'apresenta o total no cartão de cada encomenda',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder(),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            (
+              _content,
+              element,
+            ) =>
+              element?.tagName ===
+                'P' &&
+              element?.textContent ===
+                `Total: ${new Intl.NumberFormat(
+                  'pt-PT',
+                  {
+                    style: 'currency',
+                    currency: 'EUR',
+                  },
+                ).format(
+                  128.5,
+                )}`,
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'mostra estados desconhecidos como valor original em badges neutras',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                status: 'ARCHIVED',
+                paymentStatus:
+                  'PENDING_REFUND',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        const orderBadge =
+          screen.getByText(
+            'ARCHIVED',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          orderBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'neutral',
+        )
+
+        const paymentBadge =
+          screen.getByText(
+            'PENDING_REFUND',
+          ).closest(
+            '[data-variant]',
+          )
+
+        expect(
+          paymentBadge,
+        ).toHaveAttribute(
+          'data-variant',
+          'neutral',
+        )
       },
     )
   },

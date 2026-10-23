@@ -7,6 +7,7 @@ import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
+  PAYMENT_CURRENCY,
   recordVerifiedPayment,
 } from '@/server/order-lifecycle'
 import {
@@ -22,6 +23,12 @@ import {
 
 const SIMULATED_PAYMENT_JSON_LIMIT_BYTES =
   8 * 1024
+
+// Os pagamentos simulados nunca são servidos em produção, independentemente
+// de flags de ambiente.
+function isSimulatedPaymentEnabled() {
+  return process.env.NODE_ENV !== 'production'
+}
 
 function isRecord(
   value: unknown,
@@ -136,6 +143,16 @@ function handleError(
 export async function POST(
   request: Request,
 ) {
+  if (!isSimulatedPaymentEnabled()) {
+    return Response.json(
+      {
+        error:
+          'Não encontrado',
+      },
+      { status: 404 },
+    )
+  }
+
   try {
     const userId =
       await requireActiveUserId()
@@ -160,6 +177,8 @@ export async function POST(
           initiated.paymentProvider,
         paymentReference:
           initiated.paymentReference,
+        amount: initiated.amount,
+        currency: PAYMENT_CURRENCY,
       })
 
     return Response.json(
