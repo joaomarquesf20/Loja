@@ -812,3 +812,75 @@ servidor'), `orders`, `/conta`, email + template.
 testes, 127 ficheiros (+3 skipped); ESLint limpo; `next build`
 concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
 pré-existente). Trabalho **não commitado** — ver `CHECKPOINT.md`.
+
+## 20. Inventário: alertas de stock baixo e correção rápida (tarefa de 2026-10-23)
+
+Estado da **etapa 7** do roadmap. Sem alteração de schema —
+`ProductVariant.stockQuantity Int` já existia.
+
+**Serviço** — `src/server/inventory.ts` (§13: `InventoryClient`
+injetável com doubles tipados, `normalize*` puros e `getClient(client?)`):
+- `listLowStockVariants({ threshold?, limit? }, client?)` —
+  `findMany` em `productVariant` com
+  `where: { stockQuantity: { lte: threshold }, isActive: true,
+  product: { isActive: true } }`: só variantes de produtos ativos
+  (o que a loja efetivamente pode esgotar). Ordenação
+  `stockQuantity asc` + `sku asc` (críticos primeiro, determinístico),
+  `take: limit`.
+- Limiar: `DEFAULT_LOW_STOCK_THRESHOLD = 5`
+  (`undefined|null|''` → padrão; texto não numérico e frações → 'O
+  limiar de stock deve ser um número inteiro'; fora de [1, 99]
+  [MAX_LOW_STOCK_THRESHOLD] → mensagem de intervalo; `'1e3'` é
+  interpretado como 1000 e rejeitado pelo intervalo). Limite de
+  resultados: `DEFAULT_LOW_STOCK_LIMIT = 20`, intervalo [1, 100].
+- `updateVariantStock({ variantId, stock }, client?)` — **define o valor
+  absoluto** (não é delta; o admin vê o número novo na tabela):
+  `findUnique` → `InventoryNotFoundError` (404-like, sem update) →
+  `update` → devolve `{ previousStock, variant: LowStockVariant }`.
+  Stock válido: inteiro em [0, 999999] (MAX_STOCK_QUANTITY);
+  `variantId` só string não vazia. Erros: `InventoryValidationError`
+  (400) com `field: threshold|limit|variantId|stock` para a rota.
+- Mapeamento cru→painel: `toLowStockVariant` (`id → variantId`,
+  `stockQuantity → stock`, produto id/nome/slug).
+
+**Rota** — `src/app/api/admin/inventory` (guard `requireAdmin()` da
+`@/server/admin-auth`, o mesmo da etapa 5):
+- `GET` — `?threshold=` (string crua normalizada pela rota via
+  `normalizeLowStockThreshold`; sem parâmetro → padrão 5) →
+  200 `{ threshold, variants }`.
+- `PATCH` — corpo `{ variantId, stock }` → 200 snapshot
+  `{ previousStock, variant }`; 404 `Variante não encontrada`
+  (`InventoryNotFoundError` verificado **antes** de
+  `InventoryValidationError` na cadeia de instanceof — é subclasse);
+  400 validação/JSON inválido; 401/403 auth; 500 inesperado.
+
+**Widget** — `src/components/admin/inventory-alerts.tsx`
+('use client', padrão visual do `SalesDashboard`): tabela com produto,
+SKU, stock atual + badge ('Sem stock' vermelho a 0; 'Stock baixo'
+âmbar para 1..limiar), input `aria-label="Novo stock de {sku}"`
+(valor inicial = stock atual) e botão `aria-label="Guardar stock de
+{sku}"`. Após PATCH: stock ≤ limiar → linha atualizada in situ;
+acima → linha removida (já não é ruptura) + aviso
+`Stock de {produto} guardado (anterior → novo unidades).` Draft vazio
+→ erro local 'Introduz o novo stock antes de guardar.' sem pedido.
+Botão 'Atualizar lista' reexecuta o GET com o limiar corrente.
+Página `/admin` (`page.tsx`) busca em paralelo
+`Promise.all([getSalesOverview(), listLowStockVariants()])` e injeta
+`<InventoryAlerts threshold={DEFAULT_LOW_STOCK_THRESHOLD} variants={…} />`
+depois do resumo de vendas.
+
+**Testes** — +32: `inventory.ts` (12: where/orderBy/take exatos,
+limiar-limite padrão e personalizados, invalidez 0/-3/'abc'/2.5/100,
+mapeamento, update com anterior/devolvida, 0 e 999999 válidos, 404),
+rota (12: 200/normalização da query/401/403/400/500 + PATCH 200/401/
+corpo inválido/JSON inválido/404/400), widget (7: tabela+badges+limiar,
+vazio, guarda e mantém, passa o limiar→remove linha, erro do servidor,
+draft vazio sem pedido, atualizar lista) e página admin (2 novos:
+widget vazio + widget com variante crítica; mock
+`@/server/inventory` vem com `DEFAULT_LOW_STOCK_THRESHOLD: 5` — o
+módulo é mockado por completo, constantes incluídas).
+
+**Validação (2026-10-23):** `tsc --noEmit` limpo; `vitest run` — 1979
+testes, 130 ficheiros (+3 skipped); ESLint limpo; `next build`
+concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
+pré-existente). Trabalho **não commitado** — ver `CHECKPOINT.md`.

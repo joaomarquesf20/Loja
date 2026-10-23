@@ -5,9 +5,14 @@ import {
   redirect,
 } from 'next/navigation'
 
+import InventoryAlerts from '@/components/admin/inventory-alerts'
 import SalesDashboard from '@/components/admin/sales-dashboard'
 import { getSalesOverview } from '@/server/analytics'
 import { authOptions } from '@/server/auth'
+import {
+  DEFAULT_LOW_STOCK_THRESHOLD,
+  listLowStockVariants,
+} from '@/server/inventory'
 
 const areas = [
   {
@@ -59,8 +64,13 @@ export default async function AdminPage() {
     notFound()
   }
 
-  const overview =
-    await getSalesOverview()
+  const [
+    overview,
+    lowStockVariants,
+  ] = await Promise.all([
+    getSalesOverview(),
+    listLowStockVariants(),
+  ])
 
   return (
     <main className="space-y-7">
@@ -99,6 +109,15 @@ export default async function AdminPage() {
 
       <SalesDashboard
         overview={overview}
+      />
+
+      <InventoryAlerts
+        threshold={
+          DEFAULT_LOW_STOCK_THRESHOLD
+        }
+        variants={
+          lowStockVariants
+        }
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

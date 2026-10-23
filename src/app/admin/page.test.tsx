@@ -27,6 +27,8 @@ const mocks = vi.hoisted(
     ),
     getSalesOverview:
       vi.fn(),
+    listLowStockVariants:
+      vi.fn(),
   }),
 )
 
@@ -58,6 +60,16 @@ vi.mock(
   () => ({
     getSalesOverview:
       mocks.getSalesOverview,
+  }),
+)
+
+vi.mock(
+  '@/server/inventory',
+  () => ({
+    DEFAULT_LOW_STOCK_THRESHOLD:
+      5,
+    listLowStockVariants:
+      mocks.listLowStockVariants,
   }),
 )
 
@@ -126,6 +138,10 @@ describe(
   () => {
     beforeEach(() => {
       vi.clearAllMocks()
+
+      mocks.listLowStockVariants.mockResolvedValue(
+        [],
+      )
     })
 
     test(
@@ -149,6 +165,12 @@ describe(
         )
 
         expect(
+          mocks.listLowStockVariants,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+
+        expect(
           screen.getByText(
             'Faturação total',
           ),
@@ -156,6 +178,18 @@ describe(
         expect(
           screen.getByText(
             /^330,00/,
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Alertas de ruptura',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Sem variantes com stock baixo.',
           ),
         ).toBeInTheDocument()
 
@@ -186,6 +220,60 @@ describe(
         ).toBe(
           '/admin/products',
         )
+      },
+    )
+
+    test(
+      'apresenta o widget de alertas de ruptura com as variantes críticas',
+      async () => {
+        mocks.getServerSession.mockResolvedValueOnce(
+          adminSession(),
+        )
+        mocks.getSalesOverview.mockResolvedValueOnce(
+          overviewStub(),
+        )
+        mocks.listLowStockVariants.mockResolvedValueOnce(
+          [
+            {
+              variantId:
+                'variant-1',
+              sku: 'FLT-001',
+              stock: 2,
+              productId:
+                'product-1',
+              productName:
+                'Filtro de óleo',
+              productSlug:
+                'filtro-de-oleo',
+            },
+          ],
+        )
+
+        render(
+          await AdminPage(),
+        )
+
+        expect(
+          mocks.listLowStockVariants,
+        ).toHaveBeenCalledWith()
+
+        expect(
+          screen.getByText(
+            'Filtro de óleo',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'FLT-001',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByLabelText(
+            'Guardar stock de FLT-001',
+          ),
+        ).toBeInTheDocument()
       },
     )
 

@@ -1,8 +1,8 @@
-﻿# Checkpoint - 22/10/2026
+﻿# Checkpoint - 23/10/2026
 
 Ramo:
-design/storefront-foundation (etapas 1-5 commitadas e pushed;
-etapa 6 por commitar)
+design/storefront-foundation (etapas 1-6 commitadas e pushed;
+etapa 7 em progresso)
 
 Estado:
 - Etapa 1 — Webhook de pagamento (validação de segurança):
@@ -19,53 +19,34 @@ Estado:
 - Etapa 5 — Painel admin: resumo de vendas e analytics:
   commitada (7d21479); ver `knowledge.md` §18.
 - Etapa 6 — Motor de envio dinâmico + método de envio no
-  checkout (expresso end-to-end): **por commitar**;
-  ver `knowledge.md` §19.
+  checkout (expresso end-to-end):
+  commitada (2f171fc); ver `knowledge.md` §19.
+- Etapa 7 — Inventário: alertas de stock baixo e correção
+  rápida: **em progresso** (código + testes + gate concluídos;
+  documentação a seguir); ver `knowledge.md` §20.
 
-Alterações não commitadas (`git status`):
-- new: prisma/migrations/20261022120000_shipping_method/
-  (migração já aplicada no BD local `pfautoparts`)
-- new: src/lib/shipping-methods.ts(+.test.ts)
-  (catálogo partilhado de rótulos/estimativas)
-- modified: prisma/schema.prisma
-  (enum `ShippingMethod`; `CheckoutRegionRule.expressShippingCost`)
-- modified: src/server/shipping-pricing.ts(+.test.ts)
-  (suplemento expresso por cima dos portes calculados)
-- modified: src/server/checkout.ts(+.test.ts)
-  (`normalizeShippingMethod`, `getExpressAvailability`,
-  fingerprint v5, encomenda guarda `shippingMethod`)
-- modified: src/app/api/checkout/route.ts(+.test.ts) e
-  src/app/api/checkout/preview/route.ts(+.test.ts)
-  (campo literal validado; `INVALID_SHIPPING_METHOD`)
-- modified: src/app/checkout/checkout-client.tsx(+.test.tsx) e
-  src/app/checkout/checkout-payment-client.test.tsx
-  (fieldset 'Velocidade de entrega'; expresso desativado quando
-  `preview.expressAvailable === false`)
-- modified: src/server/orders.ts(+.test.ts)
-  (`shippingMethod` nulo-explícito; legacy mantém nulo)
-- modified: src/app/conta/orders-client.tsx(+.test.tsx)
-  (título/estimativa via catálogo; legacy → 'Envio standard')
-- modified: src/server/email.ts(+.test.ts) e
-  src/emails/order-confirmation.tsx(+.test.tsx)
-  (rótulo + estimativa no email; legacy → standard;
-  levantamento sem rótulo de envio)
-- modified: src/server/commercial-settings.ts(+.test.ts) e
-  src/app/admin/commercial-settings/commercial-settings-client.tsx
-  (+.test.tsx) e src/app/api/admin/commercial-settings/route.test.ts
-  (campo 'Suplemento expresso (€)'; vazio = desativado; '9.90'
-  em instalação nova)
-- modified: src/server/products.test.ts
-  (fixture de `bulkySettings` com campos novos)
+Alterações não commitadas (`git status`, etapa 7):
+- new: src/server/inventory.ts(+.test.ts)
+  (consulta de stock baixo + updateVariantStock; §13)
+- new: src/app/api/admin/inventory/route.ts(+.test.ts)
+  (GET ?threshold= / PATCH { variantId, stock }; requireAdmin)
+- new: src/components/admin/inventory-alerts.tsx(+.test.tsx)
+  (widget 'Alertas de ruptura' com correção rápida inline)
+- modified: src/app/admin/page.tsx(+.test.tsx)
+  (injeta InventoryAlerts via Promise.all com listLowStockVariants)
+- modified: knowledge.md, CHECKPOINT.md
+  (§20 nova; etapa 6 marcada como commitada 2f171fc)
 
-Validações concluídas (2026-10-22):
+Validações concluídas (2026-10-23):
 - Typecheck passou (tsc --noEmit)
-- 1947 testes a passar (127 ficheiros) + 3 skipped (vitest run)
+- 1979 testes a passar (130 ficheiros) + 3 skipped (vitest run)
 - ESLint passou (0 avisos)
 - Build de produção passou
   (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é pré-existente;
-  `/admin/commercial-settings` fica dinâmico por ler a BD)
+  `/api/admin/inventory` agora no mapa de rotas ƒ)
+- Sem alteração de schema (sem migração)
 
 Próximos passos:
-1. Commitar a etapa 6 em bloco próprio, p.ex.
-   `feat(checkout): dynamic shipping engine with express method`.
+1. Commitar a etapa 7 em bloco próprio, p.ex.
+   `feat(admin): low stock alerts with inline stock fix`.
 2. Revisão do diff fica ao encargo do utilizador.
