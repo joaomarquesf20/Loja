@@ -46,7 +46,7 @@ export default function CategorySortControl({
 
   return (
     <label className="flex items-center gap-2">
-      <span className="hidden text-[10px] font-black uppercase tracking-[0.08em] text-white/36 sm:inline">
+      <span className="hidden text-[10px] font-black uppercase tracking-[0.08em] text-gray-500 sm:inline">
         Ordenar
       </span>
 
@@ -58,7 +58,7 @@ export default function CategorySortControl({
             event.target.value,
           )
         }
-        className="h-10 max-w-[12.5rem] rounded-sm border border-white/10 bg-[#15181b] px-3 text-xs font-bold text-white/72 outline-none focus:border-brand/60 sm:max-w-none"
+        className="h-10 max-w-[12.5rem] rounded-sm border border-gray-300 bg-white px-3 text-xs font-bold text-gray-900 outline-none focus:border-brand/60 sm:max-w-none"
       >
         <option value="newest">
           Novidades

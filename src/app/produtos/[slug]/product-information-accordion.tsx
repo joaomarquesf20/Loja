@@ -21,14 +21,14 @@ export default function ProductInformationAccordion({
           key={item.id}
           id={item.id}
           open={item.defaultOpen}
-          className="group border-b border-white/8"
+          className="group border-b border-gray-200"
         >
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-sm font-black uppercase tracking-[0.1em] text-white/72 outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-brand">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-5 text-sm font-black uppercase tracking-[0.1em] text-gray-700 outline-none transition hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-brand">
             <span>{item.title}</span>
 
             <span
               aria-hidden="true"
-              className="text-lg font-light text-white/34 transition group-open:rotate-45 group-open:text-brand"
+              className="text-lg font-light text-gray-400 transition group-open:rotate-45 group-open:text-brand"
             >
               +
             </span>

@@ -121,7 +121,7 @@ export default function MobileFilterDrawer({
         type="button"
         onClick={() => setIsOpen(true)}
         aria-label="Abrir filtros"
-        className="inline-flex h-10 items-center gap-2 rounded-sm border border-white/10 px-3 text-xs font-black uppercase tracking-[0.08em] text-white/68 transition hover:border-white/24 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand lg:hidden"
+        className="inline-flex h-10 items-center gap-2 rounded-sm border border-gray-300 bg-white px-3 text-xs font-black uppercase tracking-[0.08em] text-gray-700 transition hover:border-gray-400 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand lg:hidden"
       >
         Filtros
         {activeCount > 0 && (
@@ -145,9 +145,9 @@ export default function MobileFilterDrawer({
             role="dialog"
             aria-modal="true"
             aria-labelledby="mobile-filters-heading"
-            className="absolute inset-y-0 right-0 flex w-[min(90vw,24rem)] flex-col border-l border-white/10 bg-[#0e1012] shadow-2xl shadow-black/60"
+            className="absolute inset-y-0 right-0 flex w-[min(90vw,24rem)] flex-col border-l border-gray-200 bg-white shadow-2xl shadow-gray-900/20"
           >
-            <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
               <div>
                 <p className="text-[9px] font-black uppercase tracking-[0.16em] text-brand">
                   Refina a seleção
@@ -164,7 +164,7 @@ export default function MobileFilterDrawer({
                 type="button"
                 onClick={() => setIsOpen(false)}
                 aria-label="Fechar"
-                className="grid size-9 place-items-center rounded-sm text-xl text-white/54 transition hover:bg-white/6 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                className="grid size-9 place-items-center rounded-sm text-xl text-gray-500 transition hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 ×
               </button>

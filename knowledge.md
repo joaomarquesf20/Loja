@@ -994,3 +994,84 @@ run` — 1979 testes, 130 ficheiros (+3 skipped); ESLint limpo;
 desapareceu, `/checkout` permanece ƒ, `/api/admin/inventory` ƒ,
 `/sitemap.xml` ○ com revalidate 1h. Trabalho **não commitado** — ver
 `CHECKPOINT.md`.
+
+## 22. Overhaull da vitrine: do SaaS genérico para o layout técnico de loja de peças (tarefa de 2026-10-23)
+
+Reforma visual completa da loja: saiu o look escuro "premium" genérico
+(`bg-[#0b0d0f]`, cartões `#111315`, opacidades `text-white/..`), passou
+a valer o layout **denso e técnico de catálogo de peças** (estilo
+mmauto/Autodoc): fundos neutros `gray-50`, cartões brancos com borda
+definida, acento de marca forte para ação e preço. Sem alteração de
+schema e sem lógica de negócio nova — as interações (pesquisa `?q=`,
+filtros, variantes, carrinho) ficam intactas.
+
+**Paleta (Tailwind v4 CSS-first, sem `tailwind.config.ts`)** — os
+tokens vivem em `@theme inline` no `globals.css`; ajuste: `--background`
+→ `#f9fafb` (gray-50). Acento primário forte = `brand` (`#ef5b2a`,
+`brand-strong`, `brand-soft`) para botões e preços; `success`/`danger`
+semânticos mantidos. Mapa de conversão usado em toda a vitrine (§ de
+referência para futuras superfícies): `bg-[#0b0d0f]` → `bg-gray-50`;
+cartões/panéis `bg-[#111315]`/`bg-[#15181b]` → `bg-white` com
+`border-gray-200`; inputs `bg-[#15181b]` → brancos com
+`border-gray-300`; `text-white` → `text-gray-900`; `/78..82` →
+`gray-800`; `/70..72` → `gray-700`; `/55..68` → `gray-500/600`;
+`/24..38` → `gray-300/400`; `border-white/8..18`, `ring-white/6..16` →
+`gray-200/300`; chips `bg-white/[0.055]` → brancos com borda
+`gray-300`; `hover:text-white` → `hover:text-gray-900` (exceto sobre
+`bg-brand`); anéis de foco em CTAs de marca passam a
+`ring-brand ring-offset-2`.
+
+**Header** — pesquisa central larga e proeminente (h-11, botão sólido
+`bg-brand`, `GET /#produtos?q=…`), cluster compacto conta/carrinho à
+direita, strip comercial em banda brand, navegação inferior
+`gray-50` só com categorias reais (o âncora genérico 'Marcas' saiu);
+lógica de sessão/menu/sign-out intacta — o teste `site-header.test.tsx`
+(roles/textos) passou sem alterações, confirmando que classes podem
+mudar livremente quando os testes são semânticos.
+
+**Home** — hero/unsplash, slogans e o bloco editorial "IA" removidos
+(`editorial-card.tsx` e `section-heading.tsx` **apagados** por ficarem
+sem usos). Estrutura: grelha de categorias até 8 mosaicos em banda
+branca → grelha densa "Produtos em destaque" (8, `gap-4`, 4 colunas;
+com `q` vira "Resultados encontrados" + 'Limpar pesquisa') → faixa de
+marcas em chips (mantém `/?q=marca#produtos`). IDs
+`#categorias/#produtos/#marcas` preservados (links do footer/nav);
+metadados/OG da etapa 8 intactos (`OG_FALLBACK_IMAGE` ficou para os
+cartões sociais, já não renderiza hero).
+
+**Cartão de produto** (`product-card.tsx`) — cartão compacto branco
+`border-gray-200` definitiva (hover: borda `gray-300` + sombra suave),
+imagem em branco puro (`bg-contain` com `p-4`), marca em
+`gray-500`,
+**referência `Ref.: SKU` sempre visível** em mono `gray-400`
+(`CatalogProduct` de listagem NÃO tem `sku` — usa-se
+`variants[0].sku`; o SKU exato resolvido é do painel de compra), preço
+em `text-brand`, e ação principal sempre visível sem hover: 'Adicionar'
+(`AddToCartButton` variant card) em single-variante ou 'Selecionar
+opções' em multi-variante + 'Ver produto' secundário. `variant`
+'default'|'category' mantém-se na API mas os dois usam o MESMO visual
+light — categoria e relacionados consistentes por natureza.
+
+**Re-skin light coerente** — categorias: página (breadcrumb, chips de
+filtros ativos brancos com borda, empty-state branco, FilterPanel com
+inputs brancos `border-gray-300`), `filter-group`, 
+`collapsible-filter-section`, `category-sort-control`,
+`mobile-filter-drawer` (painel branco, overlay mantém
+`bg-black/72`), `error.tsx` light. Produto: página/fichas,
+`product-purchase-panel` (dropdowns/pílulas brancas, **preço em
+`text-brand`**, alerta de combinação `text-danger`, desativados
+`gray-100/gray-300`), `product-gallery` (poços brancos, anéis
+`gray-200/300`), `add-to-cart-button` (desativados light; mensagens
+para `text-success`/`text-danger`), `product-information-accordion`,
+`compatibility-anchor-link` (hover `text-brand`), `error.tsx`. Footer
+(`storefront-footer` + `footer-session-link`) branco/cinzas.
+`/carrinho` `/checkout` `/conta` já eram light — inalterados; **admin
+fora do âmbito** (sub-sistema próprio, não tocado).
+
+**Validação (2026-10-23):** `tsc --noEmit` limpo; `vitest run` — 1979
+testes, 130 ficheiros (+3 skipped); ESLint limpo (0 avisos);
+`next build` concluída com o mapa de rotas e o sitemap ○ 1h intactos (o drop das classes da era
+`bg-white/8` e os tokens novos não afetaram nenhum teste — asserções
+são por role/texto). Trabalho
+commitado como `feat(storefront): light technical redesign — palette,
+header search, home grid, catalog re-skin`.

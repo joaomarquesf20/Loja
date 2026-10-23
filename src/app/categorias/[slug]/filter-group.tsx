@@ -51,7 +51,7 @@ export default function FilterGroup({
         <div className="mb-2 flex justify-end">
           <Link
             href={clearHref}
-            className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-white"
+            className="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400 transition hover:text-gray-900"
           >
             Limpar
           </Link>
@@ -59,7 +59,7 @@ export default function FilterGroup({
       )}
 
       {emptyHint && (
-        <p className="mt-2 text-xs leading-5 text-white/36">
+        <p className="mt-2 text-xs leading-5 text-gray-500">
           {emptyHint}
         </p>
       )}
@@ -73,8 +73,8 @@ export default function FilterGroup({
           const className =
             `flex items-center justify-between gap-3 rounded-sm py-1.5 text-sm font-semibold transition ${
               isUnavailable
-                ? 'cursor-not-allowed text-white/24'
-                : 'text-white/62 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
+                ? 'cursor-not-allowed text-gray-300'
+                : 'text-gray-600 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand'
             }`
 
           const content = (
@@ -82,7 +82,7 @@ export default function FilterGroup({
               <span>{option.label}</span>
 
               <span className="flex items-center gap-2">
-                <span className="text-xs font-medium tabular-nums text-white/28">
+                <span className="text-xs font-medium tabular-nums text-gray-400">
                   {option.productCount}
                 </span>
 
@@ -91,7 +91,7 @@ export default function FilterGroup({
                   className={`grid size-4 place-items-center rounded-[2px] border text-[10px] leading-none ${
                     option.selected
                       ? 'border-brand bg-brand text-white'
-                      : 'border-white/24 text-transparent'
+                      : 'border-gray-300 text-transparent'
                   }`}
                 >
                   ✓

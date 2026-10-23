@@ -46,7 +46,7 @@ export default function CompatibilityAnchorLink({
     <a
       href={`#${targetId}`}
       onClick={handleClick}
-      className="transition hover:text-white"
+      className="transition hover:text-brand"
     >
       {applicationsCount === 1
         ? 'Ver aplicação'

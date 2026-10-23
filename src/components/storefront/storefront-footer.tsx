@@ -12,13 +12,13 @@ export default function StorefrontFooter({
   categories,
 }: StorefrontFooterProps) {
   return (
-    <footer className="border-t border-white/6 bg-[#080a0c] text-white">
+    <footer className="border-t border-gray-200 bg-white">
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-14 sm:px-6 md:grid-cols-[1.45fr_1fr_1fr] lg:gap-16 lg:px-8 lg:py-18">
         <div>
           <Link
             href="/"
             aria-label="PFAUTOPARTS"
-            className="inline-flex rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="inline-flex rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <Image
               src="/brand/pfautoparts-logo-horizontal.png"
@@ -29,7 +29,7 @@ export default function StorefrontFooter({
             />
           </Link>
 
-          <p className="mt-5 max-w-sm text-sm leading-6 text-white/46">
+          <p className="mt-5 max-w-sm text-sm leading-6 text-gray-500">
             Jantes premium, suspensão,
             body-kits e acessórios para
             personalização automóvel.
@@ -37,7 +37,7 @@ export default function StorefrontFooter({
         </div>
 
         <div>
-          <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-900">
             Comprar
           </h2>
 
@@ -48,7 +48,7 @@ export default function StorefrontFooter({
                 <Link
                   key={category.id}
                   href={`/categorias/${category.slug}`}
-                  className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
+                  className="w-fit text-sm font-semibold text-gray-600 transition hover:text-gray-900"
                 >
                   {category.name}
                 </Link>
@@ -57,7 +57,7 @@ export default function StorefrontFooter({
             {categories.length === 0 && (
               <Link
                 href="/#produtos"
-                className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
+                className="w-fit text-sm font-semibold text-gray-600 transition hover:text-gray-900"
               >
                 Produtos
               </Link>
@@ -66,21 +66,21 @@ export default function StorefrontFooter({
         </div>
 
         <div>
-          <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38">
+          <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-900">
             Conta
           </h2>
 
           <nav className="mt-5 grid gap-3">
             <Link
               href="/conta"
-              className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
+              className="w-fit text-sm font-semibold text-gray-600 transition hover:text-gray-900"
             >
               A minha conta
             </Link>
 
             <Link
               href="/carrinho"
-              className="w-fit text-sm font-semibold text-white/58 transition hover:text-white"
+              className="w-fit text-sm font-semibold text-gray-600 transition hover:text-gray-900"
             >
               Carrinho
             </Link>
@@ -90,8 +90,8 @@ export default function StorefrontFooter({
         </div>
       </div>
 
-      <div className="border-t border-white/6">
-        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[10px] font-medium uppercase tracking-[0.08em] text-white/24 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <div className="border-t border-gray-100">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[10px] font-medium uppercase tracking-[0.08em] text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span>
             © {new Date().getFullYear()} PFAutoParts
           </span>

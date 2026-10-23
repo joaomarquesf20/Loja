@@ -602,9 +602,9 @@ function FilterPanel({
         />
       ))}
 
-      <section className="border-t border-white/8 pt-5">
+      <section className="border-t border-gray-200 pt-5">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-white/55">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-500">
             Preço
           </h3>
 
@@ -618,7 +618,7 @@ function FilterPanel({
                   priceMax: undefined,
                 },
               )}
-              className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-white"
+              className="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400 transition hover:text-gray-900"
             >
               Limpar
             </Link>
@@ -715,7 +715,7 @@ function FilterPanel({
                   filters.priceMin ?? ''
                 }
                 placeholder="Mín. €"
-                className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
+                className="h-10 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-brand/60"
               />
             </label>
 
@@ -733,14 +733,14 @@ function FilterPanel({
                   filters.priceMax ?? ''
                 }
                 placeholder="Máx. €"
-                className="h-10 w-full rounded-sm border border-white/10 bg-[#15181b] px-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-brand/60"
+                className="h-10 w-full rounded-sm border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-brand/60"
               />
             </label>
           </div>
 
           <button
             type="submit"
-            className="mt-2.5 w-full rounded-sm border border-white/12 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-white/62 transition hover:border-white/24 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="mt-2.5 w-full rounded-sm border border-gray-300 px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] text-gray-600 transition hover:border-gray-400 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             Aplicar preço
           </button>
@@ -1037,20 +1037,20 @@ export default async function CategoryPage({
   )
 
   return (
-    <main className="min-h-screen bg-[#0b0d0f] text-white">
+    <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
         <nav
           aria-label="Breadcrumb"
-          className="flex items-center gap-2 text-xs font-semibold text-white/55"
+          className="flex items-center gap-2 text-xs font-semibold text-gray-500"
         >
           <Link
             href="/"
-            className="transition hover:text-white"
+            className="transition hover:text-gray-900"
           >
             Início
           </Link>
           <span aria-hidden="true">/</span>
-          <span className="text-white/66">
+          <span className="text-gray-600">
             {category.name}
           </span>
         </nav>
@@ -1064,15 +1064,15 @@ export default async function CategoryPage({
             {category.name}
           </h1>
 
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-white/54 sm:text-base">
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-500 sm:text-base">
             {supportCopy}
           </p>
         </header>
 
-        <div className="border-y border-white/8 py-3">
+        <div className="border-y border-gray-200 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-white/54">
-              <span className="text-white">
+            <p className="text-sm font-semibold text-gray-500">
+              <span className="text-gray-900">
                 {resultForSelection.length}
               </span>{' '}
               {resultForSelection.length === 1
@@ -1101,7 +1101,7 @@ export default async function CategoryPage({
         </div>
 
         {hasActiveFilters && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-white/8 py-4">
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 py-4">
             {filters.inStockOnly && (
               <Link
                 href={buildCategoryHref(
@@ -1111,7 +1111,7 @@ export default async function CategoryPage({
                     inStockOnly: false,
                   },
                 )}
-                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
               >
                 Em stock
                 <span aria-hidden="true">
@@ -1142,7 +1142,7 @@ export default async function CategoryPage({
                         ),
                       },
                     )}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                   >
                     {brand.name}
                     <span aria-hidden="true">
@@ -1175,7 +1175,7 @@ export default async function CategoryPage({
                         ),
                       },
                     )}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                   >
                     {make.name}
                     <span aria-hidden="true">
@@ -1211,7 +1211,7 @@ export default async function CategoryPage({
                         ),
                       },
                     )}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                   >
                     {model.name}
                     <span aria-hidden="true">
@@ -1249,7 +1249,7 @@ export default async function CategoryPage({
                           ),
                       },
                     )}
-                    className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                   >
                     {generation.name}
                     <span aria-hidden="true">
@@ -1270,7 +1270,7 @@ export default async function CategoryPage({
                     priceMax: undefined,
                   },
                 )}
-                className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
               >
                 {priceMin !== undefined &&
                 priceMax !== undefined
@@ -1309,7 +1309,7 @@ export default async function CategoryPage({
                             ),
                         },
                       )}
-                      className="inline-flex items-center gap-2 rounded-full bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-white/68 transition hover:bg-white/[0.09] hover:text-white"
+                      className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                     >
                       {facet
                         ? `${facet.name}: ${value}`
@@ -1325,7 +1325,7 @@ export default async function CategoryPage({
 
             <Link
               href={clearFiltersHref}
-              className="ml-1 text-[10px] font-black uppercase tracking-[0.09em] text-white/55 transition hover:text-brand"
+              className="ml-1 text-[10px] font-black uppercase tracking-[0.09em] text-gray-500 transition hover:text-brand"
             >
               Limpar filtros
             </Link>
@@ -1346,7 +1346,7 @@ export default async function CategoryPage({
                 {hasActiveFilters && (
                   <Link
                     href={clearFiltersHref}
-                    className="text-[10px] font-bold uppercase tracking-[0.08em] text-white/34 transition hover:text-brand"
+                    className="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400 transition hover:text-brand"
                   >
                     Limpar
                   </Link>
@@ -1374,12 +1374,12 @@ export default async function CategoryPage({
             </h2>
 
             {resultForSelection.length === 0 ? (
-              <div className="border border-white/8 bg-[#111315] px-6 py-12 sm:px-8">
+              <div className="border border-gray-200 bg-white px-6 py-12 sm:px-8">
                 <p className="text-xl font-black tracking-tight">
                   Nenhum produto encontrado
                 </p>
 
-                <p className="mt-2 max-w-lg text-sm leading-6 text-white/46">
+                <p className="mt-2 max-w-lg text-sm leading-6 text-gray-500">
                   Não existem produtos que
                   correspondam aos filtros
                   selecionados. Remove um ou
@@ -1390,7 +1390,7 @@ export default async function CategoryPage({
                 {hasActiveFilters && (
                   <Link
                     href={clearFiltersHref}
-                    className="mt-6 inline-flex rounded-sm bg-brand px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                    className="mt-6 inline-flex rounded-sm bg-brand px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
                   >
                     Remover filtros
                   </Link>

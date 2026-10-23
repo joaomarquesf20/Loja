@@ -311,11 +311,11 @@ export default async function ProductPage({
       id: 'descricao',
       title: 'Descrição',
       content: product.description?.trim() ? (
-        <p className="whitespace-pre-line text-sm leading-7 text-white/50">
+        <p className="whitespace-pre-line text-sm leading-7 text-gray-500">
           {product.description}
         </p>
       ) : (
-        <p className="text-sm leading-7 text-white/38">
+        <p className="text-sm leading-7 text-gray-400">
           Ainda não existe uma descrição
           detalhada para este produto.
         </p>
@@ -331,12 +331,12 @@ export default async function ProductPage({
             (row) => (
               <div
                 key={row.label}
-                className="border-l border-white/10 pl-4"
+                className="border-l border-gray-200 pl-4"
               >
-                <dt className="text-[10px] font-black uppercase tracking-[0.12em] text-white/30">
+                <dt className="text-[10px] font-black uppercase tracking-[0.12em] text-gray-400">
                   {row.label}
                 </dt>
-                <dd className="mt-1.5 text-sm font-bold text-white/72">
+                <dd className="mt-1.5 text-sm font-bold text-gray-700">
                   {row.value}
                 </dd>
               </div>
@@ -368,13 +368,13 @@ export default async function ProductPage({
                         }
                         className="border-l border-brand/45 pl-4"
                       >
-                        <p className="text-sm font-bold text-white/78">
+                        <p className="text-sm font-bold text-gray-800">
                           {
                             formatted.label
                           }
                         </p>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-white/36">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-gray-400">
                           {formatted.bodyType && (
                             <span>
                               {
@@ -412,7 +412,7 @@ export default async function ProductPage({
       id: 'entrega-devolucoes',
       title: 'Entrega e devoluções',
       content: (
-        <div className="grid gap-3 text-sm leading-7 text-white/50">
+        <div className="grid gap-3 text-sm leading-7 text-gray-500">
           <p>
             As opções e os custos de entrega
             são apresentados no checkout de
@@ -432,15 +432,15 @@ export default async function ProductPage({
   ]
 
   return (
-    <main className="min-h-screen bg-[#0b0d0f] text-white">
+    <main className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pb-20 lg:pt-9">
         <nav
           aria-label="Breadcrumb"
-          className="flex flex-wrap items-center gap-2 text-xs font-semibold text-white/55"
+          className="flex flex-wrap items-center gap-2 text-xs font-semibold text-gray-500"
         >
           <Link
             href="/"
-            className="transition hover:text-white"
+            className="transition hover:text-gray-900"
           >
             Início
           </Link>
@@ -451,7 +451,7 @@ export default async function ProductPage({
 
           <Link
             href={`/categorias/${product.category.slug}`}
-            className="transition hover:text-white"
+            className="transition hover:text-gray-900"
           >
             {product.category.name}
           </Link>
@@ -460,7 +460,7 @@ export default async function ProductPage({
             /
           </span>
 
-          <span className="max-w-[18rem] truncate text-white/66 sm:max-w-md">
+          <span className="max-w-[18rem] truncate text-gray-600 sm:max-w-md">
             {product.name}
           </span>
         </nav>
@@ -483,7 +483,7 @@ export default async function ProductPage({
 
               <Link
                 href={`/categorias/${product.category.slug}`}
-                className="text-white/34 transition hover:text-white"
+                className="text-gray-400 transition hover:text-gray-900"
               >
                 {product.category.name}
               </Link>
@@ -494,10 +494,10 @@ export default async function ProductPage({
             </h1>
 
             <p className="mt-3 text-xs font-semibold tracking-[0.055em]">
-              <span className="uppercase text-white/30">
+              <span className="uppercase text-gray-400">
                 Referência
               </span>
-              <span className="ml-2 text-white/62">
+              <span className="ml-2 text-gray-500">
                 {product.sku}
               </span>
             </p>
@@ -508,13 +508,13 @@ export default async function ProductPage({
                   Compatibilidade registada
                 </p>
 
-                <p className="mt-2 text-sm font-bold leading-6 text-white/78">
+                <p className="mt-2 text-sm font-bold leading-6 text-gray-800">
                   {
                     compatibilityPreview.label
                   }
                 </p>
 
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-white/36">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-gray-400">
                   {compatibilityPreview.years && (
                     <span>
                       {
@@ -533,7 +533,7 @@ export default async function ProductPage({
               </div>
             )}
 
-            <div className="mt-7 border-y border-white/8 py-5">
+            <div className="mt-7 border-y border-gray-200 py-5">
               <ProductPurchasePanel
                 product={product}
               />
@@ -543,7 +543,7 @@ export default async function ProductPage({
                   (variant) =>
                     variant.options.length > 0,
                 ) && (
-                  <p className="mt-4 text-xs leading-5 text-white/36">
+                  <p className="mt-4 text-xs leading-5 text-gray-400">
                     A adequação ao teu veículo é
                     definida pelas
                     especificações da variante
@@ -554,10 +554,10 @@ export default async function ProductPage({
                 )}
             </div>
 
-            <div className="mt-7 border-t border-white/8 pt-6">
+            <div className="mt-7 border-t border-gray-200 pt-6">
               <Link
                 href={`/categorias/${product.category.slug}`}
-                className="inline-flex items-center border-b border-white/18 pb-1 text-[10px] font-black uppercase tracking-[0.1em] text-white/52 transition hover:border-brand hover:text-white"
+                className="inline-flex items-center border-b border-gray-300 pb-1 text-[10px] font-black uppercase tracking-[0.1em] text-gray-500 transition hover:border-brand hover:text-gray-900"
               >
                 Ver mais em{' '}
                 {product.category.name}
@@ -569,7 +569,7 @@ export default async function ProductPage({
 
         <section
           aria-labelledby="product-information-heading"
-          className="mt-14 border-t border-white/8 pt-10 lg:mt-18 lg:pt-12"
+          className="mt-14 border-t border-gray-200 pt-10 lg:mt-18 lg:pt-12"
         >
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
             Detalhes
@@ -592,7 +592,7 @@ export default async function ProductPage({
         {relatedProducts.length > 0 && (
           <section
             aria-labelledby="related-products-heading"
-            className="mt-14 border-t border-white/8 pt-10 lg:mt-18 lg:pt-12"
+            className="mt-14 border-t border-gray-200 pt-10 lg:mt-18 lg:pt-12"
           >
             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
               Da mesma categoria

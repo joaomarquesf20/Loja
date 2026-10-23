@@ -31,7 +31,7 @@ export default function CollapsibleFilterSection({
   )
 
   return (
-    <section className="border-t border-white/8 pt-3">
+    <section className="border-t border-gray-200 pt-3">
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
@@ -39,7 +39,7 @@ export default function CollapsibleFilterSection({
         className="flex w-full items-center justify-between gap-3 py-2 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         <span className="flex items-center gap-2">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-white/38 transition group-hover:text-white/60">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-500 transition group-hover:text-gray-700">
             {title}
           </span>
 
@@ -52,7 +52,7 @@ export default function CollapsibleFilterSection({
 
         <span
           aria-hidden="true"
-          className={`text-xs text-white/34 transition-transform duration-150 ${
+          className={`text-xs text-gray-400 transition-transform duration-150 ${
             isOpen ? 'rotate-180' : ''
           }`}
         >

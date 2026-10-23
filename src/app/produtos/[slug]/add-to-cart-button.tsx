@@ -197,11 +197,11 @@ export default function AddToCartButton({
       }
       className={
         isCompact
-          ? 'grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+          ? 'grid size-8 place-items-center rounded-sm bg-brand text-sm font-black text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300'
           : isCard
-            ? 'inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-sm bg-brand px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+            ? 'inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-sm bg-brand px-3 py-2 text-[10px] font-black uppercase tracking-[0.06em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300'
             : isProduct
-              ? 'inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-white/8 disabled:text-white/25'
+              ? 'inline-flex min-h-12 w-full items-center justify-center gap-2.5 rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-300'
               : 'w-full rounded-md bg-foreground px-5 py-3 text-sm font-semibold text-background transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto'
       }
     >
@@ -257,11 +257,11 @@ export default function AddToCartButton({
       {isProduct ? (
         <div className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3">
           <div>
-            <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.1em] text-white/34">
+            <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.1em] text-gray-500">
               Quantidade
             </span>
 
-            <div className="grid h-12 grid-cols-[2.25rem_1fr_2.25rem] overflow-hidden rounded-sm border border-white/10 bg-[#15181b]">
+            <div className="grid h-12 grid-cols-[2.25rem_1fr_2.25rem] overflow-hidden rounded-sm border border-gray-300 bg-white">
               <button
                 type="button"
                 aria-label="Diminuir quantidade"
@@ -271,7 +271,7 @@ export default function AddToCartButton({
                     quantity - 1,
                   )
                 }
-                className="text-lg text-white/48 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:text-white/14"
+                className="text-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:text-gray-300"
               >
                 −
               </button>
@@ -290,7 +290,7 @@ export default function AddToCartButton({
                     ),
                   )
                 }
-                className="min-w-0 border-x border-white/8 bg-transparent text-center text-sm font-black text-white outline-none"
+                className="min-w-0 border-x border-gray-200 bg-transparent text-center text-sm font-black text-gray-900 outline-none"
               />
 
               <button
@@ -301,7 +301,7 @@ export default function AddToCartButton({
                     quantity + 1,
                   )
                 }
-                className="text-lg text-white/48 transition hover:bg-white/5 hover:text-white"
+                className="text-lg text-gray-500 transition hover:bg-gray-50 hover:text-gray-900"
               >
                 +
               </button>
@@ -323,8 +323,8 @@ export default function AddToCartButton({
             isCompact || isCard
               ? 'sr-only'
               : isProduct
-                ? 'mt-3 text-sm font-semibold text-green-400'
-                : 'mt-3 text-sm font-medium text-green-700 dark:text-green-400'
+                ? 'mt-3 text-sm font-semibold text-success'
+                : 'mt-3 text-sm font-medium text-success'
           }
         >
           {message}
@@ -338,8 +338,8 @@ export default function AddToCartButton({
             isCompact || isCard
               ? 'sr-only'
               : isProduct
-                ? 'mt-3 text-sm font-semibold text-red-400'
-                : 'mt-3 text-sm font-medium text-red-700 dark:text-red-400'
+                ? 'mt-3 text-sm font-semibold text-danger'
+                : 'mt-3 text-sm font-medium text-danger'
           }
         >
           {error}

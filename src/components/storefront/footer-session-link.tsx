@@ -8,7 +8,7 @@ import {
 import { useState } from 'react'
 
 const footerLinkClass =
-  'w-fit text-left text-sm font-semibold text-white/58 transition hover:text-white'
+  'w-fit text-left text-sm font-semibold text-gray-600 transition hover:text-gray-900'
 
 export default function FooterSessionLink() {
   const { status } = useSession()

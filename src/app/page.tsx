@@ -2,7 +2,6 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import BrandCard from '@/components/storefront/brand-card'
 import CategoryCard from '@/components/storefront/category-card'
-import EditorialCard from '@/components/storefront/editorial-card'
 import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
 import {
@@ -27,7 +26,12 @@ type HomeProps = {
   }>
 }
 
-const HERO_IMAGE =
+/**
+ * Imagem de contexto para os cartões Open Graph/Twitter: a home
+ * já não apresenta hero visual (design técnico de catálogo), mas
+ * o preview social mantém uma imagem automóvel representativa.
+ */
+const OG_FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=88'
 
 export const metadata: Metadata = buildPageMetadata(
@@ -37,7 +41,7 @@ export const metadata: Metadata = buildPageMetadata(
     description:
       'Jantes premium, suspensões, body-kits e personalização automóvel, com pesquisa por veículo e stock em tempo real.',
     path: '/',
-    image: HERO_IMAGE,
+    image: OG_FALLBACK_IMAGE,
     absoluteTitle: true,
   },
 )
@@ -107,6 +111,11 @@ function matchesSearch(
   )
 }
 
+/**
+ * Grelhas compactas e densas: as categorias e os produtos
+ * preenchem a largura em mosaicos uniformes, com pequenos
+ * ajustes de largura máxima para contagens baixas.
+ */
 function categoryGridClass(
   count: number,
 ) {
@@ -122,7 +131,7 @@ function categoryGridClass(
     return 'grid max-w-5xl gap-3 sm:grid-cols-2 lg:grid-cols-3'
   }
 
-  return 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6'
+  return 'grid gap-3 sm:grid-cols-2 lg:grid-cols-4'
 }
 
 function brandGridClass(
@@ -155,14 +164,14 @@ function productGridClass(
   }
 
   if (count === 2) {
-    return 'grid max-w-3xl gap-5 sm:grid-cols-2'
+    return 'grid max-w-3xl gap-4 sm:grid-cols-2'
   }
 
   if (count === 3) {
-    return 'grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3'
+    return 'grid max-w-5xl gap-4 sm:grid-cols-2 lg:grid-cols-3'
   }
 
-  return 'grid gap-5 sm:grid-cols-2 lg:grid-cols-4'
+  return 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'
 }
 
 export default async function Home({
@@ -199,12 +208,16 @@ export default async function Home({
         category.parentId === null,
     )
 
+  /**
+   * Grelha de categorias robusta: até 8 mosaicos (todas as
+   * categorias de topo comerciais) em vez de um bloco pequeno.
+   */
   const storefrontCategories =
     (
       topLevelCategories.length > 0
         ? topLevelCategories
         : commercialCategories
-    ).slice(0, 4)
+    ).slice(0, 8)
 
   const categoryCards =
     storefrontCategories.map(
@@ -216,25 +229,6 @@ export default async function Home({
         ),
       }),
     )
-
-  const editorial =
-    categoryCards.find(({ category }) => {
-      const value =
-        `${category.name} ${category.slug}`
-          .toLocaleLowerCase('pt-PT')
-
-      return (
-        value.includes('exterior') ||
-        value.includes('body-kit') ||
-        value.includes('bodykit') ||
-        value.includes('splitter') ||
-        value.includes('spoiler') ||
-        value.includes('difusor')
-      )
-    }) ??
-    (categoryCards.length >= 2
-      ? categoryCards[0]
-      : null)
 
   const brandsById = new Map<
     string,
@@ -262,86 +256,37 @@ export default async function Home({
     )
     .slice(0, 8)
 
-  const highlightedProducts =
+  /**
+   * Grelha compacta única: com pesquisa mostra os resultados;
+   * sem pesquisa, as novidades do catálogo (8 destaques densos).
+   */
+  const featuredProducts =
     normalizedQuery
       ? visibleProducts.slice(0, 8)
-      : products.slice(0, 4)
+      : products.slice(0, 8)
 
-  const additionalProducts =
-    normalizedQuery
-      ? []
-      : products.slice(4, 8)
+  const footerCategories =
+    storefrontCategories.slice(0, 4)
 
   return (
-    <main className="flex-1 bg-[#0b0d0f] text-white">
-      <section className="relative isolate overflow-hidden border-b border-white/7">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-cover bg-[position:62%_50%] sm:bg-[position:66%_48%]"
-          style={{
-            backgroundImage: `url("${HERO_IMAGE}")`,
-          }}
-        />
-
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,9,10,0.98)_0%,rgba(7,9,10,0.9)_30%,rgba(7,9,10,0.48)_58%,rgba(7,9,10,0.16)_100%)]"
-        />
-
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#0b0d0f]/55 to-transparent"
-        />
-
-        <div className="relative mx-auto flex min-h-[21rem] max-w-7xl items-center px-4 py-9 sm:min-h-[23rem] sm:px-6 lg:min-h-[24rem] lg:px-8">
-          <div className="max-w-xl">
-            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-brand">
-              Jantes · Suspensão · Styling
-            </p>
-
-            <h1 className="mt-4 text-4xl font-black leading-[0.98] tracking-[-0.05em] sm:text-5xl lg:text-[3.5rem]">
-              Eleva o teu projeto.
-              <span className="block text-white/72">
-                Sem compromissos.
-              </span>
-            </h1>
-
-            <p className="mt-5 max-w-lg text-sm leading-6 text-white/62 sm:text-base">
-              Jantes premium, suspensão,
-              body-kits e componentes de
-              styling para personalizar o
-              teu automóvel.
-            </p>
-
-            <Link
-              href="/#categorias"
-              className="mt-7 inline-flex items-center rounded-sm bg-brand px-5 py-3 text-[11px] font-black uppercase tracking-[0.09em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-              Explorar catálogo
-              <span className="ml-3">
-                →
-              </span>
-            </Link>
-          </div>
-        </div>
-      </section>
-
+    <main className="flex-1 bg-gray-50 text-gray-900">
       {categoryCards.length > 0 && (
         <section
           id="categorias"
           aria-labelledby="categories-heading"
-          className="scroll-mt-40 border-b border-white/7"
+          className="scroll-mt-36 border-b border-gray-200 bg-white"
         >
-          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
             <div className="mb-5">
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
                 Comprar por categoria
               </p>
+
               <h2
                 id="categories-heading"
-                className="mt-1.5 text-xl font-black tracking-[-0.025em]"
+                className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
               >
-                Escolhe a próxima peça do teu projeto
+                Peças por categoria
               </h2>
             </div>
 
@@ -369,40 +314,15 @@ export default async function Home({
         </section>
       )}
 
-      {brands.length > 0 && (
-        <section
-          id="marcas"
-          aria-label="Marcas"
-          className="scroll-mt-40 border-b border-white/6 bg-[#0e1012]"
-        >
-          <div className="mx-auto max-w-7xl px-4 py-3.5 sm:px-6 lg:px-8">
-            <div
-              className={
-                brandGridClass(
-                  brands.length,
-                )
-              }
-            >
-              {brands.map((brand) => (
-                <BrandCard
-                  key={brand.id}
-                  name={brand.name}
-                />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
       <section
         id="produtos"
         aria-labelledby="products-heading"
-        className="scroll-mt-40"
+        className="scroll-mt-36"
       >
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-          <div className="flex items-end justify-between gap-4 border-b border-white/8 pb-4">
+        <div className="mx-auto max-w-7xl px-4 py-9 sm:px-6 lg:px-8 lg:py-12">
+          <div className="flex items-end justify-between gap-4 border-b border-gray-200 pb-4">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
                 {normalizedQuery
                   ? 'Pesquisa'
                   : 'Seleção PFAutoParts'}
@@ -421,14 +341,14 @@ export default async function Home({
             {normalizedQuery && (
               <Link
                 href="/#produtos"
-                className="text-[10px] font-black uppercase tracking-[0.1em] text-white/45 transition hover:text-brand"
+                className="text-[10px] font-black uppercase tracking-[0.1em] text-gray-500 transition hover:text-brand"
               >
                 Limpar pesquisa
               </Link>
             )}
           </div>
 
-          {highlightedProducts.length ===
+          {featuredProducts.length ===
           0 ? (
             <div className="max-w-xl py-12">
               <h3 className="text-lg font-black">
@@ -437,7 +357,7 @@ export default async function Home({
                   : 'Ainda não há produtos disponíveis'}
               </h3>
 
-              <p className="mt-2 text-sm leading-6 text-white/42">
+              <p className="mt-2 text-sm leading-6 text-gray-500">
                 {normalizedQuery
                   ? 'Experimenta outro nome, marca ou categoria.'
                   : 'Estamos a preparar a seleção PFAutoParts. Volta em breve.'}
@@ -446,10 +366,10 @@ export default async function Home({
           ) : (
             <div
               className={`mt-6 ${productGridClass(
-                highlightedProducts.length,
+                featuredProducts.length,
               )}`}
             >
-              {highlightedProducts.map(
+              {featuredProducts.map(
                 (product) => (
                   <ProductCard
                     key={product.id}
@@ -462,64 +382,44 @@ export default async function Home({
         </div>
       </section>
 
-      {!normalizedQuery &&
-        editorial && (
-          <section className="border-y border-white/7 bg-[#0e1012]">
-            <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-              <EditorialCard
-                category={
-                  editorial.category
-                }
-                image={
-                  editorial.image
-                }
-              />
+      {brands.length > 0 && (
+        <section
+          id="marcas"
+          aria-label="Marcas"
+          className="scroll-mt-36 border-t border-gray-200 bg-white"
+        >
+          <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 lg:px-8">
+            <div className="mb-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+                Marcas
+              </p>
+
+              <h2 className="mt-1.5 text-lg font-black tracking-[-0.02em] sm:text-xl">
+                Procura por marca
+              </h2>
             </div>
-          </section>
-        )}
 
-      {!normalizedQuery &&
-        additionalProducts.length >
-          0 && (
-          <section
-            aria-labelledby="more-products-heading"
-            className="border-b border-white/7"
-          >
-            <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-              <div className="border-b border-white/8 pb-4">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-brand">
-                  Outras escolhas
-                </p>
-
-                <h2
-                  id="more-products-heading"
-                  className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
-                >
-                  Mais para o teu projeto
-                </h2>
-              </div>
-
-              <div
-                className={`mt-6 ${productGridClass(
-                  additionalProducts.length,
-                )}`}
-              >
-                {additionalProducts.map(
-                  (product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                    />
-                  ),
-                )}
-              </div>
+            <div
+              className={
+                brandGridClass(
+                  brands.length,
+                )
+              }
+            >
+              {brands.map((brand) => (
+                <BrandCard
+                  key={brand.id}
+                  name={brand.name}
+                />
+              ))}
             </div>
-          </section>
-        )}
+          </div>
+        </section>
+      )}
 
       <StorefrontFooter
         categories={
-          storefrontCategories
+          footerCategories
         }
       />
     </main>

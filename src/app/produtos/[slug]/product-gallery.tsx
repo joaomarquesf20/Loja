@@ -26,10 +26,10 @@ function EmptyImage() {
     <div className="relative flex h-full w-full items-center justify-center">
       <div
         aria-hidden="true"
-        className="size-36 rounded-full border-[20px] border-white/7 sm:size-44 sm:border-[24px]"
+        className="size-36 rounded-full border-[20px] border-gray-200 sm:size-44 sm:border-[24px]"
       />
 
-      <span className="absolute bottom-6 text-[10px] font-bold uppercase tracking-[0.12em] text-white/24">
+      <span className="absolute bottom-6 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-300">
         Imagem em breve
       </span>
     </div>
@@ -123,7 +123,7 @@ export default function ProductGallery({
       aria-label="Imagens do produto"
       className="min-w-0"
     >
-      <div className="aspect-[6/5] min-h-[20rem] w-full overflow-hidden rounded-sm bg-[#111315] ring-1 ring-white/6 sm:min-h-0">
+      <div className="aspect-[6/5] min-h-[20rem] w-full overflow-hidden rounded-sm bg-white ring-1 ring-gray-200 sm:min-h-0">
         {selectedFailed ? (
           <EmptyImage />
         ) : (
@@ -165,12 +165,12 @@ export default function ProductGallery({
                       failedImages,
                     })
                   }
-                  className={`aspect-square overflow-hidden rounded-sm bg-[#111315] p-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${isSelected
+                  className={`aspect-square overflow-hidden rounded-sm bg-white p-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand ${isSelected
                     ? 'ring-1 ring-brand/70'
-                    : 'ring-1 ring-white/6 hover:ring-white/16'}`}
+                    : 'ring-1 ring-gray-200 hover:ring-gray-300'}`}
                 >
                   {hasFailed ? (
-                    <span className="grid h-full w-full place-items-center text-[9px] font-bold uppercase tracking-[0.08em] text-white/24">
+                    <span className="grid h-full w-full place-items-center text-[9px] font-bold uppercase tracking-[0.08em] text-gray-300">
                       Sem imagem
                     </span>
                   ) : (

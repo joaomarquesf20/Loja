@@ -1112,7 +1112,7 @@ export default function ProductPurchasePanel({
                   key={code}
                   className="grid gap-1.5"
                 >
-                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-white/34">
+                  <span className="text-[10px] font-black uppercase tracking-[0.1em] text-gray-500">
                     {
                       WHEEL_LABELS[
                         code
@@ -1133,7 +1133,7 @@ export default function ProductPurchasePanel({
                         event.target.value,
                       )
                     }
-                    className="min-h-11 rounded-sm border border-white/12 bg-[#15181b] px-3 text-sm font-bold text-white outline-none transition focus:border-brand"
+                    className="min-h-11 rounded-sm border border-gray-300 bg-white px-3 text-sm font-bold text-gray-900 outline-none transition focus:border-brand"
                   >
                     <option value="">
                       Selecione uma opção
@@ -1162,16 +1162,16 @@ export default function ProductPurchasePanel({
         )}
 
       {showTechnicalSpecs && (
-        <dl className="mt-5 grid gap-2 border-t border-white/8 pt-4 text-xs sm:grid-cols-2">
+        <dl className="mt-5 grid gap-2 border-t border-gray-200 pt-4 text-xs sm:grid-cols-2">
           {singleValueAxes.map((code) => (
             <div
               key={code}
               className="flex gap-2"
             >
-              <dt className="uppercase tracking-[0.06em] text-white/34">
+              <dt className="uppercase tracking-[0.06em] text-gray-500">
                 {WHEEL_LABELS[code]}
               </dt>
-              <dd className="font-bold text-white/82">
+              <dd className="font-bold text-gray-800">
                 {
                   totalWheelValuesByCode[
                     code
@@ -1183,12 +1183,12 @@ export default function ProductPurchasePanel({
 
           {centreBoreValues.length > 0 && (
             <div className="flex gap-2">
-              <dt className="uppercase tracking-[0.06em] text-white/34">
+              <dt className="uppercase tracking-[0.06em] text-gray-500">
                 {
                   WHEEL_LABELS.centre_bore
                 }
               </dt>
-              <dd className="font-bold text-white/82">
+              <dd className="font-bold text-gray-800">
                 {
                   centreBoreDisplay
                 }
@@ -1207,7 +1207,7 @@ export default function ProductPurchasePanel({
                   key={group.code}
                   className="border-0 p-0"
                 >
-                  <legend className="text-[10px] font-black uppercase tracking-[0.1em] text-white/34">
+                  <legend className="text-[10px] font-black uppercase tracking-[0.1em] text-gray-500">
                     {group.name}
                   </legend>
 
@@ -1248,13 +1248,13 @@ export default function ProductPurchasePanel({
                             className={`min-h-9 rounded-sm border px-3 text-xs font-bold transition ${
                               isSelected
                                 ? 'border-brand bg-brand text-white'
-                                : 'border-white/12 bg-[#15181b] text-white/70 hover:border-white/30 hover:text-white'
+                                : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:text-gray-900'
                             } ${
                               !optionValue.selectable
-                                ? 'cursor-not-allowed text-white/24 line-through opacity-50'
+                                ? 'cursor-not-allowed text-gray-300 line-through opacity-50'
                                 : optionValue.inStock
                                   ? ''
-                                  : 'text-white/32 line-through opacity-60'
+                                  : 'text-gray-400 line-through opacity-60'
                             }`}
                           >
                             {
@@ -1274,7 +1274,7 @@ export default function ProductPurchasePanel({
       <div
         className={
           hasMultipleVariants
-            ? 'mt-6 border-t border-white/8 pt-5'
+            ? 'mt-6 border-t border-gray-200 pt-5'
             : ''
         }
       >
@@ -1282,7 +1282,7 @@ export default function ProductPurchasePanel({
           {hasMultipleVariants &&
             price !== fromPrice &&
             selectedVariant && (
-              <span className="text-xs font-semibold text-white/38">
+              <span className="text-xs font-semibold text-gray-500">
                 Desde{' '}
                 <Price
                   value={fromPrice}
@@ -1293,11 +1293,11 @@ export default function ProductPurchasePanel({
 
           <Price
             value={price}
-            className="text-3xl font-black tracking-[-0.035em] text-white sm:text-[2rem]"
+            className="text-3xl font-black tracking-[-0.035em] text-brand sm:text-[2rem]"
           />
 
           {isWheelSelector && (
-            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white/34">
+            <span className="text-[10px] font-black uppercase tracking-[0.12em] text-gray-500">
               €/jante
             </span>
           )}
@@ -1311,10 +1311,10 @@ export default function ProductPurchasePanel({
         {isWheelSelector &&
           selection.finish && (
             <p className="mt-3 text-xs font-semibold tracking-[0.055em]">
-              <span className="uppercase text-white/30">
+              <span className="uppercase text-gray-400">
                 Acabamento atual
               </span>
-              <span className="ml-2 text-white/62">
+              <span className="ml-2 text-gray-600">
                 {selection.finish}
               </span>
             </p>
@@ -1323,10 +1323,10 @@ export default function ProductPurchasePanel({
         {isWheelSelector &&
           selectedVariant?.priceSet != null && (
             <p className="mt-3 text-xs font-semibold tracking-[0.055em]">
-              <span className="uppercase text-white/30">
+              <span className="uppercase text-gray-400">
                 Conjunto de 4
               </span>
-              <span className="ml-2 font-bold text-white/78">
+              <span className="ml-2 font-bold text-gray-800">
                 <Price
                   value={selectedVariant.priceSet}
                 />
@@ -1337,7 +1337,7 @@ export default function ProductPurchasePanel({
         {isInvalidCombination ? (
           <p
             role="alert"
-            className="mt-3 text-sm font-semibold text-red-400"
+            className="mt-3 text-sm font-semibold text-danger"
           >
             Esta combinação não está
             disponível. Escolha outra
@@ -1345,10 +1345,10 @@ export default function ProductPurchasePanel({
           </p>
         ) : (
           <p className="mt-3 text-xs font-semibold tracking-[0.055em]">
-            <span className="uppercase text-white/30">
+            <span className="uppercase text-gray-400">
               Referência
             </span>
-            <span className="ml-2 text-white/62">
+            <span className="ml-2 text-gray-600">
               {sku}
             </span>
           </p>
@@ -1361,7 +1361,7 @@ export default function ProductPurchasePanel({
             <button
               type="button"
               disabled
-              className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-sm bg-white/8 px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-white/25"
+              className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-sm bg-gray-100 px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-gray-300"
             >
               Selecione uma opção
             </button>
@@ -1369,7 +1369,7 @@ export default function ProductPurchasePanel({
             <button
               type="button"
               disabled
-              className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-sm bg-white/8 px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-white/25"
+              className="inline-flex min-h-12 w-full cursor-not-allowed items-center justify-center gap-2.5 rounded-sm bg-gray-100 px-5 py-3 text-[11px] font-black uppercase tracking-[0.08em] text-gray-300"
             >
               Combinação indisponível
             </button>
