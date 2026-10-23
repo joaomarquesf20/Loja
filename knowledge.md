@@ -740,6 +740,22 @@ partilhados, produtos, links do detalhe, tendência, estados vazios) e
 cuidado: `beforeEach(vi.clearAllMocks())` para não arrastar chamadas
 entre testes de guard).
 
+**Nota de hotfix pós-épico (2026-10-23)** — `/admin` rebentava em
+runtime com `PrismaClientValidationError` ("Invalid
+db.order.groupBy() invocation"): o top-produtos fazia `groupBy` por
+campos de `OrderItem` (`productVariantId`,
+`productNameAtPurchase`, `productSkuAtPurchase`) diretamente no
+modelo pai `Order`. **Lição: `PrismaClientValidationError` não
+aparece nos testes de unidade — os doubles (mocks) da base de dados
+não validam a sintaxe contra o schema Prisma real; queries complexas
+de `groupBy`/`aggregate` têm de ser verificadas contra uma base de
+dados real** (script temporário `node --env-file=.env` + `PrismaPg`,
+reprodução e forma corrigida). Campos de tabelas relacionadas (ex.:
+`OrderItem`) falham se forem consultados diretamente no pai (ex.:
+`Order`). Corrigido: a consulta corre em `db.orderItem.groupBy` com
+os mesmos argumentos; a interface `AnalyticsClient` distingue agora
+os dois modelos (o teste usa o handle `itemGroupBy`).
+
 **Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1890
 testes, 127 ficheiros (+3 skipped); ESLint limpo (0 avisos); `next
 build` concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é

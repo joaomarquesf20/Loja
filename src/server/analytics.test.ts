@@ -92,15 +92,6 @@ function createAnalyticsClient(
           by: string[]
         }) => {
           if (
-            args.by.length === 3
-          ) {
-            return (
-              fixtures.topProducts ??
-              []
-            )
-          }
-
-          if (
             args.by[
               0
             ] === 'status'
@@ -139,6 +130,24 @@ function createAnalyticsClient(
         },
       ),
     },
+    orderItem: {
+      groupBy: vi.fn(
+        async (args: {
+          by: string[]
+        }) => {
+          if (
+            args.by.length === 3
+          ) {
+            return (
+              fixtures.topProducts ??
+              []
+            )
+          }
+
+          return []
+        },
+      ),
+    },
   }
 
   return {
@@ -149,6 +158,8 @@ function createAnalyticsClient(
         .aggregate,
     groupBy:
       client.order.groupBy,
+    itemGroupBy:
+      client.orderItem.groupBy,
     findMany:
       client.order.findMany,
   }
@@ -439,7 +450,7 @@ describe(
         const {
           client,
           aggregate,
-          groupBy,
+          itemGroupBy,
           findMany,
         } =
           createAnalyticsClient()
@@ -475,16 +486,15 @@ describe(
         })
 
         const topProductGroupByCall =
-          groupBy.mock.calls
-            .map(
-              (call) =>
-                call[0],
-            )
-            .find(
-              (args) =>
-                args.by
-                  .length === 3,
-            )
+          itemGroupBy.mock.calls.at(
+            -1,
+          )?.[0]
+
+        expect(
+          itemGroupBy,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
 
         expect(
           topProductGroupByCall,

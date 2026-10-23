@@ -155,33 +155,6 @@ export interface AnalyticsClient {
     ): Promise<
       OrderGroupRow[]
     >
-    groupBy(
-      args: {
-        by: [
-          'productVariantId',
-          'productNameAtPurchase',
-          'productSkuAtPurchase',
-        ]
-        where: {
-          order: {
-            paymentStatus: 'PAID'
-            status: {
-              not: 'CANCELLED'
-            }
-          }
-        }
-        _sum: {
-          quantity: true
-          subtotalAtPurchase: true
-        }
-        orderBy: {
-          _sum: {
-            quantity: 'desc'
-          }
-        }
-        take: number
-      },
-    ): Promise<TopProductRow[]>
     findMany(
       args: {
         where: PaidOrderWhere & {
@@ -211,6 +184,42 @@ export interface AnalyticsClient {
         }
       },
     ): Promise<RecentOrderRow[]>
+  }
+  /**
+   * Top produtos: os campos productVariantId/
+   * productNameAtPurchase/productSkuAtPurchase vivem nas linhas de
+   * encomenda (OrderItem), não em Order — agrupar por eles em
+   * db.order dispara PrismaClientValidationError em runtime
+   * ("Invalid db.order.groupBy() invocation") e derruba o /admin.
+   */
+  orderItem: {
+    groupBy(
+      args: {
+        by: [
+          'productVariantId',
+          'productNameAtPurchase',
+          'productSkuAtPurchase',
+        ]
+        where: {
+          order: {
+            paymentStatus: 'PAID'
+            status: {
+              not: 'CANCELLED'
+            }
+          }
+        }
+        _sum: {
+          quantity: true
+          subtotalAtPurchase: true
+        }
+        orderBy: {
+          _sum: {
+            quantity: 'desc'
+          }
+        }
+        take: number
+      },
+    ): Promise<TopProductRow[]>
   }
 }
 
@@ -337,7 +346,7 @@ export async function getSalesOverview(
         by: ['paymentStatus'],
         _count: { _all: true },
       }),
-      db.order.groupBy({
+      db.orderItem.groupBy({
         by: [
           'productVariantId',
           'productNameAtPurchase',
