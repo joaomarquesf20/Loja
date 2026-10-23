@@ -22,6 +22,7 @@ import {
   createCheckoutOrder,
   previewCheckout,
   type CheckoutClient,
+  type CheckoutFulfillmentInput,
   type CheckoutShippingInput,
 } from './checkout'
 
@@ -78,6 +79,11 @@ function createRegionRules() {
         region ===
         'PORTUGAL_MAINLAND'
           ? '23.00'
+          : null,
+      expressShippingCost:
+        region ===
+        'PORTUGAL_MAINLAND'
+          ? '9.90'
           : null,
     }),
   )
@@ -1831,6 +1837,7 @@ describe(
             order.shippingCost,
           tax: order.tax,
           total: order.total,
+          expressAvailable: true,
         })
 
         expect(preview).toEqual({
@@ -1839,6 +1846,7 @@ describe(
           shippingCost: 5.9,
           tax: 8.58,
           total: 45.88,
+          expressAvailable: true,
         })
 
         expect(order).not.toHaveProperty('fingerprint')
@@ -1938,6 +1946,7 @@ describe(
           shippingCost: 24.9,
           tax: 53.27,
           total: 284.9,
+          expressAvailable: true,
         })
 
         expect(
@@ -2296,5 +2305,192 @@ describe('integridade do preview de checkout', () => {
       'user-1', shipping, accepted.fingerprint, client,
     )).rejects.toEqual({ code: 'P2034' })
     expect(transaction).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('método de envio no checkout', () => {
+  const expressShipping: CheckoutFulfillmentInput = {
+    fulfillmentMethod: 'DELIVERY',
+    shipping,
+    shippingMethod: 'EXPRESS',
+  }
+
+  test('preview expresso soma o suplemento aos portes standard e muda o fingerprint', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    const standard = await previewCheckout('user-1', shipping, previewClient)
+    const express = await previewCheckout('user-1', expressShipping, previewClient)
+
+    expect(express).toMatchObject({
+      subtotal: 39.98,
+      shippingCost: 15.8,
+      total: 55.78,
+    })
+    expect(express.fingerprint).toMatch(/^[0-9a-f]{64}$/)
+    expect(express.fingerprint).not.toBe(standard.fingerprint)
+
+    expectNoCheckoutWrites(previewTx)
+  })
+
+  test('preview padrão assume o standard disponível com configuração de expresso', async () => {
+    const { previewClient } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    expect(preview.expressAvailable).toBe(true)
+  })
+
+  test('preview padrão indica expresso indisponível sem suplemento configurado', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    previewTx.checkoutRegionRule.findMany.mockResolvedValue(
+      createRegionRules().map(rule =>
+        rule.region === 'PORTUGAL_MAINLAND'
+          ? { ...rule, expressShippingCost: null }
+          : rule,
+      ),
+    )
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    expect(preview.expressAvailable).toBe(false)
+  })
+
+  test('expresso indisponível devolve CheckoutPricingError', async () => {
+    const { previewTx, previewClient } = checkoutScenario()
+
+    previewTx.checkoutRegionRule.findMany.mockResolvedValue(
+      createRegionRules().map(rule =>
+        rule.region === 'PORTUGAL_MAINLAND'
+          ? { ...rule, expressShippingCost: null }
+          : rule,
+      ),
+    )
+
+    await expect(previewCheckout(
+      'user-1', expressShipping, previewClient,
+    )).rejects.toBeInstanceOf(CheckoutPricingError)
+  })
+
+  test('encomenda expressa guarda o método, os portes com suplemento e o total', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', expressShipping, previewClient)
+
+    const order = await createCheckoutOrder(
+      'user-1', expressShipping, preview.fingerprint, client,
+    )
+
+    expect(order).toMatchObject({
+      fulfillmentMethod: 'DELIVERY',
+      shippingMethod: 'EXPRESS',
+      shippingCost: 15.8,
+      total: 55.78,
+    })
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: 'EXPRESS',
+      shippingCost: '15.80',
+      total: '55.78',
+    })
+  })
+
+  test('encomenda de entrega sem método assume o standard', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const preview = await previewCheckout('user-1', shipping, previewClient)
+
+    await createCheckoutOrder('user-1', shipping, preview.fingerprint, client)
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: 'STANDARD',
+      shippingCost: '5.90',
+    })
+  })
+
+  test('mais de um método com o mesmo preview é rejeitado', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const standard = await previewCheckout('user-1', shipping, previewClient)
+
+    await expect(createCheckoutOrder(
+      'user-1', expressShipping, standard.fingerprint, client,
+    )).rejects.toBeInstanceOf(CheckoutPreviewChangedError)
+
+    expectNoCheckoutWrites(orderTx)
+  })
+
+  test('rejeita método de envio desconhecido antes da transação', async () => {
+    const { previewTx, previewClient, transaction } = checkoutScenario()
+
+    await expect(previewCheckout('user-1', {
+      ...expressShipping,
+      shippingMethod: 'SENDAS',
+    } as unknown as CheckoutShippingInput, previewClient)).rejects.toBeInstanceOf(
+      CheckoutValidationError,
+    )
+
+    expectNoCheckoutWrites(previewTx)
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  test('rejeita levantamento com método de envio antes da transação', async () => {
+    const { previewTx, previewClient, transaction } = checkoutScenario()
+
+    await expect(previewCheckout('user-1', {
+      fulfillmentMethod: 'PICKUP',
+      shipping: {
+        name: 'Maria Silva',
+        phone: '+351 912 345 678',
+      },
+      shippingMethod: 'EXPRESS',
+    } as unknown as CheckoutShippingInput, previewClient)).rejects.toThrow(
+      'O levantamento em loja não tem método de envio',
+    )
+
+    expectNoCheckoutWrites(previewTx)
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  test('encomenda de levantamento guarda shippingMethod nulo e portes zero', async () => {
+    const { previewClient, orderTx, client } = checkoutScenario()
+
+    const pickupInput: CheckoutFulfillmentInput = {
+      fulfillmentMethod: 'PICKUP',
+      shipping: {
+        name: 'Maria Silva',
+        phone: '+351 912 345 678',
+      },
+    }
+
+    const preview = await previewCheckout('user-1', pickupInput, previewClient)
+
+    const order = await createCheckoutOrder(
+      'user-1', pickupInput, preview.fingerprint, client,
+    )
+
+    expect(order).toMatchObject({
+      fulfillmentMethod: 'PICKUP',
+      shippingMethod: null,
+      shippingCost: 0,
+      total: 39.98,
+    })
+
+    const createCall = orderTx.order.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>
+    }
+
+    expect(createCall.data).toMatchObject({
+      shippingMethod: null,
+      shippingCost: '0.00',
+    })
   })
 })

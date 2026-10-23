@@ -270,6 +270,79 @@ describe('/api/checkout', () => {
     expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
   })
 
+  test.each([
+    null,
+    '',
+    'PICKUP',
+    'standard',
+  ])('rejeita método de envio inválido %j', async (shippingMethod) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ shippingMethod }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Método de envio inválido',
+      code: 'INVALID_SHIPPING_METHOD',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test('rejeita levantamento com método de envio', async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          pickupBody({ shippingMethod: 'EXPRESS' }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'O levantamento em loja não tem método de envio',
+      code: 'INVALID_SHIPPING_METHOD',
+    })
+    expect(mocks.createCheckoutOrder).not.toHaveBeenCalled()
+  })
+
+  test('encaminha o método de envio expresso para o serviço', async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ shippingMethod: 'EXPRESS' }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(201)
+    const input = mocks.createCheckoutOrder.mock.calls[0]?.[1]
+    expect(input).toEqual({
+      fulfillmentMethod: 'DELIVERY',
+      shipping: createShipping(),
+      shippingMethod: 'EXPRESS',
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    })
+  })
+
+  test('não encaminha método de envio quando o payload omite o campo', async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(deliveryBody()),
+      ),
+    )
+
+    expect(response.status).toBe(201)
+    const input = mocks.createCheckoutOrder.mock.calls[0]?.[1] as {
+      shippingMethod?: unknown
+    }
+    expect(input.shippingMethod).toBeUndefined()
+  })
+
   test('rejeita DELIVERY sem morada completa', async () => {
     const response = await POST(
       createRequest(

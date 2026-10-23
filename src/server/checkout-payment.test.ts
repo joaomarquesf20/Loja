@@ -59,6 +59,7 @@ function createRegionRules() {
         'PORTUGAL_MAINLAND'
           ? '23.00'
           : null,
+      expressShippingCost: null,
     }),
   )
 }

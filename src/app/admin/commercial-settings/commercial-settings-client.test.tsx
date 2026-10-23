@@ -27,6 +27,8 @@ const settings = {
         'PORTUGAL_MAINLAND',
       checkoutEnabled: true,
       taxRatePercent: '23.00',
+      expressShippingCost:
+        '9.90',
       shippingRules: [
         {
           id: 'small-rule',
@@ -132,6 +134,10 @@ function installSuccessfulFetch() {
           body.data
             ?.taxRatePercent
 
+        const express =
+          body.data
+            ?.expressShippingCost
+
         return jsonResponse({
           region:
             'PORTUGAL_MAINLAND',
@@ -143,6 +149,12 @@ function installSuccessfulFetch() {
               ? null
               : Number(
                   taxRate,
+                ).toFixed(2),
+          expressShippingCost:
+            express === null
+              ? null
+              : Number(
+                  express,
                 ).toFixed(2),
         })
       }
@@ -277,6 +289,14 @@ describe(
           ),
         ).toHaveValue(
           '23.00',
+        )
+
+        expect(
+          screen.getByLabelText(
+            'Suplemento expresso (€)',
+          ),
+        ).toHaveValue(
+          '9.90',
         )
 
         const smallSection =
@@ -429,6 +449,120 @@ describe(
                 true,
               taxRatePercent:
                 22.5,
+              expressShippingCost:
+                9.9,
+            },
+          })
+        })
+
+        expect(
+          await screen.findByText(
+            'Região guardada.',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'guarda o suplemento expresso de Portugal Continental',
+      async () => {
+        render(
+          <CommercialSettingsClient />,
+        )
+
+        const expressInput =
+          await screen.findByLabelText(
+            'Suplemento expresso (€)',
+          )
+
+        fireEvent.change(
+          expressInput,
+          {
+            target: {
+              value: '12.50',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar Portugal Continental',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            getPatchBodies(),
+          ).toContainEqual({
+            target: 'region',
+            region:
+              'PORTUGAL_MAINLAND',
+            data: {
+              checkoutEnabled:
+                true,
+              taxRatePercent: 23,
+              expressShippingCost:
+                12.5,
+            },
+          })
+        })
+
+        expect(
+          await screen.findByText(
+            'Região guardada.',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'limpa o suplemento expresso para desativar o método',
+      async () => {
+        render(
+          <CommercialSettingsClient />,
+        )
+
+        const expressInput =
+          await screen.findByLabelText(
+            'Suplemento expresso (€)',
+          )
+
+        fireEvent.change(
+          expressInput,
+          {
+            target: {
+              value: '',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar Portugal Continental',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            getPatchBodies(),
+          ).toContainEqual({
+            target: 'region',
+            region:
+              'PORTUGAL_MAINLAND',
+            data: {
+              checkoutEnabled:
+                true,
+              taxRatePercent: 23,
+              expressShippingCost:
+                null,
             },
           })
         })

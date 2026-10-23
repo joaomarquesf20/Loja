@@ -112,6 +112,8 @@ describe(
                   'PORTUGAL_MAINLAND',
                 checkoutEnabled: true,
                 taxRatePercent: '23.00',
+                expressShippingCost:
+                  '9.90',
                 shippingRules: [],
               },
             ],

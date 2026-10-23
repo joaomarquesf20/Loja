@@ -29,22 +29,27 @@ const defaultRegionRows = [
       'PORTUGAL_MAINLAND' as const,
     checkoutEnabled: true,
     taxRatePercent: '23.00',
+    expressShippingCost:
+      '9.90',
   },
   {
     region: 'MADEIRA' as const,
     checkoutEnabled: false,
     taxRatePercent: null,
+    expressShippingCost: null,
   },
   {
     region: 'AZORES' as const,
     checkoutEnabled: false,
     taxRatePercent: null,
+    expressShippingCost: null,
   },
   {
     region:
       'INTERNATIONAL' as const,
     checkoutEnabled: false,
     taxRatePercent: null,
+    expressShippingCost: null,
   },
 ]
 
@@ -234,6 +239,9 @@ describe(
           taxRatePercent:
             args.update
               .taxRatePercent,
+          expressShippingCost:
+            args.update
+              .expressShippingCost,
         }),
       )
 
@@ -510,6 +518,13 @@ describe(
         ).toBe('23.00')
 
         expect(
+          getRegion(
+            result,
+            'PORTUGAL_MAINLAND',
+          ).expressShippingCost,
+        ).toBe('9.90')
+
+        expect(
           getShippingRule(
             result,
             'SMALL',
@@ -632,6 +647,8 @@ describe(
               checkoutEnabled:
                 true,
               taxRatePercent: 23,
+              expressShippingCost:
+                9.9,
             },
             client,
           )
@@ -641,6 +658,8 @@ describe(
             'PORTUGAL_MAINLAND',
           checkoutEnabled: true,
           taxRatePercent: '23.00',
+          expressShippingCost:
+            '9.90',
         })
       },
     )
@@ -655,6 +674,8 @@ describe(
               checkoutEnabled:
                 true,
               taxRatePercent:
+                null,
+              expressShippingCost:
                 null,
             },
             client,
@@ -681,6 +702,130 @@ describe(
                 false,
               taxRatePercent:
                 null,
+              expressShippingCost:
+                null,
+            },
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          CommercialSettingsValidationError,
+        )
+      },
+    )
+
+    test(
+      'guarda o suplemento expresso no upsert da região',
+      async () => {
+        await updateCheckoutRegionRule(
+          'PORTUGAL_MAINLAND',
+          {
+            checkoutEnabled:
+              true,
+            taxRatePercent:
+              '23.00',
+            expressShippingCost:
+              '12.50',
+          },
+          client,
+        )
+
+        const call = vi.mocked(
+          client.checkoutRegionRule
+            .upsert,
+        ).mock.calls[0]?.[0]
+
+        expect(call?.update)
+          .toEqual({
+            checkoutEnabled:
+              true,
+            taxRatePercent:
+              '23.00',
+            expressShippingCost:
+              '12.50',
+          })
+
+        expect(call?.create)
+          .toEqual({
+            region:
+              'PORTUGAL_MAINLAND',
+            checkoutEnabled:
+              true,
+            taxRatePercent:
+              '23.00',
+            expressShippingCost:
+              '12.50',
+          })
+      },
+    )
+
+    test(
+      'permite configurar a região sem suplemento expresso (método desativado)',
+      async () => {
+        const result =
+          await updateCheckoutRegionRule(
+            'PORTUGAL_MAINLAND',
+            {
+              checkoutEnabled:
+                true,
+              taxRatePercent:
+                '23.00',
+              expressShippingCost:
+                null,
+            },
+            client,
+          )
+
+        expect(
+          result.expressShippingCost,
+        ).toBeNull()
+      },
+    )
+
+    test(
+      'rejeita suplemento expresso malformado',
+      async () => {
+        await expect(
+          updateCheckoutRegionRule(
+            'PORTUGAL_MAINLAND',
+            {
+              checkoutEnabled:
+                true,
+              taxRatePercent:
+                '23.00',
+              expressShippingCost:
+                '-1.00',
+            },
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          CommercialSettingsValidationError,
+        )
+
+        await expect(
+          updateCheckoutRegionRule(
+            'PORTUGAL_MAINLAND',
+            {
+              checkoutEnabled:
+                true,
+              taxRatePercent:
+                '23.00',
+              expressShippingCost:
+                '9.999',
+            },
+            client,
+          ),
+        ).rejects.toBeInstanceOf(
+          CommercialSettingsValidationError,
+        )
+
+        await expect(
+          updateCheckoutRegionRule(
+            'PORTUGAL_MAINLAND',
+            {
+              checkoutEnabled:
+                true,
+              taxRatePercent:
+                '23.00',
             },
             client,
           ),

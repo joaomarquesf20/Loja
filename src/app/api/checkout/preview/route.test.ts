@@ -124,6 +124,7 @@ function createPreview(
     shippingCost: fulfillmentMethod === 'PICKUP' ? 0 : 5.9,
     tax: 19.8,
     total: fulfillmentMethod === 'PICKUP' ? 100 : 105.9,
+    expressAvailable: true,
   }
 }
 
@@ -249,6 +250,65 @@ describe('/api/checkout/preview', () => {
       code: 'INVALID_FULFILLMENT_METHOD',
     })
     expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test.each([
+    null,
+    '',
+    'PICKUP',
+    'standard',
+  ])('rejeita método de envio inválido %j', async (shippingMethod) => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ shippingMethod }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Método de envio inválido',
+      code: 'INVALID_SHIPPING_METHOD',
+    })
+    expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test('rejeita levantamento com método de envio', async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          pickupBody({ shippingMethod: 'EXPRESS' }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: 'O levantamento em loja não tem método de envio',
+      code: 'INVALID_SHIPPING_METHOD',
+    })
+    expect(mocks.previewCheckout).not.toHaveBeenCalled()
+  })
+
+  test('encaminha o método de envio expresso para o serviço', async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify(
+          deliveryBody({ shippingMethod: 'EXPRESS' }),
+        ),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    const input = mocks.previewCheckout.mock.calls[0]?.[1]
+    expect(input).toEqual({
+      fulfillmentMethod: 'DELIVERY',
+      shipping: createShipping(),
+      shippingMethod: 'EXPRESS',
+      paymentMethod: 'CARD',
+      installmentCount: null,
+    })
   })
 
   test('rejeita DELIVERY sem morada completa', async () => {

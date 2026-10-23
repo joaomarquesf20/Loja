@@ -67,6 +67,7 @@ function createPreview() {
     shippingCost: 5.9,
     tax: 19.8,
     total: 105.9,
+    expressAvailable: true,
   }
 }
 

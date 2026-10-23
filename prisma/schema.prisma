@@ -66,6 +66,11 @@ enum CheckoutRegion {
   INTERNATIONAL
 }
 
+enum ShippingMethod {
+  STANDARD
+  EXPRESS
+}
+
 model User {
   id                         String           @id @default(cuid())
   email                      String           @unique
@@ -348,12 +353,13 @@ model StoreSettings {
 }
 
 model CheckoutRegionRule {
-  region          CheckoutRegion @id
-  checkoutEnabled Boolean        @default(false)
-  taxRatePercent  Decimal?       @db.Decimal(5, 2)
-  shippingRules   ShippingRule[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  region              CheckoutRegion @id
+  checkoutEnabled     Boolean        @default(false)
+  taxRatePercent      Decimal?       @db.Decimal(5, 2)
+  expressShippingCost Decimal?       @db.Decimal(10, 2)
+  shippingRules       ShippingRule[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 model ShippingRule {
@@ -400,6 +406,7 @@ model Order {
   paymentProvider         String?
   paymentReference        String?
   fulfillmentMethod       FulfillmentMethod @default(DELIVERY)
+  shippingMethod          ShippingMethod?
   shippingName            String
   shippingEmail           String
   shippingPhone           String

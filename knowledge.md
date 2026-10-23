@@ -743,4 +743,72 @@ entre testes de guard).
 **Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1890
 testes, 127 ficheiros (+3 skipped); ESLint limpo (0 avisos); `next
 build` concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
+pré-existente). Trabalho **commitado** (`7d21479 feat(admin): sales
+dashboard with paid-order analytics`).
+
+## 19. Motor de envio dinâmico + método de envio no checkout (tarefa de 2026-10-22)
+
+Estado da **etapa 6** do roadmap.
+
+**Modelo** — enum `ShippingMethod { STANDARD EXPRESS }`; em
+`CheckoutRegionRule` o campo `expressShippingCost Decimal?`
+(`null` = envio expresso **desativado** naquela região) e em `Order` o
+campo `shippingMethod ShippingMethod?` (`null` no levantamento em loja
+e nas encomendas de entrega anteriores à etapa — sem valor por defeito
+na BD; legacy é apresentado como standard). Migração
+`prisma/migrations/20261022120000_shipping_method` aplicada no local
+(`pfautoparts`) e `prisma generate` refeito.
+
+**Regra de negócio (fixada)** — o expresso é **suplemento por cima dos
+portes calculados** (classe, máximos, limiar grátis). Portes base
+grátis (limiar atingido) → expresso custa só o suplemento. Suplemento
+padrão de instalação nova em Portugal Continental: `9.90`; linhas já
+existentes ficam a `null` até o admin configurar. Fingerprint do
+checkout passou `schemaVersion` 4 → 5 (inclui `shippingMethod` +
+preços do expresso) — qualquer preview/encomenda pré-etapa é invalidado
+de forma segura.
+
+**Catálogo partilhado** — `src/lib/shipping-methods.ts` é a única fonte
+de rótulos/estimativas ('Envio standard' / 'Envio expresso' /
+'Levantamento em loja'; 'Entrega estimada em 2–5 / 1–2 dias úteis.' /
+'Pronto para levantamento em 1–3 dias úteis após a confirmação do
+pagamento.'). Vivem **em código, não em BD**: são cópia textual, não
+dados configuráveis; `DELIVERY` + `null` (legacy) apresenta como
+standard.
+
+**Servidor** — `checkout.ts` ganhou `normalizeShippingMethod` (rejeita
+`shippingMethod` no levantamento e valores inválidos), `getExpressAvailability`
+e pricing em `shipping-pricing.ts` (suplemento validado em cêntimos:
+erro 'Valor inválido em suplemento expresso'). Rotas `/api/checkout` e
+`/api/checkout/preview` aceitam/validam o campo literal (`INVALID_SHIPPING_METHOD`
+/ 400 no `PICKUP` + método). `orders.ts` transporta `shippingMethod`
+nulo-explícito; `/conta` e o email usam `??` no cliente/template
+(legacy → standard).
+
+**UI** — checkout: fieldset 'Velocidade de entrega' com os dois rácios
+do catálogo, expresso desativado quando `preview.expressAvailable === false`,
+resumo com método + estimativa. Admin: campo 'Suplemento expresso (€)'
+no bloco Portugal Continental ('Vazio = envio expresso desativado.').
+**Armadilha** de testing-library: texto de dica dentro de `<label>`
+quebra o `getByLabelText` exato — a dica ficou fora, como `<p>` irmão.
+
+**Email** — `OrderConfirmationEmail` recebe `shippingMethod`
+(`DELIVERY ? (order.shippingMethod ?? 'STANDARD') : null`), mostra
+linha forte com o rótulo (só em entrega, para não duplicar o
+cabeçalho de levantamento) + estimativa do catálogo. `deliverEmail`
+chama o template **como função** (`OrderConfirmationEmail(props)`) —
+o valor capturado pelo mock é a árvore JSX já avaliada, por isso os
+testes de `email.ts` afirmam via HTML renderizado
+(`renderedConfirmationEmail` com `@react-email/render`), não por props.
+
+**Testes** — +57 testes: `shipping-methods` (10), `commercial-settings`
+(21), `shipping-pricing` (32), checkout + rotas, `checkout-client`,
+`checkout-payment` (+ expresso nos fixtures: sem `expressShippingCost`
+nos doubles lança erro de suplemento inválido; sem `expressAvailable`
+nos previews simulados o cliente mostra 'Resposta inválida do
+servidor'), `orders`, `/conta`, email + template.
+
+**Validação (2026-10-22):** `tsc --noEmit` limpo; `vitest run` — 1947
+testes, 127 ficheiros (+3 skipped); ESLint limpo; `next build`
+concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
 pré-existente). Trabalho **não commitado** — ver `CHECKPOINT.md`.

@@ -14,6 +14,11 @@ import {
 
 import { STORE_NAME } from './brand'
 
+import {
+  getShippingMethodEstimate,
+  getShippingMethodLabel,
+} from '@/lib/shipping-methods'
+
 /**
  * Template de confirmação de encomenda (enviado quando o pagamento é
  * confirmado pelo webhook). Os valores chegam em cêntimos inteiros e são
@@ -49,6 +54,10 @@ export type OrderConfirmationEmailProps = {
   fulfillmentMethod:
     | 'DELIVERY'
     | 'PICKUP'
+  shippingMethod:
+    | 'STANDARD'
+    | 'EXPRESS'
+    | null
   shippingAddress:
     | OrderConfirmationEmailShippingAddress
     | null
@@ -206,6 +215,7 @@ export function OrderConfirmationEmail(
     orderNumber,
     customerName,
     fulfillmentMethod,
+    shippingMethod,
     shippingAddress,
     items,
     subtotalCents,
@@ -355,6 +365,30 @@ export function OrderConfirmationEmail(
                     shippingAddress,
                   )
                 : 'Morada de entrega não disponível. Consulte os detalhes na sua conta.'}
+          </Text>
+
+          {!isPickup ? (
+            <Text
+              style={
+                paragraphStrong
+              }
+            >
+              {getShippingMethodLabel(
+                'DELIVERY',
+                shippingMethod,
+              )}
+            </Text>
+          ) : null}
+
+          <Text
+            style={
+              paragraphWithMargin
+            }
+          >
+            {getShippingMethodEstimate(
+              isPickup ? 'PICKUP' : 'DELIVERY',
+              shippingMethod,
+            )}
           </Text>
 
           <Hr style={divider} />

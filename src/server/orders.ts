@@ -7,6 +7,11 @@ export type OrderFulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+export type OrderShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
+  | null
+
 export class OrderValidationError extends Error {
   constructor(
     public readonly field: OrderField,
@@ -68,6 +73,8 @@ export type UserOrder = {
   paymentStatus: string
   fulfillmentMethod:
     OrderFulfillmentMethod
+  shippingMethod:
+    OrderShippingMethod
   shippingName: string
   shippingEmail: string
   shippingPhone: string
@@ -122,6 +129,8 @@ type OrderRecord = {
   paymentStatus: string
   fulfillmentMethod:
     OrderFulfillmentMethod
+  shippingMethod:
+    OrderShippingMethod
   shippingName: string
   shippingEmail: string
   shippingPhone: string
@@ -171,6 +180,7 @@ type OrderSelect = {
   status: true
   paymentStatus: true
   fulfillmentMethod: true
+  shippingMethod: true
   shippingName: true
   shippingEmail: true
   shippingPhone: true
@@ -244,6 +254,7 @@ const orderSelect: OrderSelect = {
   status: true,
   paymentStatus: true,
   fulfillmentMethod: true,
+  shippingMethod: true,
   shippingName: true,
   shippingEmail: true,
   shippingPhone: true,
@@ -430,6 +441,9 @@ function mapOrder(
       order.paymentStatus,
     fulfillmentMethod:
       order.fulfillmentMethod,
+    shippingMethod:
+      order.shippingMethod ??
+      null,
     shippingName:
       order.shippingName,
     shippingEmail:

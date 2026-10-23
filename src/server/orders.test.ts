@@ -44,6 +44,8 @@ function createOrderRecord() {
     paymentStatus: 'PAID',
     fulfillmentMethod:
       'DELIVERY' as const,
+    shippingMethod:
+      'STANDARD' as const,
     shippingName:
       'Maria Silva',
     shippingEmail:
@@ -158,6 +160,8 @@ describe(
             paymentStatus: true,
             fulfillmentMethod:
               true,
+            shippingMethod:
+              true,
             shippingName: true,
             shippingEmail: true,
             shippingPhone: true,
@@ -257,6 +261,8 @@ describe(
               'PAID',
             fulfillmentMethod:
               'DELIVERY',
+            shippingMethod:
+              'STANDARD',
             shippingName:
               'Maria Silva',
             shippingEmail:
@@ -381,6 +387,8 @@ describe(
           ...createOrderRecord(),
           fulfillmentMethod:
             'PICKUP' as const,
+          shippingMethod:
+            null,
           shippingCost:
             decimal('0.00'),
           shippingAddressLine1:
@@ -408,6 +416,7 @@ describe(
         expect(result[0]).toMatchObject({
           fulfillmentMethod:
             'PICKUP',
+          shippingMethod: null,
           shippingCost:
             '0.00',
           shippingName:
@@ -427,6 +436,73 @@ describe(
           shippingCountry:
             null,
         })
+      },
+    )
+
+    test(
+      'preserva o método de envio expresso mapeado da base de dados',
+      async () => {
+        const {
+          client,
+          findMany,
+        } = createClient()
+
+        findMany.mockResolvedValue(
+          [
+            {
+              ...createOrderRecord(),
+              shippingMethod:
+                'EXPRESS' as const,
+              shippingCost:
+                decimal('15.40'),
+            },
+          ],
+        )
+
+        const result =
+          await listUserOrders(
+            'user-1',
+            client,
+          )
+
+        expect(
+          result[0],
+        ).toMatchObject({
+          shippingMethod:
+            'EXPRESS',
+          shippingCost:
+            '15.40',
+        })
+      },
+    )
+
+    test(
+      'preserva nulo em encomendas de entrega anteriores à Etapa 6',
+      async () => {
+        const {
+          client,
+          findMany,
+        } = createClient()
+
+        findMany.mockResolvedValue(
+          [
+            {
+              ...createOrderRecord(),
+              shippingMethod:
+                null,
+            },
+          ],
+        )
+
+        const result =
+          await listUserOrders(
+            'user-1',
+            client,
+          )
+
+        expect(
+          result[0]?.shippingMethod,
+        ).toBeNull()
       },
     )
 

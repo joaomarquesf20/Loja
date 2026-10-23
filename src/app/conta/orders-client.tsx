@@ -13,10 +13,18 @@ import {
   getOrderStatusLabel,
   getPaymentStatusLabel,
 } from '@/lib/order-status-labels'
+import {
+  getShippingMethodEstimate,
+  getShippingMethodLabel,
+} from '@/lib/shipping-methods'
 
 type FulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
+
+type ShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
 
 type OrderItem = {
   id: string
@@ -57,6 +65,8 @@ type Order = {
   paymentStatus: string
   fulfillmentMethod:
     FulfillmentMethod
+  shippingMethod:
+    ShippingMethod | null
   shippingName: string
   shippingEmail: string
   shippingPhone: string
@@ -199,6 +209,15 @@ function isFulfillmentMethod(
   )
 }
 
+function isShippingMethod(
+  value: unknown,
+): value is ShippingMethod {
+  return (
+    value === 'STANDARD' ||
+    value === 'EXPRESS'
+  )
+}
+
 function hasValidDeliveryAddress(
   value: Record<string, unknown>,
 ) {
@@ -247,6 +266,17 @@ function isOrder(
   if (
     !isFulfillmentMethod(
       value.fulfillmentMethod,
+    )
+  ) {
+    return false
+  }
+
+  if (
+    value.shippingMethod !== null &&
+    value.shippingMethod !==
+      undefined &&
+    !isShippingMethod(
+      value.shippingMethod,
     )
   ) {
     return false
@@ -1113,10 +1143,18 @@ export function OrdersClient() {
                   <div className="mt-5 grid gap-5 border-t pt-5 sm:grid-cols-2">
                     <div>
                       <h4 className="font-semibold">
-                        {isPickup
-                          ? 'Levantamento em loja'
-                          : 'Entrega'}
+                        {getShippingMethodLabel(
+                          order.fulfillmentMethod,
+                          order.shippingMethod,
+                        )}
                       </h4>
+
+                      <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+                        {getShippingMethodEstimate(
+                          order.fulfillmentMethod,
+                          order.shippingMethod,
+                        )}
+                      </p>
 
                       {isPickup ? (
                         <div className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">

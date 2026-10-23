@@ -40,6 +40,7 @@ type RegionRuleRecord = {
   region: CommercialCheckoutRegion
   checkoutEnabled: boolean
   taxRatePercent: DecimalValue | null
+  expressShippingCost: DecimalValue | null
 }
 
 type ShippingRuleRecord = {
@@ -56,6 +57,7 @@ type RegionRuleWriteData = {
   region: CommercialCheckoutRegion
   checkoutEnabled: boolean
   taxRatePercent: string | null
+  expressShippingCost: string | null
 }
 
 type ShippingRuleWriteData = {
@@ -76,6 +78,7 @@ const regionRuleSelect = {
   region: true,
   checkoutEnabled: true,
   taxRatePercent: true,
+  expressShippingCost: true,
 } as const
 
 const shippingRuleSelect = {
@@ -131,6 +134,7 @@ export interface CommercialSettingsClient {
       update: {
         checkoutEnabled: boolean
         taxRatePercent: string | null
+        expressShippingCost: string | null
       }
       create: RegionRuleWriteData
       select: typeof regionRuleSelect
@@ -187,6 +191,7 @@ export type CommercialRegionRule = {
   region: CommercialCheckoutRegion
   checkoutEnabled: boolean
   taxRatePercent: string | null
+  expressShippingCost: string | null
   shippingRules: CommercialShippingRule[]
 }
 
@@ -442,6 +447,11 @@ function getRegionDefaults(
       region,
       checkoutEnabled: true,
       taxRatePercent: '23.00',
+      // Instalações novas activam o envio expresso com suplemento base;
+      // regiões já criadas mantêm `null` (expresso desactivado) até o
+      // administrador configurar o valor.
+      expressShippingCost:
+        '9.90',
     }
   }
 
@@ -449,6 +459,7 @@ function getRegionDefaults(
     region,
     checkoutEnabled: false,
     taxRatePercent: null,
+    expressShippingCost: null,
   }
 }
 
@@ -623,6 +634,12 @@ function mapCommercialSettings(
               regionRecord.taxRatePercent,
               'taxa de IVA',
               MAX_TAX_HUNDREDTHS,
+            ),
+          expressShippingCost:
+            normalizeStoredDecimal(
+              regionRecord.expressShippingCost,
+              'suplemento expresso',
+              MAX_MONEY_HUNDREDTHS,
             ),
           shippingRules:
             mappedShippingRules,
@@ -843,11 +860,29 @@ function parseRegionRuleInput(
     )
   }
 
+  if (
+    !hasOwn(
+      input,
+      'expressShippingCost',
+    )
+  ) {
+    throw new CommercialSettingsValidationError(
+      'Suplemento expresso inválido',
+    )
+  }
+
   const taxRate =
     normalizeNullableDecimalInput(
       input.taxRatePercent,
       'Taxa de IVA',
       MAX_TAX_HUNDREDTHS,
+    )
+
+  const expressShippingCost =
+    normalizeNullableDecimalInput(
+      input.expressShippingCost,
+      'Suplemento expresso',
+      MAX_MONEY_HUNDREDTHS,
     )
 
   if (
@@ -864,6 +899,9 @@ function parseRegionRuleInput(
       input.checkoutEnabled,
     taxRatePercent:
       taxRate?.value ?? null,
+    expressShippingCost:
+      expressShippingCost?.value ??
+      null,
   }
 }
 
@@ -1097,6 +1135,12 @@ export async function updateCheckoutRegionRule(
         result.taxRatePercent,
         'taxa de IVA',
         MAX_TAX_HUNDREDTHS,
+      ),
+    expressShippingCost:
+      normalizeStoredDecimal(
+        result.expressShippingCost,
+        'suplemento expresso',
+        MAX_MONEY_HUNDREDTHS,
       ),
   }
 }

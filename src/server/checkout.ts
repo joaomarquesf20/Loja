@@ -7,6 +7,7 @@ import {
   CommercialSettingsConfigurationError,
   getCommercialSettings,
   type CommercialCheckoutRegion,
+  type CommercialSettings,
   type CommercialSettingsClient,
   type CommercialShippingClass,
 } from './commercial-settings'
@@ -90,6 +91,11 @@ export type CheckoutPaymentMethod =
   | 'CARD'
   | 'INSTALLMENTS'
 
+export type CheckoutShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
+  | null
+
 export type CheckoutContactInput = {
   name: string
   phone: string
@@ -109,10 +115,12 @@ export type CheckoutFulfillmentInput =
   | {
       fulfillmentMethod: 'DELIVERY'
       shipping: CheckoutShippingInput
+      shippingMethod?: 'STANDARD' | 'EXPRESS'
     }
   | {
       fulfillmentMethod: 'PICKUP'
       shipping: CheckoutContactInput
+      shippingMethod?: never
     }
 
 export type CheckoutPaymentInput =
@@ -149,10 +157,12 @@ type NormalizedFulfillmentInput =
   | {
       fulfillmentMethod: 'DELIVERY'
       shipping: CheckoutShipping
+      shippingMethod: 'STANDARD' | 'EXPRESS'
     }
   | {
       fulfillmentMethod: 'PICKUP'
       shipping: CheckoutContact
+      shippingMethod: null
     }
 
 type NormalizedPaymentInput =
@@ -173,6 +183,7 @@ export type CheckoutResult = {
   id: string
   orderNumber: string
   fulfillmentMethod: CheckoutFulfillmentMethod
+  shippingMethod: CheckoutShippingMethod
   paymentMethod: CheckoutPaymentMethod
   installmentCount: number | null
   subtotal: number
@@ -192,6 +203,7 @@ type CheckoutAmounts = {
 
 export type CheckoutPreviewResult = CheckoutAmounts & {
   fingerprint: string
+  expressAvailable: boolean
 }
 
 export class CheckoutValidationError extends Error {
@@ -353,6 +365,10 @@ type CheckoutTransactionClient =
           paymentProvider: null
           paymentReference: null
           fulfillmentMethod: CheckoutFulfillmentMethod
+          shippingMethod:
+            | 'STANDARD'
+            | 'EXPRESS'
+            | null
           shippingName: string
           shippingEmail: string
           shippingPhone: string
@@ -660,6 +676,30 @@ function isCheckoutFulfillmentInput(
   )
 }
 
+/**
+ * Normaliza o método de envio no input de entrega. O standard é o valor por
+ * omissão — clientes antigos que não enviam o campo continuam a funcionar.
+ */
+function normalizeShippingMethodInput(
+  value: unknown,
+): 'STANDARD' | 'EXPRESS' {
+  if (value === undefined) {
+    return 'STANDARD'
+  }
+
+  if (value === 'STANDARD') {
+    return 'STANDARD'
+  }
+
+  if (value === 'EXPRESS') {
+    return 'EXPRESS'
+  }
+
+  throw new CheckoutValidationError(
+    'Método de envio inválido',
+  )
+}
+
 function normalizeFulfillmentInput(
   input: CheckoutServiceInput,
 ): NormalizedFulfillmentInput {
@@ -669,6 +709,7 @@ function normalizeFulfillmentInput(
       shipping: normalizeShipping(
         input,
       ),
+      shippingMethod: 'STANDARD',
     }
   }
 
@@ -681,6 +722,10 @@ function normalizeFulfillmentInput(
       shipping: normalizeShipping(
         input.shipping as CheckoutShippingInput,
       ),
+      shippingMethod:
+        normalizeShippingMethodInput(
+          input.shippingMethod,
+        ),
     }
   }
 
@@ -688,11 +733,21 @@ function normalizeFulfillmentInput(
     input.fulfillmentMethod ===
     'PICKUP'
   ) {
+    if (
+      input.shippingMethod !==
+      undefined
+    ) {
+      throw new CheckoutValidationError(
+        'O levantamento em loja não tem método de envio',
+      )
+    }
+
     return {
       fulfillmentMethod: 'PICKUP',
       shipping: normalizeContact(
         input.shipping as CheckoutContactInput,
       ),
+      shippingMethod: null,
     }
   }
 
@@ -976,6 +1031,31 @@ function calculateIncludedTaxCents(
 type CheckoutPricing = ReturnType<
   typeof calculateShippingPricing
 >
+
+/**
+ * O envio expresso está disponível quando a regra da região tem suplemento
+ * configurado — a única região alcançável pelo checkout hoje é Portugal
+ * Continental.
+ */
+function getExpressAvailability(
+  settings: CommercialSettings,
+): boolean {
+  const mainland =
+    settings.regions.find(
+      (region) =>
+        region.region ===
+        'PORTUGAL_MAINLAND',
+    )
+
+  if (!mainland) {
+    return false
+  }
+
+  return (
+    mainland.expressShippingCost !==
+    null
+  )
+}
 
 function createPickupPricing(
   pricing: CheckoutPricing,
@@ -1352,11 +1432,17 @@ async function prepareCheckout(
 
   let pricing: CheckoutPricing
 
+  let expressAvailable = false
+
   try {
     const settings =
       await getCommercialSettings(
         tx,
       )
+
+    expressAvailable = getExpressAvailability(
+      settings,
+    )
 
     if (
       fulfillment.fulfillmentMethod ===
@@ -1367,6 +1453,8 @@ async function prepareCheckout(
           settings,
           region:
             fulfillment.shipping.region,
+          shippingMethod:
+            fulfillment.shippingMethod,
           items:
             preparedItems.map(
               (item) => ({
@@ -1440,6 +1528,7 @@ async function prepareCheckout(
     shippingEmail,
     preparedItems,
     pricing,
+    expressAvailable,
   }
 }
 
@@ -1470,11 +1559,13 @@ function createCheckoutFingerprint(
       : null
 
   const snapshot = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     userId: user.id,
     shippingEmail,
     fulfillmentMethod:
       fulfillment.fulfillmentMethod,
+    shippingMethod:
+      fulfillment.shippingMethod,
     payment: {
       method:
         fulfillment.paymentMethod,
@@ -1581,6 +1672,10 @@ function createCheckoutFingerprint(
         pricing.freeShippingApplied,
       freeShippingThresholdCents:
         pricing.freeShippingThresholdCents,
+      shippingMethod:
+        pricing.shippingMethod,
+      expressSurchargeCents:
+        pricing.expressSurchargeCents,
     },
   }
 
@@ -1646,6 +1741,8 @@ export async function previewCheckout(
             prepared,
             fulfillment,
           ),
+        expressAvailable:
+          prepared.expressAvailable,
       }
     },
   )
@@ -1769,6 +1866,8 @@ export async function createCheckoutOrder(
             fulfillmentMethod:
               fulfillment
                 .fulfillmentMethod,
+            shippingMethod:
+              fulfillment.shippingMethod,
             shippingName:
               contact.name,
             shippingEmail,
@@ -1898,6 +1997,8 @@ export async function createCheckoutOrder(
         fulfillmentMethod:
           fulfillment
             .fulfillmentMethod,
+        shippingMethod:
+          fulfillment.shippingMethod,
         paymentMethod:
           fulfillment.paymentMethod,
         installmentCount:

@@ -114,6 +114,11 @@ export type EmailOrderFulfillmentMethod =
   | 'DELIVERY'
   | 'PICKUP'
 
+export type EmailOrderShippingMethod =
+  | 'STANDARD'
+  | 'EXPRESS'
+  | null
+
 type EmailOrderItemRecord = {
   productNameAtPurchase: string
   productSkuAtPurchase: string
@@ -134,6 +139,7 @@ export type EmailOrderRecord = {
   status: EmailOrderStatus
   paymentStatus: EmailOrderPaymentStatus
   fulfillmentMethod: EmailOrderFulfillmentMethod
+  shippingMethod: EmailOrderShippingMethod
   subtotal: EmailMoneyValue
   shippingCost: EmailMoneyValue
   tax: EmailMoneyValue
@@ -171,6 +177,7 @@ export type EmailOrderSelect = {
   status: true
   paymentStatus: true
   fulfillmentMethod: true
+  shippingMethod: true
   subtotal: true
   shippingCost: true
   tax: true
@@ -237,6 +244,7 @@ const emailOrderSelect: EmailOrderSelect = {
   status: true,
   paymentStatus: true,
   fulfillmentMethod: true,
+  shippingMethod: true,
   subtotal: true,
   shippingCost: true,
   tax: true,
@@ -727,6 +735,12 @@ function buildConfirmationEmailProps(
         order.shippingName,
       fulfillmentMethod:
         order.fulfillmentMethod,
+      shippingMethod:
+        order.fulfillmentMethod ===
+        'DELIVERY'
+          ? (order.shippingMethod ??
+            'STANDARD')
+          : null,
       shippingAddress:
         order.fulfillmentMethod ===
           'PICKUP' ||

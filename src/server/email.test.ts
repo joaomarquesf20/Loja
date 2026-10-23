@@ -6,6 +6,8 @@ import {
   vi,
 } from 'vitest'
 
+import { render } from '@react-email/render'
+
 // O cliente Prisma é substituído (padrão dos testes do servidor) — o serviço
 // de email recebe sempre os clientes e a configuração como parâmetros.
 vi.mock(
@@ -75,6 +77,8 @@ function makeOrderRecord(
     paymentStatus: 'PAID',
     fulfillmentMethod:
       'DELIVERY',
+    shippingMethod:
+      'STANDARD',
     subtotal: money(
       '100.00',
     ),
@@ -136,6 +140,42 @@ function standardOptions(
     from: 'store@example.com',
     ...overrides,
   }
+}
+
+/** Renderiza o HTML do email capturado pelo mock para asserções de conteúdo. */
+async function renderedConfirmationEmail(
+  emailClient: EmailClient,
+): Promise<string> {
+  const send = emailClient
+    .emails
+    .send as unknown as {
+    mock: {
+      calls: Array<
+        Array<{
+          react: unknown
+        }>
+      >
+    }
+  }
+
+  const payload =
+    send.mock.calls[0]?.[0]
+
+  if (!payload) {
+    throw new Error(
+      'Email não enviado',
+    )
+  }
+
+  const html = await render(
+    payload.react as Parameters<
+      typeof render
+    >[0],
+  )
+
+  return html
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
 }
 
 describe(
@@ -710,6 +750,160 @@ describe(
               status: 'sent',
               id: 'resend-email-1',
             })
+          },
+        )
+
+        test(
+          'repassa o método de envio do registo para o template',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            const outcome =
+              await sendOrderConfirmationEmail(
+                {
+                  orderId:
+                    'order-1',
+                },
+                {
+                  ...standardOptions(),
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          shippingMethod:
+                            'EXPRESS',
+                          shippingCost:
+                            money(
+                              '15.40',
+                            ),
+                          total: money(
+                            '115.40',
+                          ),
+                        },
+                      ),
+                    ),
+                  emailClient,
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'sent',
+              id: 'resend-email-1',
+            })
+
+            const html =
+              await renderedConfirmationEmail(
+                emailClient,
+              )
+
+            expect(html).toContain(
+              'Envio expresso',
+            )
+
+            expect(html).toContain(
+              'Entrega estimada em 1–2 dias úteis.',
+            )
+          },
+        )
+
+        test(
+          'assumiu o standard para entregas legadas sem método guardado',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            await sendOrderConfirmationEmail(
+              {
+                orderId:
+                  'order-1',
+              },
+              {
+                ...standardOptions(),
+                client:
+                  orderClientWith(
+                    makeOrderRecord(
+                      {
+                        shippingMethod:
+                          null,
+                      },
+                    ),
+                  ),
+                emailClient,
+              },
+            )
+
+            const html =
+              await renderedConfirmationEmail(
+                emailClient,
+              )
+
+            expect(html).toContain(
+              'Envio standard',
+            )
+
+            expect(html).toContain(
+              'Entrega estimada em 2–5 dias úteis.',
+            )
+          },
+        )
+
+        test(
+          'levantamento em loja não tem método de envio no template',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            await sendOrderConfirmationEmail(
+              {
+                orderId:
+                  'order-1',
+              },
+              {
+                ...standardOptions(),
+                client:
+                  orderClientWith(
+                    makeOrderRecord(
+                      {
+                        fulfillmentMethod:
+                          'PICKUP',
+                        shippingMethod:
+                          null,
+                        shippingCost:
+                          money(
+                            '0.00',
+                          ),
+                        shippingAddressLine1:
+                          null,
+                        shippingAddressLine2:
+                          null,
+                        shippingCity:
+                          null,
+                        shippingPostalCode:
+                          null,
+                        shippingCountry:
+                          null,
+                      },
+                    ),
+                  ),
+                emailClient,
+              },
+            )
+
+            const html =
+              await renderedConfirmationEmail(
+                emailClient,
+              )
+
+            expect(html).toContain(
+              'Pronto para levantamento em 1–3 dias úteis após a confirmação do pagamento.',
+            )
+
+            expect(html).not.toContain(
+              'Envio standard',
+            )
           },
         )
 

@@ -18,6 +18,8 @@ const baseProps: OrderConfirmationEmailProps =
       'Maria Encomenda',
     fulfillmentMethod:
       'DELIVERY',
+    shippingMethod:
+      'STANDARD',
     shippingAddress: {
       name: 'Maria Encomenda',
       line1:
@@ -186,8 +188,106 @@ describe(
 
         expect(
           html,
+        ).toContain(
+          'Pronto para levantamento em 1–3 dias úteis após a confirmação do pagamento.',
+        )
+
+        expect(
+          html,
+        ).not.toContain(
+          'Envio standard',
+        )
+
+        expect(
+          html,
         ).not.toContain(
           'Rua das Flores',
+        )
+      },
+    )
+
+    test(
+      'entrega standard mostra o rótulo e a estimativa de entrega',
+      async () => {
+        const html =
+          normalizeText(
+            await render(
+              <OrderConfirmationEmail
+                {...baseProps}
+                shippingMethod="STANDARD"
+              />,
+            ),
+          )
+
+        expect(
+          html,
+        ).toContain(
+          'Envio standard',
+        )
+
+        expect(
+          html,
+        ).toContain(
+          'Entrega estimada em 2–5 dias úteis.',
+        )
+      },
+    )
+
+    test(
+      'entrega expressa mostra o rótulo e a estimativa expressa',
+      async () => {
+        const html =
+          normalizeText(
+            await render(
+              <OrderConfirmationEmail
+                {...baseProps}
+                shippingMethod="EXPRESS"
+                shippingCostCents={
+                  1580
+                }
+              />,
+            ),
+          )
+
+        expect(
+          html,
+        ).toContain(
+          'Envio expresso',
+        )
+
+        expect(
+          html,
+        ).toContain(
+          'Entrega estimada em 1–2 dias úteis.',
+        )
+      },
+    )
+
+    test(
+      'entrega legacy sem método guardado assume o standard',
+      async () => {
+        const html =
+          normalizeText(
+            await render(
+              <OrderConfirmationEmail
+                {...baseProps}
+                shippingMethod={
+                  null
+                }
+              />,
+            ),
+          )
+
+        expect(
+          html,
+        ).toContain(
+          'Envio standard',
+        )
+
+        expect(
+          html,
+        ).toContain(
+          'Entrega estimada em 2–5 dias úteis.',
         )
       },
     )

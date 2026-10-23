@@ -113,6 +113,8 @@ function bulkySettings(
           'PORTUGAL_MAINLAND' as const,
         checkoutEnabled: true,
         taxRatePercent: '23.00',
+        expressShippingCost:
+          null,
         shippingRules: [
           {
             id: 'bulky-rule',

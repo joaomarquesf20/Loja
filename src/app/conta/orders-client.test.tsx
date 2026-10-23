@@ -35,6 +35,8 @@ function createOrder(
     paymentStatus: 'PAID',
     fulfillmentMethod:
       'DELIVERY',
+    shippingMethod:
+      'STANDARD',
     shippingName:
       'Maria Silva',
     shippingEmail:
@@ -88,6 +90,7 @@ function createPickupOrder(
   return createOrder({
     fulfillmentMethod:
       'PICKUP',
+    shippingMethod: null,
     shippingCost:
       '0.00',
     shippingAddressLine1:
@@ -235,7 +238,13 @@ describe(
 
         expect(
           screen.getByText(
-            'Entrega',
+            'Envio standard',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Entrega estimada em 2–5 dias úteis.',
           ),
         ).toBeInTheDocument()
 
@@ -405,6 +414,72 @@ describe(
         expect(
           screen.queryByText(
             'Portugal',
+          ),
+        ).not.toBeInTheDocument()
+      },
+    )
+
+    test(
+      'identifica encomendas com envio expresso e a estimativa correspondente',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                shippingMethod:
+                  'EXPRESS',
+                shippingCost:
+                  '15.40',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Envio expresso',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Entrega estimada em 1–2 dias úteis.',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'apresenta envio standard para encomendas de entrega sem método guardado',
+      async () => {
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse({
+            orders: [
+              createOrder({
+                shippingMethod:
+                  null,
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'Envio standard',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'Entrega',
           ),
         ).not.toBeInTheDocument()
       },
