@@ -1,10 +1,12 @@
 ﻿# Checkpoint - 23/10/2026
 
 Ramo:
-design/storefront-foundation (etapas 1-7 commitadas e pushed;
-etapa 8 — polimento final — em progresso, não commitada)
+design/storefront-foundation — **épico COMPLETO**: 8 etapas
+commitadas e pushed, e a branch mergeada em `main` com
+`--no-ff` (mensagem "Merge branch 'design/storefront-foundation':
+Complete Storefront Foundation Epic (Stages 1-8)").
 
-Estado:
+Estado final por etapa:
 - Etapa 1 — Webhook de pagamento (validação de segurança):
   commitada (ee49f8b); ver `knowledge.md` §14.
 - Etapa 2 — Fase 3 da migração Product → ProductVariant
@@ -24,10 +26,20 @@ Estado:
 - Etapa 7 — Inventário: alertas de stock baixo e correção
   rápida: commitada (2ea2eb7); ver `knowledge.md` §20.
 - Etapa 8 — Polimento final, auditoria de performance e SEO
-  base: **em progresso** (código + gate concluídos; falta
-  commit); ver `knowledge.md` §21.
+  base: **commitada (c4b4f9a)**; ver `knowledge.md` §21.
 
-Alterações não commitadas (`git status`, etapa 8):
+Nota final:
+A fase de fundação da vitrine está completa, production-ready e
+mergeada em `main`. Gate final verde: typecheck limpo; 1979
+testes a passar (130 ficheiros) + 3 skipped; ESLint limpo; build de
+produção SEM avisos (DYNAMIC_SERVER_USAGE no /checkout resolvido,
+/checkout ƒ por sessão, /sitemap.xml com ISR de 1h). SEO base com
+Open Graph/canonical em todas as páginas públicas; leituras de
+catálogo deduplicadas por request (React cache); validação de
+stock/preço autoritativa no checkout (páginas de comércio
+mantêm force-dynamic).
+
+Conteúdo commitado na etapa 8 (c4b4f9a):
 - new: src/server/catalog-request.ts
   (getCatalogCategories = cache(listCatalogCategories) — dedupe
   por request entre layout e páginas)
@@ -49,21 +61,7 @@ Alterações não commitadas (`git status`, etapa 8):
 - modified: src/app/sitemap.ts
   (force-dynamic → revalidate = 3600 + fallback só-da-home)
 
-Validações concluídas (2026-10-23):
-- Typecheck passou (tsc --noEmit)
-- 1979 testes a passar (130 ficheiros) + 3 skipped (vitest run)
-- ESLint passou (0 avisos)
-- Build de produção SEM avisos:
-  - log 'Checkout cart check failed' / DYNAMIC_SERVER_USAGE
-    já não aparece; /checkout permanece ƒ (por sessão)
-  - /sitemap.xml passou a prerender com ISR de 1h (1h 1y)
-  - /api/admin/inventory permanece no mapa de rotas ƒ
-- Sem migração; sem novos testes (metadados cobertos pelo build)
-
-Fase de fundação da vitrine: completa (etapas 1-8) exceto o
-commit da etapa 8.
-
-Próximos passos:
-1. Commitar a etapa 8 em bloco próprio, p.ex.
-   `feat(storefront): seo baseline, request dedupe and build polish`.
-2. Abrir PR de `design/storefront-foundation` para `main`.
+Próximos passos (pós-épico):
+- Desenhar e executar o próximo bloco do roadmap a partir de
+  `main` (nova branch de fases).
+- Registar no `knowledge.md` novas secções por etapa nova.
