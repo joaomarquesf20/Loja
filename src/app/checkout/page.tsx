@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 
 import { listCartItems } from '@/server/cart'
@@ -7,6 +8,18 @@ import {
 } from '@/server/user-auth'
 
 import { CheckoutClient } from './checkout-client'
+
+/**
+ * O checkout depende da sessão (getServerSession → headers()), por
+ * isso o segmento é declarado como dinâmico: o build deixa de tentar
+ * prerender estático, que gerava o aviso `DYNAMIC_SERVER_USAGE`
+ * apanhado pelo catch da verificação do carrinho vazio abaixo.
+ */
+export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Finalizar compra',
+}
 
 /**
  * Verifica no servidor se o carrinho da sessão está vazio.

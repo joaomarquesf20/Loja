@@ -882,5 +882,99 @@ módulo é mockado por completo, constantes incluídas).
 
 **Validação (2026-10-23):** `tsc --noEmit` limpo; `vitest run` — 1979
 testes, 130 ficheiros (+3 skipped); ESLint limpo; `next build`
-concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
-pré-existente). Trabalho **não commitado** — ver `CHECKPOINT.md`.
+concluída (à data o aviso `DYNAMIC_SERVER_USAGE` no `/checkout` era
+pré-existente; resolvido na §21). Commit da etapa: `2ea2eb7`.
+
+## 21. Polimento final, auditoria de performance e SEO base (etapa 8, 2026-10-23)
+
+Fecha a **fase de fundação da vitrine**. Branch
+`design/storefront-foundation` pronta para PR contra `main`. Sem
+alteração de schema e sem novos testes (a cobertura de metadados vem
+do build — mapa de rotas e prerender; a suíte existente mantém-se
+intacta).
+
+**1. Aviso `DYNAMIC_SERVER_USAGE` no `/checkout` — resolvido**
+- Causa: no build o Next tentava prerender estático de `/checkout`;
+  `requireActiveUserId()` usa `getServerSession` → `headers()` →
+  bailout dinâmico que o catch da própria página apanhava e logava
+  como 'Checkout cart check failed:' (parecia erro, mas o build
+  acabava 0 e a rota era ƒ de qualquer forma).
+- Correção: `export const dynamic = 'force-dynamic'` em
+  `src/app/checkout/page.tsx` (rota por sessão). Com o segmento
+  declarado, o build deixa de tentar prerender: sem aviso, sem catch
+  a engolir o bailout, rota continua ƒ.
+- Convenção: qualquer página que toque em sessão/`headers()` no
+  servidor declara `dynamic = 'force-dynamic'` (home, produto,
+  categoria e checkout). As shells `/carrinho` `/conta` `/login`
+  `/registar` são `○` estáticas porque o cliente busca dados de
+  sessão via API — manter assim.
+
+**2. SEO base (+ Open Graph)**
+- `src/app/seo.ts`: `SITE_NAME` ('PFAUTOPARTS'),
+  `SITE_DESCRIPTION` ('Jantes premium, suspensões, body-kits e
+  personalização automóvel.') e
+  `buildPageMetadata({ title, description, path?, image?,
+  absoluteTitle? })` — título, descrição, `alternates.canonical` e
+  Open Graph (type website, locale pt_PT, siteName) coerentes; cards
+  Twitter herdam do OG resolvido.
+- Layout: `metadataBase` de `NEXTAUTH_URL ??
+  'http://localhost:3000'` (mesma convenção de robots.ts/sitemap.ts;
+  env inválido → try/catch e fallback, não rebenta o build),
+  `title: { default: 'PFAUTOPARTS', template: '%s | PFAUTOPARTS' }`,
+  defaults OG + `twitter.card: 'summary_large_image'`.
+- `generateMetadata` por item na página de produto e de categoria:
+  título/nome, descrição (descrição do produto truncada a 300 ou
+  fallback construído; na categoria, descrição ou
+  `getCategorySupportCopy`), canonical `/produtos/{slug}` /
+  `/categorias/{slug}` **sem filtros**, og:image da primeira imagem
+  do produto. Produto/categoria inexistentes → título de fallback
+  com `robots: { index: false }` (não chamam `notFound()` duplicado;
+  a página própria o faz).
+- Home: `metadata` via helper com `absoluteTitle: true` (bypass do
+  template), canonical `/` e og:image = imagem hero. Títulos
+  adicionados a `/carrinho` ('Carrinho de compras') e `/checkout`
+  ('Finalizar compra'). `/conta` `/login` `/registar` herdam o
+  default do layout (auth flows, fora do âmbito do baseline).
+
+**3. Estratégia de fetching/caching — decisões**
+- Páginas de comércio (`/`, `/produtos/[slug]`,
+  `/categorias/[slug]`, `/checkout`) **permanecem
+  `force-dynamic`**: preços e stock têm de estar frescos a cada
+  request e a home/categoria têm pesquisa/filtros por URL. NÃO
+  introduzir `revalidate`/ISR nas páginas de comércio; a validação
+  de stock/preço autoritativa está no POST do checkout.
+- Deduplicação por request — `src/server/catalog-request.ts`:
+  `getCatalogCategories = cache(listCatalogCategories)` (React
+  `cache`). Layout, home, produto e categoria partilham UMA consulta
+  de categorias por request (o header do layout, o rodapé e os
+  metadados reutilizam); na página de produto, `generateMetadata` e
+  o corpo passam a partilhar a leitura do produto
+  (`getCatalogProductBySlug` com `cache()` nível de página em vez de
+  duas consultas). Sem TTL — apenas dedupe intra-request.
+  - `cache()` NÃO entra nos serviços (`src/server/*` testados):
+    fora do contexto React de request a memo seria global e
+    contaminaria os testes com client injetável. Wrappers vivem do
+    lado de apresentação/páginas.
+- `/sitemap.xml`: `force-dynamic` → `revalidate = 3600` (ISR: no
+  build aparece `○ /sitemap.xml 1h 1y`), deixa de consultar a BD a
+  cada request; try/catch degrada de forma controlada para a entrada
+  só-da-home se a BD estiver inacessível no build. `/robots.txt`
+  mantém-se `○`; lista de disallow inalterada
+  (`/admin`, `/api`, `/conta`, `/checkout`, `/carrinho`).
+- Limitação conhecida (documentada, fora do âmbito): nas shells
+  estáticas `○` o cabeçalho reflete as categorias do build (o layout
+  lê a BD no prerender); estudar `revalidate` no layout ou header
+  via API se se tornar relevante em produção.
+
+Ficheiros da etapa 8: novos
+`src/server/catalog-request.ts`, `src/app/seo.ts`; alterados
+`layout.tsx`, `page.tsx`, `produtos/[slug]/page.tsx`,
+`categorias/[slug]/page.tsx`, `checkout/page.tsx`,
+`carrinho/page.tsx`, `sitemap.ts`.
+
+**Validação (2026-10-23):** `npx tsc --noEmit` limpo; `npx vitest
+run` — 1979 testes, 130 ficheiros (+3 skipped); ESLint limpo;
+`next build` **sem avisos**: log 'Checkout cart check failed'
+desapareceu, `/checkout` permanece ƒ, `/api/admin/inventory` ƒ,
+`/sitemap.xml` ○ com revalidate 1h. Trabalho **não commitado** — ver
+`CHECKPOINT.md`.

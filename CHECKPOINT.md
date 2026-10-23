@@ -1,8 +1,8 @@
 ﻿# Checkpoint - 23/10/2026
 
 Ramo:
-design/storefront-foundation (etapas 1-6 commitadas e pushed;
-etapa 7 em progresso)
+design/storefront-foundation (etapas 1-7 commitadas e pushed;
+etapa 8 — polimento final — em progresso, não commitada)
 
 Estado:
 - Etapa 1 — Webhook de pagamento (validação de segurança):
@@ -22,31 +22,48 @@ Estado:
   checkout (expresso end-to-end):
   commitada (2f171fc); ver `knowledge.md` §19.
 - Etapa 7 — Inventário: alertas de stock baixo e correção
-  rápida: **em progresso** (código + testes + gate concluídos;
-  documentação a seguir); ver `knowledge.md` §20.
+  rápida: commitada (2ea2eb7); ver `knowledge.md` §20.
+- Etapa 8 — Polimento final, auditoria de performance e SEO
+  base: **em progresso** (código + gate concluídos; falta
+  commit); ver `knowledge.md` §21.
 
-Alterações não commitadas (`git status`, etapa 7):
-- new: src/server/inventory.ts(+.test.ts)
-  (consulta de stock baixo + updateVariantStock; §13)
-- new: src/app/api/admin/inventory/route.ts(+.test.ts)
-  (GET ?threshold= / PATCH { variantId, stock }; requireAdmin)
-- new: src/components/admin/inventory-alerts.tsx(+.test.tsx)
-  (widget 'Alertas de ruptura' com correção rápida inline)
-- modified: src/app/admin/page.tsx(+.test.tsx)
-  (injeta InventoryAlerts via Promise.all com listLowStockVariants)
-- modified: knowledge.md, CHECKPOINT.md
-  (§20 nova; etapa 6 marcada como commitada 2f171fc)
+Alterações não commitadas (`git status`, etapa 8):
+- new: src/server/catalog-request.ts
+  (getCatalogCategories = cache(listCatalogCategories) — dedupe
+  por request entre layout e páginas)
+- new: src/app/seo.ts
+  (SITE_NAME/SITE_DESCRIPTION + buildPageMetadata: título,
+  descrição, canonical, Open Graph)
+- modified: src/app/layout.tsx
+  (metadataBase/template/OG/Twitter + categorias memoizadas)
+- modified: src/app/page.tsx
+  (metadata da home com absoluteTitle + og:image hero)
+- modified: src/app/produtos/[slug]/page.tsx
+  (generateMetadata por produto + leitura única via cache)
+- modified: src/app/categorias/[slug]/page.tsx
+  (generateMetadata por categoria, canonical sem filtros)
+- modified: src/app/checkout/page.tsx
+  (dynamic = 'force-dynamic' — resolve DYNAMIC_SERVER_USAGE
+  — e título 'Finalizar compra')
+- modified: src/app/carrinho/page.tsx (título 'Carrinho de compras')
+- modified: src/app/sitemap.ts
+  (force-dynamic → revalidate = 3600 + fallback só-da-home)
 
 Validações concluídas (2026-10-23):
 - Typecheck passou (tsc --noEmit)
 - 1979 testes a passar (130 ficheiros) + 3 skipped (vitest run)
 - ESLint passou (0 avisos)
-- Build de produção passou
-  (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é pré-existente;
-  `/api/admin/inventory` agora no mapa de rotas ƒ)
-- Sem alteração de schema (sem migração)
+- Build de produção SEM avisos:
+  - log 'Checkout cart check failed' / DYNAMIC_SERVER_USAGE
+    já não aparece; /checkout permanece ƒ (por sessão)
+  - /sitemap.xml passou a prerender com ISR de 1h (1h 1y)
+  - /api/admin/inventory permanece no mapa de rotas ƒ
+- Sem migração; sem novos testes (metadados cobertos pelo build)
+
+Fase de fundação da vitrine: completa (etapas 1-8) exceto o
+commit da etapa 8.
 
 Próximos passos:
-1. Commitar a etapa 7 em bloco próprio, p.ex.
-   `feat(admin): low stock alerts with inline stock fix`.
-2. Revisão do diff fica ao encargo do utilizador.
+1. Commitar a etapa 8 em bloco próprio, p.ex.
+   `feat(storefront): seo baseline, request dedupe and build polish`.
+2. Abrir PR de `design/storefront-foundation` para `main`.

@@ -7,7 +7,11 @@ import {
 import './globals.css'
 import Providers from './providers'
 import SiteHeader from './site-header'
-import { listCatalogCategories } from '@/server/catalog'
+import {
+  SITE_DESCRIPTION,
+  SITE_NAME,
+} from './seo'
+import { getCatalogCategories } from '@/server/catalog-request'
 import { getCommercialSettings } from '@/server/commercial-settings'
 import {
   isStorefrontCategoryVisible,
@@ -24,16 +28,56 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+/**
+ * Base de URLs para metadataBase (Open Graph, canonical) a partir do
+ * NEXTAUTH_URL — a mesma convenção de robots.ts/sitemap.ts. O try/
+ * catch evita que um valor inválido no env rebente com o build.
+ */
+function getMetadataBaseUrl() {
+  try {
+    return new URL(
+      (
+        process.env.NEXTAUTH_URL ??
+        'http://localhost:3000'
+      ).replace(/\/+$/, ''),
+    )
+  } catch {
+    return new URL('http://localhost:3000')
+  }
+}
+
+/**
+ * SEO base: título com template ('%s | PFAUTOPARTS' nas páginas
+ * filho), descrição e defaults de Open Graph/Twitter. Páginas com
+ * metadados próprios substituem o openGraph — os cards do Twitter
+ * herdam do Open Graph resolvido.
+ */
 export const metadata: Metadata = {
-  title: 'PFAUTOPARTS',
-  description:
-    'Jantes premium, suspensões, body-kits e personalização automóvel.',
+  metadataBase: getMetadataBaseUrl(),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: 'website',
+    locale: 'pt_PT',
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: '/',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
 }
 
 async function getHeaderCategories() {
   try {
     const categories =
-      await listCatalogCategories()
+      await getCatalogCategories()
 
     const commercialCategories =
       sortStorefrontCategories(

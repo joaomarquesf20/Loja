@@ -1,17 +1,20 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
+import { buildPageMetadata } from '@/app/seo'
 import {
   isStorefrontCategoryVisible,
   sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
 import { getCategoryFilterProfile } from '@/lib/storefront-category-profile'
 import {
-  getCatalogCategoryPageBySlug,
   getCatalogProductBySlug,
-  listCatalogCategories,
+  getCatalogCategoryPageBySlug,
 } from '@/server/catalog'
+import { getCatalogCategories } from '@/server/catalog-request'
 import { listProductCompatibilities } from '@/server/product-compatibilities'
 import CompatibilityAnchorLink from './compatibility-anchor-link'
 import ProductGallery from './product-gallery'
@@ -29,6 +32,48 @@ type ProductPageProps = {
   }>
 }
 
+/**
+ * Leitura do produto memoizada por pedido: `generateMetadata` e a
+ * página partilham a mesma consulta em vez de duplicarem o fetch.
+ */
+const getCatalogProductPerRequest = cache(
+  getCatalogProductBySlug,
+)
+
+export async function generateMetadata({
+  params,
+}: ProductPageProps): Promise<Metadata> {
+  const { slug } = await params
+
+  const product =
+    await getCatalogProductPerRequest(
+      slug,
+    )
+
+  if (!product) {
+    return {
+      title: 'Produto não encontrado',
+      robots: { index: false },
+    }
+  }
+
+  const productDescription =
+    product.description?.trim()
+
+  const metadataDescription =
+    productDescription &&
+    productDescription.length > 0
+      ? productDescription.slice(0, 300)
+      : `Vê preço, disponibilidade e aplicações de ${product.name} (${product.sku}) na PFAUTOPARTS.`
+
+  return buildPageMetadata({
+    title: product.name,
+    description: metadataDescription,
+    path: `/produtos/${product.slug}`,
+    image: product.images[0],
+  })
+}
+
 type ProductCompatibility =
   Awaited<
     ReturnType<
@@ -38,7 +83,7 @@ type ProductCompatibility =
 
 function getFooterCategories(
   categories: Awaited<
-    ReturnType<typeof listCatalogCategories>
+    ReturnType<typeof getCatalogCategories>
   >,
 ) {
   const commercial =
@@ -168,7 +213,9 @@ export default async function ProductPage({
   const { slug } = await params
 
   const product =
-    await getCatalogProductBySlug(slug)
+    await getCatalogProductPerRequest(
+      slug,
+    )
 
   if (!product) {
     notFound()
@@ -193,7 +240,7 @@ export default async function ProductPage({
     compatibilities,
     categoryPage,
   ] = await Promise.all([
-    listCatalogCategories(),
+    getCatalogCategories(),
     showsVehicleCompatibility
       ? listProductCompatibilities(
           product.id,

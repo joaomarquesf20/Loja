@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import BrandCard from '@/components/storefront/brand-card'
 import CategoryCard from '@/components/storefront/category-card'
 import EditorialCard from '@/components/storefront/editorial-card'
@@ -10,11 +11,12 @@ import {
   sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
 import {
-  listCatalogCategories,
   listCatalogProducts,
   type CatalogCategory,
   type CatalogProduct,
 } from '@/server/catalog'
+import { getCatalogCategories } from '@/server/catalog-request'
+import { buildPageMetadata } from './seo'
 
 export const dynamic =
   'force-dynamic'
@@ -27,6 +29,18 @@ type HomeProps = {
 
 const HERO_IMAGE =
   'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=88'
+
+export const metadata: Metadata = buildPageMetadata(
+  {
+    title:
+      'PFAUTOPARTS — Jantes, suspensões e body-kits',
+    description:
+      'Jantes premium, suspensões, body-kits e personalização automóvel, com pesquisa por veículo e stock em tempo real.',
+    path: '/',
+    image: HERO_IMAGE,
+    absoluteTitle: true,
+  },
+)
 
 function firstProductImage(
   products: CatalogProduct[],
@@ -158,7 +172,7 @@ export default async function Home({
     await Promise.all([
       searchParams,
       listCatalogProducts(),
-      listCatalogCategories(),
+      getCatalogCategories(),
     ])
 
   const normalizedQuery =

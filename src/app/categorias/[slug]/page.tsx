@@ -1,10 +1,12 @@
 import Link from 'next/link'
+import type { Metadata } from 'next'
 import {
   notFound,
   redirect,
 } from 'next/navigation'
 import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
+import { buildPageMetadata } from '@/app/seo'
 import {
   isStorefrontCategoryVisible,
   sortStorefrontCategories,
@@ -12,11 +14,11 @@ import {
 import {
   getCatalogCategoryFacetsBySlug,
   getCatalogCategoryPageBySlug,
-  listCatalogCategories,
   type CatalogBrandFacet,
   type CatalogCategoryFacets,
   type CatalogVehicleMakeFacet,
 } from '@/server/catalog'
+import { getCatalogCategories } from '@/server/catalog-request'
 import CategorySortControl from './category-sort-control'
 import {
   getBrandFilterLabel,
@@ -50,6 +52,48 @@ import FilterGroup, {
 import MobileFilterDrawer from './mobile-filter-drawer'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Metadados pela categoria base (sem filtros): o canonical da URL
+ * filtrada aponta para a categoria limpa e a leitura usa a mesma
+ * leitura memoizada por request da página (uma consulta ao total).
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{
+    slug: string
+  }>
+}): Promise<Metadata> {
+  const { slug } = await params
+
+  const categories =
+    await getCatalogCategories()
+
+  const category = categories.find(
+    (item) => item.slug === slug,
+  )
+
+  if (!category) {
+    return {
+      title: 'Categoria não encontrada',
+      robots: { index: false },
+    }
+  }
+
+  const categoryDescription =
+    category.description?.trim() ||
+    getCategorySupportCopy(
+      category.name,
+      category.slug,
+    )
+
+  return buildPageMetadata({
+    title: category.name,
+    description: categoryDescription,
+    path: `/categorias/${category.slug}`,
+  })
+}
 
 type CategoryPageProps = {
   params: Promise<{
@@ -118,7 +162,7 @@ function getCategorySupportCopy(
 
 function getFooterCategories(
   categories: Awaited<
-    ReturnType<typeof listCatalogCategories>
+    ReturnType<typeof getCatalogCategories>
   >,
 ) {
   const commercial =
@@ -833,7 +877,7 @@ export default async function CategoryPage({
         slug,
         requestedCatalogFilters,
       ),
-      listCatalogCategories(),
+      getCatalogCategories(),
     ])
 
   if (!result || !facets) {
