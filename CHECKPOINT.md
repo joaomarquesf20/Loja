@@ -65,3 +65,74 @@ Próximos passos (pós-épico):
 - Desenhar e executar o próximo bloco do roadmap a partir de
   `main` (nova branch de fases).
 - Registar no `knowledge.md` novas secções por etapa nova.
+
+---
+
+# Checkpoint - 24/10/2026 — Epic 2: Vehicle Search
+
+Épico: Vehicle Search
+Etapa 1-2 — Database Schema and Migration: **COMPLETA** (não
+commitada; em `master` @ `7e6ba79` + trabalho novo sem commit).
+
+Estado:
+- `prisma/schema.prisma`: adicionado o modelo M2M
+  `ProductVariantVehicleCompatibility`
+  (`productVariantId` + `vehicleConfigurationId`, FKs com
+  `onDelete: Cascade`, `@@unique` composto e índice), com as
+  relações `ProductVariant.vehicleCompatibilities` e
+  `VehicleConfiguration.variantCompatibilities`. Reutilizada a
+  hierarquia existente (`VehicleBrand`/`VehicleModel`/
+  `VehicleGeneration`/`VehicleConfiguration`) — não foi criada uma
+  segunda hierarquia Make/Engine (nomes do cliente: `VehicleBrand`
+  ≙ make; `VehicleConfiguration` ≙ engine, com `engineCode`,
+  `displacementCc`, `powerKw`, `bodyType`, `yearFrom`/`yearTo`).
+- Reparação incidental: linha em branco restaurada em
+  `model Product` entre `createdAt` e o bloco `@@index` (dano
+  deixado por edição interrompida anterior).
+- Migração aplicada: `20261024145434_add_vehicle_compatibility`
+  (25 em `prisma/migrations`; `migrate status`: schema up to date).
+- Seed idempotente: `scripts/seed-vehicle-fits.mjs`
+  (npm: `npm run dev:vehicles:seed`):
+  - Opel / Corsa B / 1993-2000 com configurações
+    "1.5 TD Sport" (X15DT) e "1.5 TD" (4EC1-T), ambos
+    1488cc/50kW/3-door hatchback/1994→2000 — os dois códigos do
+    motor entram como configurações irmãs (1 código por
+    configuração, lookups por igualdade continuam a funcionar);
+  - BMW / Série 1 (reutilizado o modelo admin `serie-1`) /
+    geração F20 com configuração "116d" (N47D20C1, 1995cc,
+    85kW, 2011→2015);
+  - Ligações M2M criadas:
+    `BM-2-44-MPACK-SD1G` (difusor BMW real) → 116d F20;
+    `bicos` → Corsa B 1.5 TD Sport.
+- Doubles: `src/server/variant-vehicle-compatibility.test.ts`
+  ("Pick<PrismaClient, 'productVariant' |
+  'productVariantVehicleCompatibility'>" + shape
+  variante→configuração→geração→modelo→marca via fakes). Sem
+  `__mocks__` no projeto: os doubles da casa são Typed `Pick`
+  por serviço (§13); o novo modelo já está coberto.
+- Gate: `tsc --noEmit` limpo; 1981 testes a passar
+  (132 ficheiros: 131 + 1 skipped) + 3 skipped pré-existentes.
+
+Lições desta etapa (para `knowledge.md`):
+- `migrate dev` do Prisma 7 (com `prisma.config.ts`) NÃO corre
+  `prisma generate` — o accessor novo ficou `undefined` no seed
+  até `npx prisma generate` manual.
+- Checksums em `_prisma_migrations` = SHA-256 dos bytes do
+  `migration.sql` (verificado em 3 migrações de controlo).
+  Migração aplicada com conteúdo diferente do ficheiro (fixes
+  cutover `5aea435`/`9c1870d`/`36d7420`) ⇒ "modified after it was
+  applied" e reset proposto. Resolvido SEM reset/perda de dados
+  sincronizando o checksum do registo para o ficheiro atual
+  (UPDATE bookkeeping; equivalente ao `migrate resolve --applied`,
+  bloqueado por P3008).
+- Regra de segurança: `migrate reset` é proibido em BDs com
+  dados reais; investigar sempre com `git log` do
+  `migration.sql` + hashes antes de qualquer resolução.
+
+Próximos passos (pós-etapa):
+- Etapa 3 do épico: API de pesquisa de veículos (filtros por
+  marca/modelo/geração/configuração) e serviços correspondentes
+  (reutilizar o padrão de clientes Typed de §13).
+- Commit do épico quando o utilizador pedir (ficheiros: schema,
+  migração, seed, teste de doubles, package.json npm script).
+

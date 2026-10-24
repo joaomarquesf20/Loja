@@ -81,9 +81,9 @@ model User {
   failedLoginAttempts        Int              @default(0)
   failedLoginWindowStartedAt DateTime?
   loginBlockedUntil          DateTime?
-  addresses                  Address[]       @relation("UserAddresses")
-  defaultAddressId           String?         @unique
-  defaultAddress             Address?        @relation("UserDefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull)
+  addresses                  Address[]        @relation("UserAddresses")
+  defaultAddressId           String?          @unique
+  defaultAddress             Address?         @relation("UserDefaultAddress", fields: [defaultAddressId], references: [id], onDelete: SetNull)
   cartItems                  CartItem[]
   guestCartMerges            GuestCartMerge[]
   orders                     Order[]
@@ -128,7 +128,7 @@ model VehicleGeneration {
 }
 
 model VehicleConfiguration {
-  id                     String                        @id @default(cuid())
+  id                     String                               @id @default(cuid())
   generationId           String
   name                   String
   engineCode             String?
@@ -138,8 +138,9 @@ model VehicleConfiguration {
   bodyType               String?
   yearFrom               Int?
   yearTo                 Int?
-  generation             VehicleGeneration             @relation(fields: [generationId], references: [id])
+  generation             VehicleGeneration                    @relation(fields: [generationId], references: [id])
   productCompatibilities ProductVehicleCompatibility[]
+  variantCompatibilities ProductVariantVehicleCompatibility[]
 }
 
 model Category {
@@ -185,7 +186,7 @@ model Product {
   variants        ProductVariant[]
   options         ProductOption[]
   imageMetadata   ProductImage[]
-  createdAt       DateTime                       @default(now())
+  createdAt       DateTime                      @default(now())
 
   @@index([categoryId])
   @@index([shippingClass])
@@ -193,22 +194,23 @@ model Product {
 }
 
 model ProductVariant {
-  id             String                          @id @default(cuid())
-  productId      String
-  sku            String                          @unique
-  supplierSku    String?
-  price          Decimal                         @db.Decimal(10, 2)
-  priceSet       Decimal?                        @db.Decimal(10, 2)
-  stockQuantity  Int                             @default(0)
-  isActive       Boolean                         @default(true)
-  images         String[]
-  position       Int                             @default(0)
-  optionKey      String
-  product        Product                         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  selections     ProductVariantOptionSelection[]
-  specifications ProductVariantSpecification[]
-  cartItems      CartItem[]
-  orderItems     OrderItem[]
+  id                     String                               @id @default(cuid())
+  productId              String
+  sku                    String                               @unique
+  supplierSku            String?
+  price                  Decimal                              @db.Decimal(10, 2)
+  priceSet               Decimal?                             @db.Decimal(10, 2)
+  stockQuantity          Int                                  @default(0)
+  isActive               Boolean                              @default(true)
+  images                 String[]
+  position               Int                                  @default(0)
+  optionKey              String
+  product                Product                              @relation(fields: [productId], references: [id], onDelete: Cascade)
+  selections             ProductVariantOptionSelection[]
+  specifications         ProductVariantSpecification[]
+  cartItems              CartItem[]
+  orderItems             OrderItem[]
+  vehicleCompatibilities ProductVariantVehicleCompatibility[]
 
   @@unique([productId, optionKey])
   @@index([productId, position])
@@ -229,13 +231,13 @@ model ProductOption {
 }
 
 model ProductOptionValue {
-  id         String                          @id @default(cuid())
-  optionId   String
-  value      String
-  position   Int                             @default(0)
-  option     ProductOption                   @relation(fields: [optionId], references: [id], onDelete: Cascade)
-  selections ProductVariantOptionSelection[]
-  productImages ProductImage[]                 @relation("ProductImageFinishValue")
+  id            String                          @id @default(cuid())
+  optionId      String
+  value         String
+  position      Int                             @default(0)
+  option        ProductOption                   @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  selections    ProductVariantOptionSelection[]
+  productImages ProductImage[]                  @relation("ProductImageFinishValue")
 
   @@unique([optionId, value])
   @@unique([id, optionId])
@@ -243,15 +245,15 @@ model ProductOptionValue {
 }
 
 model ProductImage {
-  id            String               @id @default(cuid())
+  id            String              @id @default(cuid())
   productId     String
   url           String
   altText       String?
-  sortOrder     Int                  @default(0)
-  isPrimary     Boolean              @default(false)
+  sortOrder     Int                 @default(0)
+  isPrimary     Boolean             @default(false)
   finishValueId String?
-  product       Product              @relation(fields: [productId], references: [id], onDelete: Cascade)
-  finishValue   ProductOptionValue?  @relation("ProductImageFinishValue", fields: [finishValueId], references: [id], onDelete: SetNull)
+  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  finishValue   ProductOptionValue? @relation("ProductImageFinishValue", fields: [finishValueId], references: [id], onDelete: SetNull)
 
   @@index([productId, sortOrder])
   @@index([finishValueId])
@@ -300,6 +302,17 @@ model ProductVehicleCompatibility {
   @@index([productId])
   @@index([vehicleBrandId, vehicleModelId])
   @@index([vehicleGenerationId])
+  @@index([vehicleConfigurationId])
+}
+
+model ProductVariantVehicleCompatibility {
+  id                     String               @id @default(cuid())
+  productVariantId       String
+  vehicleConfigurationId String
+  variant                ProductVariant       @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
+  vehicleConfiguration   VehicleConfiguration @relation(fields: [vehicleConfigurationId], references: [id], onDelete: Cascade)
+
+  @@unique([productVariantId, vehicleConfigurationId])
   @@index([vehicleConfigurationId])
 }
 
@@ -430,8 +443,8 @@ model Order {
   items                   OrderItem[]
   events                  OrderEvent[]
 
-  @@index([orderNumber])
   @@unique([paymentProvider, paymentReference])
+  @@index([orderNumber])
 }
 
 model OrderItem {
@@ -457,40 +470,44 @@ model OrderItem {
 }
 
 model OrderEvent {
-  id                String          @id @default(cuid())
+  id                String         @id @default(cuid())
   orderId           String
   type              OrderEventType
   fromOrderStatus   OrderStatus?
   toOrderStatus     OrderStatus?
   fromPaymentStatus PaymentStatus?
   toPaymentStatus   PaymentStatus?
-  createdAt         DateTime        @default(now())
-  order             Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now())
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId, createdAt])
 }
 
 model ProductImport {
-  id               String    @id @default(cuid())
-  fileName         String
-  mode             String
-  failureMode      String    @default("abort")
-  status           String
-  startedAt        DateTime  @default(now())
-  finishedAt       DateTime?
-  createdBy        String?
-  createdProducts  Int       @default(0)
-  updatedProducts  Int       @default(0)
-  createdVariants  Int       @default(0)
-  updatedVariants  Int       @default(0)
-  /** Imagens novas criadas pelo import. */
-  createdImages    Int       @default(0)
-  /** Imagens já existentes e reutilizadas (dedupe por produto+finish+URL). */
-  matchedImages    Int       @default(0)
-  errorCount       Int       @default(0)
-  errors           Json      @default("[]")
-  warnings         Json      @default("[]")
-  changes          Json      @default("[]")
+  id              String    @id @default(cuid())
+  fileName        String
+  mode            String
+  failureMode     String    @default("abort")
+  status          String
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  createdBy       String?
+  createdProducts Int       @default(0)
+  updatedProducts Int       @default(0)
+  createdVariants Int       @default(0)
+  updatedVariants Int       @default(0)
+  /**
+   * Imagens novas criadas pelo import.
+   */
+  createdImages   Int       @default(0)
+  /**
+   * Imagens já existentes e reutilizadas (dedupe por produto+finish+URL).
+   */
+  matchedImages   Int       @default(0)
+  errorCount      Int       @default(0)
+  errors          Json      @default("[]")
+  warnings        Json      @default("[]")
+  changes         Json      @default("[]")
 
   @@index([startedAt])
 }

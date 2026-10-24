@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "dev:catalog:seed": "node --env-file=.env scripts/storefront-dev-data.mjs seed",
-    "dev:catalog:clear": "node --env-file=.env scripts/storefront-dev-data.mjs clear"
+    "dev:catalog:clear": "node --env-file=.env scripts/storefront-dev-data.mjs clear",
+    "dev:vehicles:seed": "node --env-file=.env scripts/seed-vehicle-fits.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
