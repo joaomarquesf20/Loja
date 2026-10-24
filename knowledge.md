@@ -1075,3 +1075,80 @@ testes, 130 ficheiros (+3 skipped); ESLint limpo (0 avisos);
 são por role/texto). Trabalho
 commitado como `feat(storefront): light technical redesign — palette,
 header search, home grid, catalog re-skin`.
+
+## 23. Épico 2 — Vehicle Search & Compatibilidade: arquitetura e lições (tarefa de 2026-10-24)
+
+Épico completo nos quatro commits de `master`: `253ca7c`
+(schema/migração/seed + doubles de variantes), `de81fe1`
+(serviço de pesquisa + 4 rotas públicas) e `54fa106`
+(selector de veículo, persistência e filtros na vitrine;
++ 2 rotas de compatibilidade). Gate final: tsc limpo; 2062
+testes (142 ficheiros + 1 skipped) + 3 skipped; lint limpo;
+build limpo com `/api/vehicles/...` (ƒ) no route map e
+sitemap ○ 1h.
+
+**Prisma Migration Safety** — quando `migrate dev` bloqueia
+com "modified after it was applied" por migrações editadas
+depois de aplicadas (caso
+`20260921143000_move_cart_orders_to_variants`, alterada pelos
+fixes `5aea435`/`9c1870d`/`36d7420`), a recuperação é
+sincronizar o campo `checksum` diretamente na tabela
+`_prisma_migrations`: SHA-256 dos bytes do `migration.sql`
+atual (UPDATE apenas bookkeeping, equivalente a
+`migrate resolve --applied`, sem perda de dados). `migrate
+reset` é proibido em bases de dados com dados reais; antes de
+qualquer resolução, investigar com `git log` do ficheiro de
+migração e validar hashes em migrações de controlo. A notar
+também: `migrate dev` no Prisma 7 (com `prisma.config.ts`)
+NÃO corre `prisma generate` — accessor novo (M2M de
+variante↔configuração) fica `undefined` até `npx prisma
+generate` manual.
+
+**SSR-Safe Persistence** — estado de sessão client persistido
+(veículo selecionado: chave `pfa-veiculo` no localStorage com
+evento DOM custom `pfa-veiculo-mudou` + evento `storage`) usa
+`useSyncExternalStore`, não leitura em `useEffect` + `useState`
+(padrão antigo: setState síncrono no corpo do efeito —
+proibido pelo lint `react-hooks/set-state-in-effect` e gerador
+de cascading renders/hydration mismatch). Requisitos do
+encaixe: `getServerSnapshot` → null (seguro em SSR) e snapshot
+com identidade estável entre renders — cache pela string crua
+de storage (`getItem` em cada chamada, re-parse só quando
+muda: invalida-se automaticamente mesmo com mutações
+externas, outros tabs/testes). Para fetches derivados desse
+estado (badge de ficha, wrapper da grelha), guardar
+`{ configurationId, ...resultado }` num único state e derivar
+o modo "a verificar" por comparação de ids — `setState`
+exclusivamente dentro de callbacks async.
+
+**M2M Catalog Filtering** — compatibilidade ao nível de SKU
+numa junção dedicada `ProductVariantVehicleCompatibility`
+(`productVariantId` + `vehicleConfigurationId`, FKs
+`onDelete: Cascade`, `@@unique` composto + índice), ligando
+variantes a configurações exactas (≙ código do motor, com
+`engineCode`/`displacementCc`/`powerKw`/anos), sem duplicar a
+hierarquia existente (`VehicleBrand` ≙ make; `VehicleModel`
+≙ model; `VehicleGeneration` intermédia). Consultas
+desacopladas no serviço `src/server/vehicle-search.ts` (§13:
+cliente injetável `Pick`, erros de domínio, validação antes
+das leituras): a cascata do selector (`listVehicleMakes` →
+`listVehicleModelOptions` → `listVehicleGenerationOptions`) e
+os filtros de compatibilidade
+(`findCompatibleProductsForVehicleConfiguration` — união das
+fontes M2M de variante + linhas `ProductVehicleCompatibility`
+ao nível do produto (gestão admin), dedup por produto e
+ordenação determinística por `slug` em `pt-PT`;
+`getProductVehicleCompatibility`) alimentam 6 rotas
+`/api/vehicles/...` com 400/404/500 mapeados. Na vitrine, o
+filtro por configuração é client-side (localStorage +
+eventos) e compõe por cima do filtro veicular server-side da
+categoria por URL (`make`/`model`/`generation`), sem alterar
+esse sistema. **Fail-open** sempre: o wrapper mostra nota de
+erro e devolve o catálogo completo; o badge de compatibilidade
+é silencioso em 4xx/erro de rede — a loja nunca fica vazia
+por causa da verificação de compatibilidade. Fixtures
+(seed idempotente, `npm run dev:vehicles:seed`): Opel Corsa B
+1993-2000 ("1.5 TD Sport" X15DT + "1.5 TD" 4EC1-T,
+1488cc/50kW/1994→2000), BMW Série 1 F20 116d (N47D20C1,
+1995cc/85kW/2011→2015); ligações
+`BM-2-44-MPACK-SD1G` → 116d e `bicos` → 1.5 TD Sport.
