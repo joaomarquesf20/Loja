@@ -130,9 +130,65 @@ Lições desta etapa (para `knowledge.md`):
   `migration.sql` + hashes antes de qualquer resolução.
 
 Próximos passos (pós-etapa):
-- Etapa 3 do épico: API de pesquisa de veículos (filtros por
-  marca/modelo/geração/configuração) e serviços correspondentes
-  (reutilizar o padrão de clientes Typed de §13).
 - Commit do épico quando o utilizador pedir (ficheiros: schema,
   migração, seed, teste de doubles, package.json npm script).
+
+---
+
+# Checkpoint - 24/10/2026 — Epic 2: Vehicle Search (cont.)
+
+Etapa 3 — Vehicle Search API & Services: **COMPLETA** (não
+commitada; commit da base schema/seed feito em `253ca7c` e
+pushed para `master`).
+
+- Serviço: `src/server/vehicle-search.ts` (§13: cliente
+  injetável via `Pick<PrismaClient, 'vehicleBrand' |
+  'vehicleModel' | 'vehicleGeneration' |
+  'vehicleConfiguration' |
+  'productVariantVehicleCompatibility'>`, erros de domínio
+  `ValidationError`/`NotFoundError`, validação antes das
+  leituras). Funções:
+  - `listVehicleMakes` — marcas ordenadas por nome;
+  - `listVehicleModelOptions(makeSlug)` — modelos por
+    slug da marca (slug global da marca via `@unique`;
+    404 se não existir; marca sem modelos devolve `[]`);
+  - `listVehicleGenerationOptions(modelSlug)` — gerações
+    com configurações aninhadas vía `findFirst` por slug
+    (`@@unique([brandId, slug])` não garante unicidade
+    global — `findFirst` ordenado por marca é
+    determinístico);
+  - `findCompatibleVariantsForVehicleConfiguration(id)`
+    — ligações M2M variant→config com `where` embutido
+    (só variantes ativas de produtos ativos), ordering
+    composto (nome do produto, posição da variante);
+    404 se a configuração não existir; mapeia
+    `link.variant` e usa `compatibleVariantSelect`
+    (`satisfies Prisma.ProductVariantSelect`).
+- Rotas públicas (todas dinâmicas no route map):
+  - GET `/api/vehicles/makes`
+  - GET `/api/vehicles/makes/[makeSlug]/models`
+  - GET `/api/vehicles/models/[modelSlug]/generations`
+  - GET `/api/vehicles/configurations/[configurationId]/variants`
+  Cada rota com `handleError` local (Validation → 400
+  genérico, NotFound → 404 com mensagem, inesperado → 500 +
+  `console.error` com tag própria).
+- Testes: `src/server/vehicle-search.test.ts` (12 testes:
+  happy paths, 400/404/500 por consulta, where/order/select
+  exatos, listas vazias de marca/modelo/config sem
+  ligações) + 4 `route.test.ts` co-localizados (14 testes,
+  mocks do serviço com classes de erro locais).
+- Gate: `tsc --noEmit` limpo; `vitest run`: **2007 passed**
+  (137 ficheiros: 136 + 1 skipped) + 3 skipped;
+  `npm run lint` limpo; `npm run build` limpo com sitemap
+  ISR intacto (○ 1h). Nota: `Prisma.Decimal` (não
+  `Prisma.DecimalValue`) é o tipo de `powerKw`/`price` no
+  client gerado do Prisma 7; route mocks usam cast único
+  `as unknown as <tipo exportado>` para literais com
+  Decimal.
+
+Next steps (pós-etapa 3): commit da etapa 3 quando o
+utilizador pedir; seguinte: integração no storefront
+(seletor de veículo na ficha de produto/listagem usando as
+novas rotas).
+
 
