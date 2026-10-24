@@ -4,6 +4,7 @@ import BrandCard from '@/components/storefront/brand-card'
 import CategoryCard from '@/components/storefront/category-card'
 import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
+import VehicleSelector from '@/components/storefront/vehicle-selector'
 import {
   getStorefrontCategoryImage,
   isStorefrontCategoryVisible,
@@ -270,6 +271,37 @@ export default async function Home({
 
   return (
     <main className="flex-1 bg-gray-50 text-gray-900">
+      <section
+        id="teu-veiculo"
+        aria-labelledby="vehicle-heading"
+        className="scroll-mt-36 border-b border-gray-200 bg-white"
+      >
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
+            O teu veículo
+          </p>
+
+          <h2
+            id="vehicle-heading"
+            className="mt-1.5 text-xl font-black tracking-[-0.025em] sm:text-2xl"
+          >
+            Pesquisa por veículo
+          </h2>
+
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
+            Escolhe a marca, o modelo e a
+            configuração do teu carro.
+            Guardamos a tua escolha no
+            navegador para mostrar apenas as
+            peças compatíveis.
+          </p>
+
+          <div className="mt-5">
+            <VehicleSelector />
+          </div>
+        </div>
+      </section>
+
       {categoryCards.length > 0 && (
         <section
           id="categorias"

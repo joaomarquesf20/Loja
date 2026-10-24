@@ -24,6 +24,8 @@ export type VehicleSearchClient =
     | 'vehicleGeneration'
     | 'vehicleConfiguration'
     | 'productVariantVehicleCompatibility'
+    | 'productVehicleCompatibility'
+    | 'product'
   >
 
 export class ValidationError extends Error {
@@ -252,6 +254,7 @@ export async function listVehicleGenerationOptions(
  * (ligações M2M ProductVariantVehicleCompatibility). Só
  * devolve variantes ativas de produtos ativos.
  */
+
 export async function findCompatibleVariantsForVehicleConfiguration(
   configurationId: string,
   client?: VehicleSearchClient,
@@ -305,4 +308,197 @@ export async function findCompatibleVariantsForVehicleConfiguration(
     )
 
   return links.map((link) => link.variant)
+}
+
+export type VehicleCompatibleProductSummary =
+  {
+    id: string
+    slug: string
+  }
+
+/**
+ * Produtos compatíveis com uma configuração de veículo,
+ * pela união das duas fontes de compatibilidade: as
+ * ligações M2M variante↔configuração e as linhas de
+ * compatibilidade ao nível do produto (gestão admin).
+ * Deduplicado por produto e ordenado por slug.
+ */
+export async function findCompatibleProductsForVehicleConfiguration(
+  configurationId: string,
+  client?: VehicleSearchClient,
+): Promise<VehicleCompatibleProductSummary[]> {
+  const id = validateConfigurationId(
+    configurationId,
+  )
+  const db = getClient(client)
+
+  const vehicleConfiguration =
+    await db.vehicleConfiguration.findUnique({
+      where: { id },
+      select: { id: true },
+    })
+
+  if (!vehicleConfiguration) {
+    throw new NotFoundError(
+      'Configuração do veículo não encontrada',
+    )
+  }
+
+  const [variantLinks, productLinks] =
+    await Promise.all([
+      db.productVariantVehicleCompatibility.findMany(
+        {
+          where: {
+            vehicleConfigurationId: id,
+            variant: {
+              isActive: true,
+              product: {
+                isActive: true,
+              },
+            },
+          },
+          select: {
+            variant: {
+              select: {
+                product: {
+                  select: {
+                    id: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      ),
+      db.productVehicleCompatibility.findMany(
+        {
+          where: {
+            vehicleConfigurationId: id,
+            product: {
+              isActive: true,
+            },
+          },
+          select: {
+            product: {
+              select: {
+                id: true,
+                slug: true,
+              },
+            },
+          },
+        },
+      ),
+    ])
+
+  const productsById = new Map<
+    string,
+    VehicleCompatibleProductSummary
+  >()
+
+  for (const link of variantLinks) {
+    productsById.set(
+      link.variant.product.id,
+      link.variant.product,
+    )
+  }
+
+  for (const link of productLinks) {
+    productsById.set(
+      link.product.id,
+      link.product,
+    )
+  }
+
+  return Array.from(productsById.values()).sort(
+    (first, second) =>
+      first.slug.localeCompare(second.slug, 'pt-PT'),
+  )
+}
+
+export type VehicleCompatibilityStatus = {
+  configurationId: string
+  compatible: boolean
+}
+
+/**
+ * Estado de compatibilidade de um produto com uma
+ * configuração de veículo (mesma união de fontes):
+ * variante ligada por M2M ou compatibilidade de
+ * produto. Erros de domínio para produto/configuração
+ * inexistentes.
+ */
+export async function getProductVehicleCompatibility(
+  productSlug: string,
+  configurationId: string,
+  client?: VehicleSearchClient,
+): Promise<VehicleCompatibilityStatus> {
+  const slug = validateSlug(
+    productSlug,
+    'Produto é obrigatório',
+  )
+  const id = validateConfigurationId(
+    configurationId,
+  )
+  const db = getClient(client)
+
+  const [
+    vehicleConfiguration,
+    product,
+  ] = await Promise.all([
+    db.vehicleConfiguration.findUnique({
+      where: { id },
+      select: { id: true },
+    }),
+    db.product.findUnique({
+      where: { slug },
+      select: { id: true },
+    }),
+  ])
+
+  if (!vehicleConfiguration) {
+    throw new NotFoundError(
+      'Configuração do veículo não encontrada',
+    )
+  }
+
+  if (!product) {
+    throw new NotFoundError(
+      'Produto não encontrado',
+    )
+  }
+
+  const [
+    variantLink,
+    productLink,
+  ] = await Promise.all([
+    db.productVariantVehicleCompatibility.findFirst(
+      {
+        where: {
+          vehicleConfigurationId: id,
+          variant: {
+            productId: product.id,
+            isActive: true,
+          },
+        },
+        select: { id: true },
+      },
+    ),
+    db.productVehicleCompatibility.findFirst(
+      {
+        where: {
+          productId: product.id,
+          vehicleConfigurationId: id,
+        },
+        select: { id: true },
+      },
+    ),
+  ])
+
+  return {
+    configurationId: id,
+    compatible: Boolean(
+      variantLink ?? productLink,
+    ),
+  }
 }

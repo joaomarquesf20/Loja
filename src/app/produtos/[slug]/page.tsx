@@ -4,6 +4,7 @@ import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
+import VehicleCompatibilityBadge from '@/components/storefront/vehicle-compatibility-badge'
 import { buildPageMetadata } from '@/app/seo'
 import {
   isStorefrontCategoryVisible,
@@ -501,6 +502,12 @@ export default async function ProductPage({
                 {product.sku}
               </span>
             </p>
+
+            <div className="mt-4">
+              <VehicleCompatibilityBadge
+                productSlug={product.slug}
+              />
+            </div>
 
             {compatibilityPreview && (
               <div className="mt-6 border-l-2 border-brand pl-4">

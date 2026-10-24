@@ -4,8 +4,8 @@ import {
   notFound,
   redirect,
 } from 'next/navigation'
-import ProductCard from '@/components/storefront/product-card'
 import StorefrontFooter from '@/components/storefront/storefront-footer'
+import VehicleCompatibleProducts from '@/components/storefront/vehicle-compatible-products'
 import { buildPageMetadata } from '@/app/seo'
 import {
   isStorefrontCategoryVisible,
@@ -1373,51 +1373,14 @@ export default async function CategoryPage({
               Produtos
             </h2>
 
-            {resultForSelection.length === 0 ? (
-              <div className="border border-gray-200 bg-white px-6 py-12 sm:px-8">
-                <p className="text-xl font-black tracking-tight">
-                  Nenhum produto encontrado
-                </p>
-
-                <p className="mt-2 max-w-lg text-sm leading-6 text-gray-500">
-                  Não existem produtos que
-                  correspondam aos filtros
-                  selecionados. Remove um ou
-                  mais filtros para voltares
-                  a ver esta categoria.
-                </p>
-
-                {hasActiveFilters && (
-                  <Link
-                    href={clearFiltersHref}
-                    className="mt-6 inline-flex rounded-sm bg-brand px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.08em] text-white transition hover:bg-brand-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
-                  >
-                    Remover filtros
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <div
-                className={`grid gap-5 sm:grid-cols-2 ${
-                  resultForSelection.length === 1
-                    ? 'max-w-md'
-                    : resultForSelection.length ===
-                        2
-                      ? 'max-w-3xl'
-                      : 'xl:grid-cols-3'
-                }`}
-              >
-                {resultForSelection.map(
-                  (product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      variant="category"
-                    />
-                  ),
-                )}
-              </div>
-            )}
+            <VehicleCompatibleProducts
+              products={resultForSelection}
+              clearFiltersHref={
+                hasActiveFilters
+                  ? clearFiltersHref
+                  : undefined
+              }
+            />
           </section>
         </div>
       </div>

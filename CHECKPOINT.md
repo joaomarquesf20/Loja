@@ -191,4 +191,159 @@ utilizador pedir; seguinte: integração no storefront
 (seletor de veículo na ficha de produto/listagem usando as
 novas rotas).
 
+---
+
+# Checkpoint - 24/10/2026 — Epic 2: Vehicle Search (cont.)
+
+Etapa 4 — Storefront Vehicle Selector and Compatibility
+Filtering: **COMPLETA** (não commitada) —
+**ÉPICO 2 COMPLETO** (etapas 1–4).
+
+Estado:
+- Serviço (`src/server/vehicle-search.ts`): 2 funções
+  novas sobre a união das duas fontes de
+  compatibilidade (M2M variante↔configuração +
+  linhas de `ProductVehicleCompatibility` ao nível
+  do produto):
+  - `findCompatibleProductsForVehicleConfiguration(id)`
+    — produtos deduplicados por `id`, ordenados por
+    `slug` (locale `pt-PT`), só variantes ativas de
+    produtos ativos; 404 se a configuração não
+    existir;
+  - `getProductVehicleCompatibility(productSlug, id)`
+    — `{ configurationId, compatible }`;
+    validações antes das leituras; NotFoundError
+    para produto/configuração inexistentes.
+  `VehicleSearchClient` Pick estendido com
+  `'productVehicleCompatibility'` e `'product'`.
+- Rotas públicas (co-laboradas com testes):
+  - GET
+    `/api/vehicles/configurations/[configurationId]/products`
+    → `{ products: [{ id, slug }] }`
+  - GET
+    `/api/vehicles/products/[productSlug]/compatibility?configurationId=`
+    → `{ configurationId, compatible }`
+    (parâmetro em falta → 400)
+  Mesmo padrão `handleError` local
+  (400/404/500 + `console.error` com tag).
+- Persistência do veículo selecionado:
+  `src/components/storefront/vehicle-selection.ts`
+  — 'use client' lib com localStorage (chave
+  `pfa-veiculo`), evento DOM custom
+  (`pfa-veiculo-mudou`) + evento `storage`
+  (outros tabs): `readVehicleSelection`/
+  `writeVehicleSelection`/
+  `clearVehicleSelection`/
+  `subscribeVehicleSelection`/
+  `buildVehicleSelectionLabel` ("Opel Corsa B 1.5
+  TD Sport") e hook `useVehicleSelection` cwd
+  `useSyncExternalStore` (snapshot cacheado pela
+  string crua de storage — identidade estável e
+  invalidação automática; `getServerSnapshot` →
+  null, seguro em SSR).
+- Selector em cascata:
+  `vehicle-selector.tsx` (Marca → Modelo →
+  Configuração com `optgroup` por geração),
+  consome os endpoints do passo 3; guarda
+  `configurationId` + etiqueta + slugs da cadeia
+  no storage aquando da escolha da configuração;
+  chip "Veículo guardado: {etiqueta}" + botão
+  Limpar; pré-seleção da cadeia guardada (marca →
+  modelo → configuração); guards de sequência
+  (`makeRequestRef`/`modelRequestRef`) contra
+  respostas fora de ordem; erros com
+  `role="alert"` + "Tentar novamente".
+- Filtro/indicador da categoria:
+  `vehicle-compatible-products.tsx` — wrapper
+  client da grelha de produtos (reusa
+  `ProductCard`, server-safe mas embedável em
+  árvore client). Banner "A mostrar peças
+  compatíveis para: {etiqueta}" + contagem
+  ("1 peça compatível"/"N peças compatíveis
+  nesta categoria") + botões "Mudar veículo"
+  (abre o selector embebido) e "Limpar". Enquanto
+  verifica: grelha escondida + "A verificar
+  compatibilidade…" (sem flash de catálogo).
+  Ready: filtra por ids compatíveis; 0 matches →
+  painel vazio dedicado "Nenhuma peça compatível
+  com {etiqueta}" + Limpar. Erro: fail-open —
+  catálogo completo + nota de erro (a loja nunca
+  fica vazia por causa da verificação). Sem
+  veículo guardado: comportamento idêntico ao
+  servidor (incl. estado vazio original com
+  "Remover filtros" via `clearFiltersHref`).
+- Badge na ficha de produto:
+  `vehicle-compatibility-badge.tsx` após o
+  parágrafo "Referência" — "Compatível com o teu
+  veículo" (esmeralda) / "Não compatível"
+  (vermelho); silencioso sem seleção, em 4xx
+  (ex.: 404 produto/configuração removida) e em
+  erro de rede.
+- Páginas tocadas: `src/app/page.tsx` (nova
+  secção `id="teu-veiculo"` antes de
+  `#categorias`), `src/app/categorias/[slug]/page.tsx`
+  (grelha substituída pelo wrapper; import
+  `ProductCard` removido), `src/app/produtos/[slug]/page.tsx`
+  (badge após "Referência").
+- Decisão de arquitetura: persistência via
+  localStorage + eventos (NÃO via URL) — a página
+  de categoria já tem o seu próprio sistema
+  server-side de filtro veicular por parâmetros de
+  URL (`make`/`model`/`generation`); o filtro por
+  configuração compõe por cima, no cliente, sem
+  alterar o servidor.
+- Testes: serviço +12 em
+  `vehicle-search.test.ts` (24 no ficheiro: união/
+  dedup/ordenado, filtros de ativos nas duas
+  fontes, 404s, status verdadeiro/falso, rejeições
+  de validação) + 2 ficheiros de teste de rota
+  (10 testes) + 4 ficheiros de teste de
+  componente (33 testes: lib 12, selector 6,
+  wrapper 9, badge 6 — fetch roteado por URL com
+  `vi.stubGlobal`, storage semeado antes do
+  render).
+- Gate: `npx tsc --noEmit` limpo; `vitest run`:
+  **2062 passed** (142 ficheiros + 1 skipped) + 3
+  skipped (linha base 2007 → +55 testes novos);
+  `npm run lint` limpo; `npm run build` limpo —
+  route map com as 2 rotas novas (ƒ) e sitemap
+  ○ 1h intacto.
+
+Lições desta etapa (para `knowledge.md`):
+- O lint `react-hooks/set-state-in-effect` proíbe
+  `setState` síncrono no corpo de efeitos. Padrão
+  aplicável na casa para fetches derivados de um
+  "estado de sessão": num único state
+  `{ configurationId, ...resultado }` e derive o
+  estado "a verificar" por comparação de ids —
+  `setState` apenas dentro de callbacks async.
+- `useSyncExternalStore` é o encaixe natural para
+  estado de sessão com persistência (localStorage
+  + eventos DOM): `getSnapshot` com cache da
+  string crua dá identidade estável entre renders
+  e invalidação automática perante mutações
+  externas; exige `getServerSnapshot`.
+- `ProductCard` é server-safe mas embedável em
+  árvore client (importa `AddToCartButton`
+  'use client'; nenhum módulo server-only) —
+  reutilização direta dentro de wrappers client
+  sem duplicar markup.
+- Em ambiente jsdom `localStorage` funciona
+  nativamente; para fetch, `vi.stubGlobal` +
+  roteamento por URL (função com `String(input)`)
+  seguido de `vi.unstubAllGlobals`.
+- Corpos não-array vindos de mocks (ex.: abrir o
+  selector com fetch mockado a um só payload)
+  rebentam `list.map` — normalizar com
+  `Array.isArray` nos setters de listas.
+
+Próximos passos (pós-épico):
+- Commit da etapa 4 quando o utilizador pedir
+  (ficheiros novos: 2 rotas + 2 route tests, lib
+  de seleção + test, 4 componentes + 3 test files
+  —i.e. selector/wrapper/badge + seus testes;
+  modificados: serviço + service tests, home,
+  categoria, ficha, CHECKPOINT.md).
+- Registar as lições em `knowledge.md` (§ nova).
+
 

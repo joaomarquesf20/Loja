@@ -13,7 +13,9 @@ vi.mock('./db', () => ({
 import {
   NotFoundError,
   ValidationError,
+  findCompatibleProductsForVehicleConfiguration,
   findCompatibleVariantsForVehicleConfiguration,
+  getProductVehicleCompatibility,
   listVehicleGenerationOptions,
   listVehicleMakes,
   listVehicleModelOptions,
@@ -91,6 +93,14 @@ type FakeClient = {
   }
   vehicleVariantCompatibility: {
     findMany: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
+  }
+  productCompatibility: {
+    findMany: ReturnType<typeof vi.fn>
+    findFirst: ReturnType<typeof vi.fn>
+  }
+  product: {
+    findUnique: ReturnType<typeof vi.fn>
   }
 }
 
@@ -113,6 +123,16 @@ function createFakeClient(): FakeClient {
 
   const vehicleVariantCompatibility = {
     findMany: vi.fn(),
+    findFirst: vi.fn(),
+  }
+
+  const productCompatibility = {
+    findMany: vi.fn(),
+    findFirst: vi.fn(),
+  }
+
+  const product = {
+    findUnique: vi.fn(),
   }
 
   const client = {
@@ -122,6 +142,9 @@ function createFakeClient(): FakeClient {
     vehicleConfiguration,
     productVariantVehicleCompatibility:
       vehicleVariantCompatibility,
+    productVehicleCompatibility:
+      productCompatibility,
+    product,
   } as unknown as VehicleSearchClient
 
   return {
@@ -131,6 +154,8 @@ function createFakeClient(): FakeClient {
     vehicleGeneration,
     vehicleConfiguration,
     vehicleVariantCompatibility,
+    productCompatibility,
+    product,
   }
 }
 
@@ -558,6 +583,460 @@ describe(
             fake.client,
           ),
         ).resolves.toEqual([])
+      },
+    )
+  },
+)
+
+describe(
+  'compatible products for vehicle configuration',
+  () => {
+    let fake: FakeClient
+
+    beforeEach(() => {
+      fake = createFakeClient()
+    })
+
+    test(
+      'rejeita ID vazio de configuração',
+      async () => {
+        await expect(
+          findCompatibleProductsForVehicleConfiguration(
+            '  ',
+            fake.client,
+          ),
+        ).rejects.toBeInstanceOf(
+          ValidationError,
+        )
+
+        expect(
+          fake.vehicleConfiguration
+            .findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'configuração inexistente devolve NotFoundError',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          null,
+        )
+
+        await expect(
+          findCompatibleProductsForVehicleConfiguration(
+            'config-missing',
+            fake.client,
+          ),
+        ).rejects.toBeInstanceOf(
+          NotFoundError,
+        )
+
+        expect(
+          fake.vehicleVariantCompatibility
+            .findMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'une as duas fontes de compatibilidade, deduplicando produto e ordenando por slug',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.vehicleVariantCompatibility.findMany.mockResolvedValue(
+          [
+            {
+              variant: {
+                product: {
+                  id: 'product-difusores',
+                  slug: 'difusores-bm',
+                },
+              },
+            },
+            {
+              variant: {
+                product: {
+                  id: 'product-bicos',
+                  slug: 'bicos-injetores',
+                },
+              },
+            },
+            {
+              variant: {
+                product: {
+                  id: 'product-difusores',
+                  slug: 'difusores-bm',
+                },
+              },
+            },
+          ],
+        )
+        fake.productCompatibility.findMany.mockResolvedValue(
+          [
+            {
+              product: {
+                id: 'product-difusores',
+                slug: 'difusores-bm',
+              },
+            },
+            {
+              product: {
+                id: 'product-suspensao',
+                slug: 'suspensao-coilover',
+              },
+            },
+          ],
+        )
+
+        const products =
+          await findCompatibleProductsForVehicleConfiguration(
+            'configuration-116d',
+            fake.client,
+          )
+
+        expect(products).toEqual([
+          {
+            id: 'product-bicos',
+            slug: 'bicos-injetores',
+          },
+          {
+            id: 'product-difusores',
+            slug: 'difusores-bm',
+          },
+          {
+            id: 'product-suspensao',
+            slug: 'suspensao-coilover',
+          },
+        ])
+      },
+    )
+
+    test(
+      'preserva o filtro de ativos nas duas fontes',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.vehicleVariantCompatibility.findMany.mockResolvedValue(
+          [],
+        )
+        fake.productCompatibility.findMany.mockResolvedValue(
+          [],
+        )
+
+        await findCompatibleProductsForVehicleConfiguration(
+          'configuration-116d',
+          fake.client,
+        )
+
+        expect(
+          fake.vehicleVariantCompatibility
+            .findMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            vehicleConfigurationId:
+              'configuration-116d',
+            variant: {
+              isActive: true,
+              product: {
+                isActive: true,
+              },
+            },
+          },
+          select: {
+            variant: {
+              select: {
+                product: {
+                  select: {
+                    id: true,
+                    slug: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        expect(
+          fake.productCompatibility.findMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            vehicleConfigurationId:
+              'configuration-116d',
+            product: {
+              isActive: true,
+            },
+          },
+          select: {
+            product: {
+              select: {
+                id: true,
+                slug: true,
+              },
+            },
+          },
+        })
+      },
+    )
+
+    test(
+      'configuração sem ligações devolve lista vazia',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-1',
+          },
+        )
+        fake.vehicleVariantCompatibility.findMany.mockResolvedValue(
+          [],
+        )
+        fake.productCompatibility.findMany.mockResolvedValue(
+          [],
+        )
+
+        await expect(
+          findCompatibleProductsForVehicleConfiguration(
+            'configuration-1',
+            fake.client,
+          ),
+        ).resolves.toEqual([])
+      },
+    )
+  },
+)
+
+describe(
+  'product vehicle compatibility status',
+  () => {
+    let fake: FakeClient
+
+    beforeEach(() => {
+      fake = createFakeClient()
+    })
+
+    test(
+      'rejeita slug vazio de produto',
+      async () => {
+        await expect(
+          getProductVehicleCompatibility(
+            '  ',
+            'configuration-116d',
+            fake.client,
+          ),
+        ).rejects.toBeInstanceOf(
+          ValidationError,
+        )
+
+        expect(
+          fake.product.findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'rejeita ID vazio de configuração',
+      async () => {
+        await expect(
+          getProductVehicleCompatibility(
+            'difusores-bm',
+            '   ',
+            fake.client,
+          ),
+        ).rejects.toBeInstanceOf(
+          ValidationError,
+        )
+
+        expect(
+          fake.product.findUnique,
+        ).not.toHaveBeenCalled()
+        expect(
+          fake.vehicleConfiguration
+            .findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'produto inexistente devolve NotFoundError',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.product.findUnique.mockResolvedValue(
+          null,
+        )
+
+        await expect(
+          getProductVehicleCompatibility(
+            'missing-product',
+            'configuration-116d',
+            fake.client,
+          ),
+        ).rejects.toThrow(
+          'Produto não encontrado',
+        )
+      },
+    )
+
+    test(
+      'configuração inexistente devolve NotFoundError',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          null,
+        )
+        fake.product.findUnique.mockResolvedValue(
+          {
+            id: 'product-difusores',
+          },
+        )
+
+        await expect(
+          getProductVehicleCompatibility(
+            'difusores-bm',
+            'config-missing',
+            fake.client,
+          ),
+        ).rejects.toThrow(
+          'Configuração do veículo não encontrada',
+        )
+      },
+    )
+
+    test(
+      'compatível via ligação de variante',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.product.findUnique.mockResolvedValue(
+          {
+            id: 'product-difusores',
+          },
+        )
+        fake.vehicleVariantCompatibility.findFirst.mockResolvedValue(
+          { id: 'compat-1' },
+        )
+        fake.productCompatibility.findFirst.mockResolvedValue(
+          null,
+        )
+
+        await expect(
+          getProductVehicleCompatibility(
+            'difusores-bm',
+            'configuration-116d',
+            fake.client,
+          ),
+        ).resolves.toEqual({
+          configurationId:
+            'configuration-116d',
+          compatible: true,
+        })
+
+        expect(
+          fake.vehicleVariantCompatibility
+            .findFirst,
+        ).toHaveBeenCalledWith({
+          where: {
+            vehicleConfigurationId:
+              'configuration-116d',
+            variant: {
+              productId:
+                'product-difusores',
+              isActive: true,
+            },
+          },
+          select: { id: true },
+        })
+      },
+    )
+
+    test(
+      'compatível via linha de compatibilidade de produto',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.product.findUnique.mockResolvedValue(
+          {
+            id: 'product-difusores',
+          },
+        )
+        fake.vehicleVariantCompatibility.findFirst.mockResolvedValue(
+          null,
+        )
+        fake.productCompatibility.findFirst.mockResolvedValue(
+          { id: 'product-compat-1' },
+        )
+
+        await expect(
+          getProductVehicleCompatibility(
+            'difusores-bm',
+            'configuration-116d',
+            fake.client,
+          ),
+        ).resolves.toEqual({
+          configurationId:
+            'configuration-116d',
+          compatible: true,
+        })
+
+        expect(
+          fake.productCompatibility.findFirst,
+        ).toHaveBeenCalledWith({
+          where: {
+            productId:
+              'product-difusores',
+            vehicleConfigurationId:
+              'configuration-116d',
+          },
+          select: { id: true },
+        })
+      },
+    )
+
+    test(
+      'sem ligações devolve compatível false',
+      async () => {
+        fake.vehicleConfiguration.findUnique.mockResolvedValue(
+          {
+            id: 'configuration-116d',
+          },
+        )
+        fake.product.findUnique.mockResolvedValue(
+          {
+            id: 'product-difusores',
+          },
+        )
+        fake.vehicleVariantCompatibility.findFirst.mockResolvedValue(
+          null,
+        )
+        fake.productCompatibility.findFirst.mockResolvedValue(
+          null,
+        )
+
+        await expect(
+          getProductVehicleCompatibility(
+            'difusores-bm',
+            'configuration-116d',
+            fake.client,
+          ),
+        ).resolves.toEqual({
+          configurationId:
+            'configuration-116d',
+          compatible: false,
+        })
       },
     )
   },
