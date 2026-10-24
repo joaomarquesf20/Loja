@@ -418,6 +418,12 @@ model Order {
   installmentCount        Int?
   paymentProvider         String?
   paymentReference        String?
+  /**
+   * Data da confirmação efetiva do pagamento. É preenchida quando o estado
+   * de pagamento passa para PAID (ex.: webhook do Stripe), para suportar
+   * controlo de fulfillment sem dependência de OrderEvent.
+   */
+  paidAt                  DateTime?
   fulfillmentMethod       FulfillmentMethod @default(DELIVERY)
   shippingMethod          ShippingMethod?
   shippingName            String

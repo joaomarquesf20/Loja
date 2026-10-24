@@ -1,291 +1,20 @@
 import { NextResponse } from 'next/server'
 
 import {
-  CheckoutCartChangedError,
-  CheckoutEmptyCartError,
-  CheckoutInsufficientStockError,
-  CheckoutPreviewChangedError,
-  CheckoutPricingError,
-  CheckoutProductUnavailableError,
-  type CheckoutContactInput,
-  type CheckoutFulfillmentInput,
   type CheckoutInput,
-  type CheckoutPaymentInput,
-  type CheckoutShippingInput,
-  CheckoutUserUnavailableError,
-  CheckoutValidationError,
   createCheckoutOrder,
 } from '@/server/checkout'
 import {
-  InvalidJsonBodyError,
   readJsonBody,
-  RequestPayloadTooLargeError,
 } from '@/server/http-request'
 import {
   requireActiveUserId,
-  UnauthorizedUserError,
 } from '@/server/user-auth'
-
-const CHECKOUT_JSON_LIMIT_BYTES =
-  32 * 1024
-
-type CheckoutApiErrorCode =
-  | 'UNAUTHENTICATED'
-  | 'INVALID_JSON'
-  | 'PAYLOAD_TOO_LARGE'
-  | 'INVALID_REQUEST'
-  | 'INVALID_FULFILLMENT_METHOD'
-  | 'INVALID_SHIPPING'
-  | 'INVALID_SHIPPING_METHOD'
-  | 'INVALID_PAYMENT'
-  | 'INVALID_FINGERPRINT'
-  | 'CHECKOUT_PREVIEW_CHANGED'
-
-function errorResponse(
-  message: string,
-  status: number,
-  code?: CheckoutApiErrorCode,
-) {
-  return NextResponse.json(
-    code
-      ? {
-          error: message,
-          code,
-        }
-      : {
-          error: message,
-        },
-    {
-      status,
-    },
-  )
-}
-
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  )
-}
-
-function parseContactInput(
-  value: unknown,
-): CheckoutContactInput | null {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const { name, phone } = value
-
-  if (
-    typeof name !== 'string' ||
-    typeof phone !== 'string'
-  ) {
-    return null
-  }
-
-  return {
-    name,
-    phone,
-  }
-}
-
-function parseDeliveryShippingInput(
-  value: unknown,
-): CheckoutShippingInput | null {
-  if (!isRecord(value)) {
-    return null
-  }
-
-  const {
-    name,
-    phone,
-    addressLine1,
-    addressLine2,
-    city,
-    postalCode,
-    country,
-    region,
-  } = value
-
-  if (
-    typeof name !== 'string' ||
-    typeof phone !== 'string' ||
-    typeof addressLine1 !== 'string' ||
-    typeof city !== 'string' ||
-    typeof postalCode !== 'string' ||
-    typeof country !== 'string' ||
-    typeof region !== 'string'
-  ) {
-    return null
-  }
-
-  if (
-    addressLine2 !== undefined &&
-    addressLine2 !== null &&
-    typeof addressLine2 !== 'string'
-  ) {
-    return null
-  }
-
-  return {
-    name,
-    phone,
-    addressLine1,
-    addressLine2,
-    city,
-    postalCode,
-    country,
-    region:
-      region as CheckoutShippingInput['region'],
-  }
-}
-
-function parsePaymentInput(
-  body: Record<string, unknown>,
-): CheckoutPaymentInput | null {
-  const paymentMethod =
-    body.paymentMethod
-  const installmentCount =
-    body.installmentCount
-
-  if (paymentMethod === 'CARD') {
-    if (
-      installmentCount !== undefined &&
-      installmentCount !== null
-    ) {
-      return null
-    }
-
-    return {
-      paymentMethod: 'CARD',
-      installmentCount: null,
-    }
-  }
-
-  if (
-    paymentMethod === 'INSTALLMENTS'
-  ) {
-    if (
-      typeof installmentCount !==
-        'number' ||
-      !Number.isSafeInteger(
-        installmentCount,
-      ) ||
-      installmentCount < 2 ||
-      installmentCount >
-        12
-    ) {
-      return null
-    }
-
-    return {
-      paymentMethod: 'INSTALLMENTS',
-      installmentCount,
-    }
-  }
-
-  return null
-}
-
-function handleCheckoutError(
-  error: unknown,
-) {
-  if (
-    error instanceof
-    UnauthorizedUserError
-  ) {
-    return errorResponse(
-      'Não autenticado',
-      401,
-      'UNAUTHENTICATED',
-    )
-  }
-
-  if (
-    error instanceof
-    RequestPayloadTooLargeError
-  ) {
-    return errorResponse(
-      'Pedido demasiado grande',
-      413,
-      'PAYLOAD_TOO_LARGE',
-    )
-  }
-
-  if (
-    error instanceof
-    InvalidJsonBodyError
-  ) {
-    return errorResponse(
-      'JSON inválido',
-      400,
-      'INVALID_JSON',
-    )
-  }
-
-  if (
-    error instanceof
-    CheckoutPreviewChangedError
-  ) {
-    return errorResponse(
-      error.message,
-      409,
-      'CHECKOUT_PREVIEW_CHANGED',
-    )
-  }
-
-  if (
-    error instanceof
-    CheckoutValidationError
-  ) {
-    return errorResponse(
-      error.message,
-      400,
-    )
-  }
-
-  if (
-    error instanceof
-    CheckoutUserUnavailableError
-  ) {
-    return errorResponse(
-      error.message,
-      403,
-    )
-  }
-
-  if (
-    error instanceof
-      CheckoutEmptyCartError ||
-    error instanceof
-      CheckoutProductUnavailableError ||
-    error instanceof
-      CheckoutInsufficientStockError ||
-    error instanceof
-      CheckoutCartChangedError ||
-    error instanceof
-      CheckoutPricingError
-  ) {
-    return errorResponse(
-      error.message,
-      409,
-    )
-  }
-
-  console.error(
-    'Unexpected checkout API error:',
-    error,
-  )
-
-  return errorResponse(
-    'Erro interno do servidor',
-    500,
-  )
-}
+import {
+  CHECKOUT_JSON_LIMIT_BYTES,
+  handleCheckoutError,
+  parseCheckoutRequestBody,
+} from './checkout-request'
 
 export async function POST(
   request: Request,
@@ -299,145 +28,23 @@ export async function POST(
       CHECKOUT_JSON_LIMIT_BYTES,
     )
 
-    if (!isRecord(body)) {
-      return errorResponse(
-        'Pedido inválido',
-        400,
-        'INVALID_REQUEST',
-      )
-    }
+    const parsed =
+      parseCheckoutRequestBody(body)
 
-    const fulfillmentMethod =
-      body.fulfillmentMethod
-
-    if (
-      fulfillmentMethod !==
-        'DELIVERY' &&
-      fulfillmentMethod !==
-        'PICKUP'
-    ) {
-      return errorResponse(
-        'Método de entrega inválido',
-        400,
-        'INVALID_FULFILLMENT_METHOD',
-      )
-    }
-
-    const shippingMethod =
-      body.shippingMethod
-
-    if (
-      shippingMethod !==
-        undefined &&
-      shippingMethod !==
-        'STANDARD' &&
-      shippingMethod !==
-        'EXPRESS'
-    ) {
-      return errorResponse(
-        'Método de envio inválido',
-        400,
-        'INVALID_SHIPPING_METHOD',
-      )
-    }
-
-    let fulfillment:
-      CheckoutFulfillmentInput
-
-    if (
-      fulfillmentMethod ===
-      'DELIVERY'
-    ) {
-      const shipping =
-        parseDeliveryShippingInput(
-          body.shipping,
-        )
-
-      if (!shipping) {
-        return errorResponse(
-          'Dados de entrega inválidos',
-          400,
-          'INVALID_SHIPPING',
-        )
-      }
-
-      fulfillment = {
-        fulfillmentMethod:
-          'DELIVERY',
-        shipping,
-        shippingMethod,
-      }
-    } else {
-      if (
-        shippingMethod !==
-        undefined
-      ) {
-        return errorResponse(
-          'O levantamento em loja não tem método de envio',
-          400,
-          'INVALID_SHIPPING_METHOD',
-        )
-      }
-
-      const shipping =
-        parseContactInput(
-          body.shipping,
-        )
-
-      if (!shipping) {
-        return errorResponse(
-          'Dados para levantamento inválidos',
-          400,
-          'INVALID_SHIPPING',
-        )
-      }
-
-      fulfillment = {
-        fulfillmentMethod:
-          'PICKUP',
-        shipping,
-      }
-    }
-
-    const payment =
-      parsePaymentInput(body)
-
-    if (!payment) {
-      return errorResponse(
-        'Dados de pagamento inválidos',
-        400,
-        'INVALID_PAYMENT',
-      )
+    if (!parsed.ok) {
+      return parsed.response
     }
 
     const checkoutInput = {
-      ...fulfillment,
-      ...payment,
+      ...parsed.fulfillment,
+      ...parsed.payment,
     } as CheckoutInput
-
-    const expectedFingerprint =
-      body.expectedFingerprint
-
-    if (
-      typeof expectedFingerprint !==
-        'string' ||
-      expectedFingerprint.length !== 64 ||
-      !/^[0-9a-f]{64}$/.test(
-        expectedFingerprint,
-      )
-    ) {
-      return errorResponse(
-        'Referência de preview inválida. Calcula novamente o total.',
-        400,
-        'INVALID_FINGERPRINT',
-      )
-    }
 
     const order =
       await createCheckoutOrder(
         userId,
         checkoutInput,
-        expectedFingerprint,
+        parsed.expectedFingerprint,
       )
 
     return NextResponse.json(

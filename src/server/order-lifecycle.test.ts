@@ -199,6 +199,7 @@ describe(
               'test-provider',
             paymentReference:
               'pay-123',
+            paidAt: expect.any(Date),
           },
         })
 

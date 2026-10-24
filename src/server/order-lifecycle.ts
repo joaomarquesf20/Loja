@@ -113,6 +113,11 @@ type PaymentUpdateManyArgs = {
       | 'FAILED'
     paymentProvider: string
     paymentReference: string
+    /**
+     * Marca temporal da confirmação de pagamento; opcional porque as
+     * falhas (FAILED) a deixam inalterada.
+     */
+    paidAt?: Date
   }
 }
 
@@ -591,6 +596,10 @@ export async function recordVerifiedPayment(
   input: VerifiedPaidPaymentInput,
   client?: OrderLifecycleClient,
 ): Promise<OrderLifecycleState> {
+  // Capturado no início para que todas as escritas da confirmação partilhem
+  // a mesma marca temporal de pagamento.
+  const now = new Date()
+
   const orderId =
     normalizeOrderId(input.orderId)
 
@@ -740,6 +749,7 @@ export async function recordVerifiedPayment(
               paymentStatus: 'PAID',
               paymentProvider,
               paymentReference,
+              paidAt: now,
             },
           })
 

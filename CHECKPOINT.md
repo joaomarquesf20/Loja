@@ -346,4 +346,167 @@ Próximos passos (pós-épico):
   categoria, ficha, CHECKPOINT.md).
 - Registar as lições em `knowledge.md` (§ nova).
 
+---
+
+
+# Checkpoint - 24/10/2026 — Epic 3: Stripe Checkout & Real Transactions
+
+Etapa 1 — Order Schema & Stripe Service Foundation: **COMPLETA**
+(não commitada; `master` @ `ddfabbc` + trabalho novo sem commit).
+
+Estado:
+- `prisma/schema.prisma`: campo aditivo `Order.paidAt DateTime?`
+  (bloco de pagamento, com comentário) — data da confirmação
+  efetiva do pagamento para tracking de fulfillment sem
+  depender de OrderEvent. O ID da sessão Stripe não precisou de
+  colunas novas: o par existente `paymentProvider` +
+  `paymentReference` (`@@unique([paymentProvider,
+  paymentReference])`) já suporta
+  `paymentProvider='STRIPE'` + `paymentReference=cs_…`.
+- Migração aplicada: `20261024162651_add_stripe_order_fields`
+  (26 em `prisma/migrations`; alter-add column, sem dados
+  tocados; `npx prisma generate` manual — Prisma 7 não gera no
+  `migrate dev`).
+- `recordVerifiedPayment` (order-lifecycle) agora grava
+  `paidAt: now` no caminho PAID (captura única no início da
+  função); a asserção exata do teste de sucesso foi atualizada
+  (`paidAt: expect.any(Date)`). Repetições idempotentes do
+  webhook continuam a não re-escrita (early return quando já
+  PAID).
+- Modelo de stock CLARIFICADO: `createCheckoutOrder` decresce o
+  stock das variantes na CRIAÇÃO da encomenda
+  (`updateMany` com guard `stockQuantity >= quantity` dentro
+  de `runSerializableTransaction`) — reserva-on-order.
+  Consequentemente o webhook do Stripe NÃO decresce stock de
+  novo (evitaria dupla decresção); "decrement safely" =
+  transição PAID idempotente via `recordVerifiedPayment`.
+- SDK: `npm install stripe` (stripe@23.0.1 em dependencies).
+  Efeito lateral corrigido: o install podou 46 pacotes
+  extraneous (resend/@react-email/… usados pelos emails
+  existentes) — reinstalados com `npm install --no-save` para
+  restaurar o estado anterior (tsc/build voltaram a compilar
+  os módulos de email).
+- Serviço novo `src/server/stripe.ts` (§13): cliente
+  estrutural mínimo `StripeClient`
+  (`checkout.sessions.create` + `webhooks.constructEvent`) —
+  SDK real inicializada preguiçosamente de `STRIPE_SECRET_KEY`
+  com cache por chave; fakes nos testes injetados por
+  parâmetro. Erros de domínio: `StripeConfigurationError`,
+  `StripeValidationError` (field), `StripeSessionRequestError`
+  (502), `StripeCheckoutConflictError` (409),
+  `StripeCheckoutOrderNotFoundError` (404),
+  `StripeWebhookAuthenticationError` (400). Função principal
+  `initiateStripeCheckoutForOrder(orderId, userId, urls,
+  deps)`: `loadStripeCheckoutProjection` (guard: encomenda
+  pagável, PENDING, provider/reference null, SÓ a própria,
+  soma artigos+portes === total) → `createStripeCheckoutSession`
+  (line_items com unit_amount EM CÊNTIMOS, linha "Portes de
+  envio" quando > 0, metadata orderId/orderNumber/
+  paymentProvider, client_reference_id, customer_email,
+  locale 'pt', currency 'eur') → persistência guard via
+  `updateMany` (where status+PENDING+provider/reference null+
+  userId). Helpers: `centsToDecimalString`,
+  `decimalMoneyToCents` (string inteiros, sem floats),
+  `buildStripeCheckoutSessionParams`,
+  `verifyStripeWebhookEvent` (payload cru + header
+  stripe-signature + STRIPE_WEBHOOK_SECRET),
+  `mapConfirmedCheckoutSession` (payment_status === 'paid',
+  senão null; amount_total/currency/metadata validados; 'eur'
+  → 'EUR').
+- Rota nova `POST /api/checkout/stripe`:
+  `requireActiveUserId` → corpo idêntico ao /api/checkout →
+  `createCheckoutOrder` (valida carrinho/stock/preços e cria
+  encomenda com stock reservado) → sessão Stripe → 201
+  `{ order, checkoutSession: { id, url } }`. URLs: sucesso
+  `/checkout/sucesso?order={orderNumber}&session_id=
+  {CHECKOUT_SESSION_ID}` (placeholder substituído pelo
+  Stripe), cancelamento `/checkout?pagamento=cancelado`,
+  base `NEXTAUTH_URL` com fallback localhost. Erros:
+  401/400/409/404/500 dos códigos de checkout existentes +
+  400 INVALID_REQUEST (StripeValidationError), 404
+  ORDER_NOT_FOUND, 409 CHECKOUT_CONFLICT, 502
+  STRIPE_UNAVAILABLE, 500 STRIPE_NOT_CONFIGURED.
+- Rota nova `POST /api/webhooks/stripe` (`runtime = 'nodejs'`):
+  corpo cru com limites de content-length/bytes (64KB,
+  TextEncoder compatível com jsdom), verificação REAL da
+  assinatura (constructEvent, sem mocking no teste), eventos
+  ≠ checkout.session.completed e sessões unpaid → 200
+  `{ received: true }` (reentrega indesejada evitada);
+  sessão paga → `recordVerifiedPayment` (orderId dos
+  metadados, provider STRIPE, referência cs_…, amount em
+  string decimal, currency maiúscula) → 200 `{ received,
+  orderId, paymentStatus }`. Mapeamento: assinatura 400,
+  validação 400, NotFound 404, Conflict 409 (reentrega do
+  Stripe resolve por idempotência), config 500, inesperado
+  500.
+- Refatoração compartilhada: novo
+  `src/app/api/checkout/checkout-request.ts` com o parsing e
+  mapeamento de erros ANTES duplicados entre rotas de checkout
+  (`parseCheckoutRequestBody`, `mapCheckoutDomainError`,
+  `handleCheckoutError`, `errorResponse`,
+  `CHECKOUT_JSON_LIMIT_BYTES`); `src/app/api/checkout/route.ts`
+  simplificado para importar deste módulo (comportamento e
+  testes/asserções idênticos).
+- Env: `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`
+  adicionadas ao `.env` (gitignored, vazias — preencher com
+  chaves do dashboard antes de usar) + `.env.example` criado
+  (o .gitignore já tinha `!.env.example`).
+- Testes: `src/server/stripe.test.ts` (42 testes em fakes
+  tipados: mapping de line_items/cesta/metadata/urls, erros de
+  config/validação, sessão síncrona constructEvent throw nos
+  fakes, projeção (portes, pickup, guards, soma total),
+  iniciação/persistência/rollback sem guard por falha
+  Stripe), `src/app/api/checkout/stripe/route.test.ts` (16
+  testes: 401/400 x5/409/201 + assersões de chamada de
+  iniciação + 502/409/404/500 STRIPE NOT CONFIGURED/
+  INVALID_REQUEST/inesperado), `src/app/api/webhooks/stripe/
+  route.test.ts` (14 testes com assinatura REAL via
+  `new Stripe(sk_test).webhooks.generateTestHeaderString` —
+  HMAC offline: happy path + idempotência (2 eventos),
+  body manipulado após assinar → 400, segredo errado → 400,
+  sem header → 400, outros eventos → 200 ack, unpaid → 200
+  ack, sessão sem metadata/valor/moeda → 400, record → 404/
+  409/400, 500 do erro de configurado, 413 com padding > 64KB).
+- Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2134
+  passed** (146 ficheiros: 142 pré-existentes + 3 novos, um
+  deles skipped) + 3 skipped (baseline 2062 → +72);
+  `npm run lint` limpo;
+  `npm run build` limpo com `/api/checkout/stripe` e
+  `/api/webhooks/stripe` novas no route map (ƒ).
+- Nota final do gate: apenas um aviso de lint
+  apareceu durante a etapa (alias `StripeApiErrorCode` sem
+  uso); removido e a suite de gates ficou sem avisos.
+
+Lições desta etapa (para `knowledge.md`):
+- `npm install <novo-dependência>` PODE podar pacotes
+  extraneous (instalados manualmente sem gravar): baselines
+  de tsc que compilam módulos dessas dependências falham a
+  seguir. Restaurar com `npm install --no-save <pkg…>`
+  recria o estado anterior sem tocar package.json.
+- Fakes de contrato síncrono (constructEvent lança) têm de
+  usar `mockImplementation(() => { throw … })`.
+  `mockRejectedValue` devolvia uma Promise (contrato async) e
+  a falha nunca era lançada — o fluxo seguia com o valor
+  Promise e errava noutra linha.
+- unit_amount do Stripe é EM CÊNTIMOS inteiros: converter
+  Decimal da BD para string → regex inteiros → cêntimos com
+  aritmética inteira (nunca aritmética de float dividindo
+  por 100).
+- A sessão Stripe cobra a SOMA dos line_items: os portes têm
+  de entrar como linha própria ("Portes de envio") para que a
+  sessão === total da encomenda; a divergência é guardada no
+  serviço (projeção) antes de abrir a sessão.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 1 quando o utilizador pedir (novos:
+  stripe.ts + test, /api/checkout/stripe + test,
+  /api/webhooks/stripe + test, checkout-request.ts,
+  migração, .env.example; modificados: schema, order-
+  lifecycle(+test), checkout/route.ts, package.json,
+  package-lock.json, CHECKPOINT.md).
+- Etapa 2 do épico: frontend do checkout com Stripe
+  (redireção para a sessão) e página /checkout/sucesso,
+  consumindo `checkoutSession.url`, e finalização do fluxo.
+
+
 
