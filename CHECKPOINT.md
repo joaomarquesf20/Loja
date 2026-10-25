@@ -657,5 +657,155 @@ Próximos passos (pós-etapa):
   verificação da sessão na página de sucesso, e registo das
   lições em `knowledge.md` (§ nova).
 
+---
+
+# Checkpoint - 25/10/2026 — Epic 3: Stripe Checkout & Real Transactions (cont.)
+
+Etapa 3 — Order History & Retry Payment Flow:
+**COMPLETA** (não commitada; commit da etapa 2 fica para
+pedido do utilizador).
+
+Estado:
+- Página de histórico nova
+  `src/app/conta/encomendas/page.tsx` ('use client' +
+  `useSession` gate espelhando /conta: loading, coluna
+  "Inicia sessão" com callbackUrl `%2Fconta%2Fencomendas`,
+  shell autenticado com "← Voltar à conta") que renderiza o
+  componente novo `OrdersHistoryClient`
+  (`orders-history-client.tsx`). A secção de encomendas da
+  `/conta` permanece intocada (OrdersClient).
+- `OrdersHistoryClient`: carrega `GET /api/orders`
+  (`cache: 'no-store'`) com shape guard própio e enxuto
+  (id/orderNumber/total monetário/estado/paymentStatus/data
+  válida/items array; resposta inválida → 'Resposta inválida
+  do servidor'); lista ordenada por data (o serviço já
+  devolve `createdAt desc`) com número, data (pt-PT
+  `Europe/Lisbon`), count de artigos, badges de estado
+  (OrderStatusBadge/PaymentStatusBadge) e total em EUR.
+- Guard do botão em sincronia com o serviço: "Pagar agora"
+  só em encomendas com estado PENDING/CONFIRMED/PROCESSING/
+  READY_FOR_PICKUP **e** paymentStatus PENDING (paymentStatus
+  FAILED não é retomável via Stripe nesta etapa: falhas
+  assíncronas continuam a ter o caminho simulado em /conta, e
+  a retoma após FAILED fica como possível continuação do
+  épico). Encomendas iniciadas com PAYMENT_PROVIDER
+  distinto (ex.: PFA_SIMULATED historicamente) passam o guard
+  do cliente e recebem 409 do serviço com mensagem explícita.
+- Ação de retoma: POST `/api/checkout/stripe/retry` com
+  `{ orderId }`; resposta 201 validada por parser estrito
+  (`checkoutSession.id` string + `url` http/https — nunca
+  `javascript:`) e navegação integral via
+  `redirectToExternalUrl` (mesmo módulo do checkout). Label
+  "A redirecionar…" no botão com `redirectingOrderId`
+  congelado no sucesso (sem `finally`); erros do servidor
+  (409 conflito, 502 Stripe, rede) em `role="alert"` por
+  encomenda com mensagem da API e fallback 'Não foi possível
+  retomar o pagamento' quando não há corpo legível.
+- Serviço novo: `retryStripeCheckoutForOrder(orderId,
+  userId, urls, deps?)` em `src/server/stripe.ts` com
+  `StripeRetryCheckoutUrls` (o URL de sucesso é função
+  `buildSuccessUrl(orderNumber)` porque o número só é
+  conhecido depois de carregar a projeção) e
+  `StripeRetriedCheckoutSession { orderId, orderNumber,
+  sessionId, sessionUrl }`. Projeção extraiu-se: loader
+  partilhado `findStripeOrderProjection` (encomenda própria →
+  StripeCheckoutOrderNotFoundError; estado pagável → 409;
+  paymentStatus !== PENDING → 409) + helpers
+  `buildStripeCheckoutLineItems` (artigos+portes em cêntimos,
+  soma === total → integridade; CANCELLED já repôs stock e é
+  recusado pelo estado) + `getStripeCheckoutProjection`;
+  `loadStripeCheckoutProjection` mantém assinatura e
+  mensagens (provider/reference null). A variante de retoma
+  aceita paymentProvider null OU 'STRIPE' (sessão anterior
+  expirada/abandonada é substituída) e recusa outros
+  fornecedores; orderId chega "raw" do pedido e é normalizado
+  (trim/≤64 → StripeValidationError 'orderId' → 400).
+- Persistência da retoma: guard `updateMany`
+  `{ id, userId, status, paymentStatus PENDING,
+  paymentProvider in [null, 'STRIPE'] }` → data
+  { paymentProvider STRIPE, paymentReference nova sessão };
+  `StripeCheckoutDbClient.order.updateMany` alargado com
+  `StripeOrderRetryUpdateManyArgs` (fakes inalterados); a
+  troca de referência respeita `@@unique([paymentProvider,
+  paymentReference])` porque cada sessão tem id fresco.
+  count !== 1 → 409 'A encomenda foi alterada durante a
+  retoma do pagamento' e a sessão externa fica sem efeito.
+- Refactor partilhado: `checkout-config.ts` novo em
+  `src/app/api/checkout/stripe/` — SUCCESS/CANCEL paths,
+  placeholder `{CHECKOUT_SESSION_ID}`, base
+  `NEXTAUTH_URL`/localhost:3000,
+  `buildStripeCheckoutSuccessUrl(orderNumber)` +
+  `buildStripeCheckoutCancelUrl()` e
+  `handleStripeCheckoutError` (404/409/502/500
+  STRIPE_NOT_CONFIGURED/400 INVALID_REQUEST). A rota de
+  criação passou a importar daí (comportamento idêntico,
+  teste da criação sem alterações).
+- Rota nova: `src/app/api/checkout/stripe/retry/route.ts`
+  (POST) — 401 `UNAUTHENTICATED`; corpo lido com
+  `CHECKOUT_JSON_LIMIT_BYTES`; orderId passado crú ao
+  serviço (corpo sem objeto → undefined → 400 pela
+  normalização); 201 `{ orderNumber, checkoutSession:
+  { id, url } }`.
+- Stack de testes (+33): `stripe.test.ts` +10 (retoma com
+  sessão anterior → nova sessão criada com metadata/params
+  exatos e referência reposta com guard
+  paymentProvider in [null, STRIPE]; primeira retoma sem
+  referência + normalização de id; 404 de outra conta;
+  CANCELLED; paymentStatus PAID; outro fornecedor —
+  sem create/update; total divergente; persistência
+  concorrente count 0; falha Stripe não persiste; orderId
+  inválido 42/branco/comprido → findFirst/create não
+  chamados), `retry/route.test.ts` 12 (401; JSON inválido;
+  corpo array → 400 com mock a replicar a validação do
+  serviço; orderId número; 404; 409 com mensagem; 201 +
+  buildSuccessUrl('PFA-ABC123') → URL exato com placeholder;
+  `NEXTAUTH_URL` com trim de barra; 502; 500
+  STRIPE_NOT_CONFIGURED; 400 StripeValidationError; 500
+  inesperado com console.error espiado),
+  `orders-history-client.test.tsx` 8 (carregamento + guard
+  'no-store'; botão só em pendentes; retoma com POST body +
+  label "A redirecionar…" + redirect no URL; erro do
+  servidor + botão reativado; URL não-http(s) → 'Resposta
+  inválida do servidor'; 500 sem corpo → fallback; estado
+  vazio; erro de carga → Tentar novamente), e
+  `encomendas/page.test.tsx` 3 (loading, login com
+  callbackUrl exato, autenticado com secção real mockada).
+- Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2184
+  passed** (152 ficheiros: 151 passed + 1 skipped) + 3
+  skipped (baseline 2151 → +33); `npm run lint` limpo;
+  `npm run build` limpo — route map com
+  `/api/checkout/stripe/retry` (ƒ) e `/conta/encomendas`
+  (○ static, client-only sob gate de sessão).
+
+Lições desta etapa (para `knowledge.md`):
+- Quando a rota delega a validação do corpo no serviço
+  (precedente payments/simulate), o mock do serviço nos
+  testes de rota tem de replicar essa validação — um mock
+  "sempre resolve" deixa o mapeamento 400 sem cobertura.
+- `getCheckoutBaseUrl` lê `NEXTAUTH_URL` em call-time; nos
+  testes com `vi.stubEnv`, o URL buildable tem de ser
+  avaliado ANTES de `unstubAllEnvs`, porque a função
+  capturada é lazy.
+- builders de URL em funções (vs strings fechadas)
+  permitem a rota construir URLs dependentes de dados
+  carregados depois — a rota mantém a responsabilidade de
+  construir, o serviço de orquestrar.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 3 quando o utilizador pedir (novos:
+  src/app/api/checkout/stripe/checkout-config.ts,
+  src/app/api/checkout/stripe/retry/route.ts + test,
+  src/app/conta/encomendas/page.tsx + test,
+  orders-history-client.tsx + test; modificados:
+  src/server/stripe.ts + test, stripe route.ts, CHECKPOINT.md).
+- Testar a retoma real com `STRIPE_SECRET_KEY` preenchido no
+  `.env`: criar encomenda, abandonar o pagamento no Stripe e
+  pagar pela página nova (incl. webhook local com
+  `STRIPE_WEBHOOK_SECRET` do dashboard).
+- Épico possível a seguir: retoma após paymentStatus FAILED
+  (webhook de pagamento assíncrono falho → reaproveitar o
+  fluxo com reset a PENDING + event PAYMENT_RETRIED), e
+  registo das lições em `knowledge.md` (§ nova).
+
 
 

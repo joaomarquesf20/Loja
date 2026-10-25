@@ -25,6 +25,7 @@ import {
   mapConfirmedCheckoutSession,
   resolveStripeSecretKey,
   resolveStripeWebhookSecret,
+  retryStripeCheckoutForOrder,
   verifyStripeWebhookEvent,
   StripeConfigurationError,
   StripeCheckoutConflictError,
@@ -1160,6 +1161,562 @@ describe(
 
         expect(
           db.updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+  },
+)
+
+describe(
+  'retryStripeCheckoutForOrder',
+  () => {
+    const retryUrls = {
+      buildSuccessUrl:
+        (orderNumber: string) =>
+          `http://localhost:3000/checkout/sucesso?order=${orderNumber}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl:
+        'http://localhost:3000/checkout/cancelado',
+    }
+
+    test(
+      'cria uma nova sessão para uma encomenda com sessão Stripe anterior e repõe a referência',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    paymentProvider:
+                      'STRIPE',
+                    paymentReference:
+                      'cs_antiga',
+                  },
+                ),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient(
+            {
+              createResult: {
+                id: 'cs_test_retoma',
+                url:
+                  'https://stripe.test/retoma',
+              },
+            },
+          )
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).resolves.toEqual({
+          orderId: 'order-1',
+          orderNumber: 'PFA-ABC123',
+          sessionId: 'cs_test_retoma',
+          sessionUrl:
+            'https://stripe.test/retoma',
+        })
+
+        expect(
+          db.findFirst,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            userId: 'user-1',
+          },
+          select: {
+            id: true,
+            orderNumber: true,
+            userId: true,
+            status: true,
+            paymentStatus: true,
+            paymentProvider: true,
+            paymentReference: true,
+            fulfillmentMethod: true,
+            shippingCost: true,
+            total: true,
+            shippingEmail: true,
+            items: {
+              select: {
+                id: true,
+                productNameAtPurchase: true,
+                productSkuAtPurchase: true,
+                priceAtPurchase: true,
+                quantity: true,
+              },
+            },
+          },
+        })
+
+        expect(
+          stripe.sessionsCreate,
+        ).toHaveBeenCalledWith({
+          mode: 'payment',
+          customer_email:
+            'maria@example.com',
+          client_reference_id:
+            'order-1',
+          success_url:
+            'http://localhost:3000/checkout/sucesso?order=PFA-ABC123&session_id={CHECKOUT_SESSION_ID}',
+          cancel_url:
+            'http://localhost:3000/checkout/cancelado',
+          locale: 'pt',
+          metadata: {
+            orderId: 'order-1',
+            orderNumber:
+              'PFA-ABC123',
+            paymentProvider:
+              STRIPE_PAYMENT_PROVIDER,
+          },
+          line_items: [
+            {
+              quantity: 2,
+              price_data: {
+                currency: 'eur',
+                unit_amount: 10000,
+                product_data: {
+                  name: 'Filtro de óleo',
+                  description:
+                    'FLT-01',
+                },
+              },
+            },
+            {
+              quantity: 1,
+              price_data: {
+                currency: 'eur',
+                unit_amount: 590,
+                product_data: {
+                  name:
+                    'Portes de envio',
+                },
+              },
+            },
+          ],
+        })
+
+        expect(
+          db.updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            userId: 'user-1',
+            status: 'PENDING',
+            paymentStatus:
+              'PENDING',
+            paymentProvider: {
+              in: [
+                null,
+                STRIPE_PAYMENT_PROVIDER,
+              ],
+            },
+          },
+          data: {
+            paymentProvider:
+              STRIPE_PAYMENT_PROVIDER,
+            paymentReference:
+              'cs_test_retoma',
+          },
+        })
+      },
+    )
+
+    test(
+      'aceita encomenda pendente sem sessão anterior e normaliza o identificador',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            ' order-1 ',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).resolves.toMatchObject({
+          sessionId: 'cs_test_1',
+        })
+
+        expect(
+          db.updateMany,
+        ).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    test(
+      'recusa encomenda de outro utilizador ou inexistente',
+      async () => {
+        const db =
+          createStripeFakeDb({
+            order: null,
+          })
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          StripeCheckoutOrderNotFoundError,
+        )
+
+        expect(
+          stripe.sessionsCreate,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          db.updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'recusa encomenda cancelada (o stock já foi reposto)',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    status:
+                      'CANCELLED',
+                  },
+                ),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          'O estado da encomenda não permite iniciar o pagamento',
+        )
+
+        expect(
+          stripe.sessionsCreate,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'recusa encomenda com pagamento não pendente',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    paymentStatus:
+                      'PAID',
+                  },
+                ),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          'A encomenda já tem um estado de pagamento iniciado',
+        )
+
+        expect(
+          stripe.sessionsCreate,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'recusa encomenda iniciada com outro fornecedor de pagamento',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    paymentProvider:
+                      'PFA_SIMULATED',
+                    paymentReference:
+                      'simul_1',
+                  },
+                ),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          'O pagamento desta encomenda foi iniciado por outro fornecedor',
+        )
+
+        expect(
+          stripe.sessionsCreate,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          db.updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'recusa encomenda cujo total diverge dos artigos e dos portes',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    total: {
+                      toString: () =>
+                        '999.00',
+                    },
+                  },
+                ),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          'O total da encomenda não corresponde aos artigos e aos portes de envio',
+        )
+
+        expect(
+          stripe.sessionsCreate,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'recusa alteração concorrente durante a persistência da nova referência',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(
+                  {
+                    paymentProvider:
+                      'STRIPE',
+                    paymentReference:
+                      'cs_antiga',
+                  },
+                ),
+              updateManyCount: 0,
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          'A encomenda foi alterada durante a retoma do pagamento',
+        )
+      },
+    )
+
+    test(
+      'não persiste a nova referência quando o Stripe falha',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient(
+            {
+              createError:
+                new Error(
+                  'fail',
+                ),
+            },
+          )
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-1',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          StripeSessionRequestError,
+        )
+
+        expect(
+          db.updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'valida o identificador da encomenda recebido do pedido',
+      async () => {
+        const db =
+          createStripeFakeDb(
+            {
+              order:
+                createOrderRecord(),
+            },
+          )
+
+        const stripe =
+          createStripeFakeClient()
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            42,
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          StripeValidationError,
+        )
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            '  ',
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          StripeValidationError,
+        )
+
+        await expect(
+          retryStripeCheckoutForOrder(
+            'order-'.repeat(
+              13,
+            ),
+            'user-1',
+            retryUrls,
+            {
+              db: db.client,
+              stripeClient:
+                stripe.client,
+            },
+          ),
+        ).rejects.toThrow(
+          StripeValidationError,
+        )
+
+        expect(
+          db.findFirst,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          stripe.sessionsCreate,
         ).not.toHaveBeenCalled()
       },
     )

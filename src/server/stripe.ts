@@ -898,13 +898,37 @@ type StripeOrderUpdateManyArgs = {
   }
 }
 
+export type StripeOrderRetryUpdateManyArgs =
+  {
+    where: {
+      id: string
+      userId: string
+      status: string
+      paymentStatus: 'PENDING'
+      /**
+       * A retoma atua sobre encomendas sem pagamento iniciado ou com uma
+       * sessão Stripe anterior ainda não paga.
+       */
+      paymentProvider: {
+        in: Array<string | null>
+      }
+    }
+    data: {
+      paymentProvider:
+        typeof STRIPE_PAYMENT_PROVIDER
+      paymentReference: string
+    }
+  }
+
 export interface StripeCheckoutDbClient {
   order: {
     findFirst(
       args: StripeOrderFindFirstArgs,
     ): Promise<StripeOrderRecord | null>
     updateMany(
-      args: StripeOrderUpdateManyArgs,
+      args:
+        | StripeOrderUpdateManyArgs
+        | StripeOrderRetryUpdateManyArgs,
     ): Promise<{ count: number }>
   }
 }
@@ -931,15 +955,16 @@ export type StripeInitiatedCheckoutSession =
   }
 
 /**
- * Carrega a encomenda (com artigos e portes) e converte-a na projeção
- * necessária para a sessão de Checkout. Todos os montantes são convertidos
- * em cêntimos para coincidirem com o formato do Stripe.
+ * Carrega a encomenda (com artigos) para a projeção de checkout e valida
+ * os guardões partilhados pela criação e pela retoma do pagamento:
+ * encomenda própria do utilizador, estado pagável e pagamento por
+ * iniciar.
  */
-export async function loadStripeCheckoutProjection(
+async function findStripeOrderProjection(
   orderId: string,
   userId: string,
   db?: StripeCheckoutDbClient,
-): Promise<StripeCheckoutProjection> {
+): Promise<StripeOrderRecord> {
   const client =
     getStripeCheckoutDbClient(db)
 
@@ -996,17 +1021,18 @@ export async function loadStripeCheckoutProjection(
     )
   }
 
-  if (
-    order.paymentProvider !==
-      null ||
-    order.paymentReference !==
-      null
-  ) {
-    throw new StripeCheckoutConflictError(
-      'O pagamento da encomenda já foi iniciado',
-    )
-  }
+  return order
+}
 
+/**
+ * Converte os artigos da encomenda em linhas de Checkout (incluindo a
+ * linha de portes, quando aplicável) e garante que a sessão cobra
+ * exatamente o total da encomenda (artigos + portes). Numa encomenda
+ * consistente o stock continua reservado desde a criação.
+ */
+function buildStripeCheckoutLineItems(
+  order: StripeOrderRecord,
+): StripeCheckoutLineItemInput[] {
   const items: Array<
     StripeCheckoutLineItemInput
   > = order.items.map(
@@ -1036,7 +1062,7 @@ export async function loadStripeCheckoutProjection(
     })
   }
 
-  // A sessão do Stripe cobra a soma dos artigos; garanti que coincide
+  // A sessão do Stripe cobra a soma dos artigos; garante que coincide
   // com o total da encomenda antes de abrir a sessão.
   const expectedTotalCents =
     decimalMoneyToCents(
@@ -1060,13 +1086,88 @@ export async function loadStripeCheckoutProjection(
     )
   }
 
+  return items
+}
+
+function getStripeCheckoutProjection(
+  order: StripeOrderRecord,
+): StripeCheckoutProjection {
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
     customerEmail: order.shippingEmail,
     status: order.status,
-    items,
+    items: buildStripeCheckoutLineItems(
+      order,
+    ),
   }
+}
+
+/**
+ * Carrega a encomenda (com artigos e portes) e converte-a na projeção
+ * necessária para a sessão de Checkout. Todos os montantes são convertidos
+ * em cêntimos para coincidirem com o formato do Stripe. Só aceita
+ * encomendas sem qualquer iniciação de pagamento prévia.
+ */
+export async function loadStripeCheckoutProjection(
+  orderId: string,
+  userId: string,
+  db?: StripeCheckoutDbClient,
+): Promise<StripeCheckoutProjection> {
+  const order =
+    await findStripeOrderProjection(
+      orderId,
+      userId,
+      db,
+    )
+
+  if (
+    order.paymentProvider !==
+      null ||
+    order.paymentReference !==
+      null
+  ) {
+    throw new StripeCheckoutConflictError(
+      'O pagamento da encomenda já foi iniciado',
+    )
+  }
+
+  return getStripeCheckoutProjection(
+    order,
+  )
+}
+
+/**
+ * Variante da projeção para a retoma do pagamento: uma encomenda com uma
+ * sessão Stripe anterior ainda não paga (expirada ou abandonada) pode
+ * obter uma nova sessão; um fornecedor de pagamento distinto é recusado.
+ */
+async function loadStripeRetriableOrderProjection(
+  orderId: string,
+  userId: string,
+  db?: StripeCheckoutDbClient,
+): Promise<StripeCheckoutProjection> {
+  const order =
+    await findStripeOrderProjection(
+      orderId,
+      userId,
+      db,
+    )
+
+  if (
+    order.paymentProvider !==
+      null &&
+    order.paymentProvider !==
+      STRIPE_PAYMENT_PROVIDER
+  ) {
+    throw new StripeCheckoutConflictError(
+      'O pagamento desta encomenda foi iniciado por outro fornecedor',
+    )
+  }
+
+  return getStripeCheckoutProjection(
+    order,
+  )
 }
 
 /**
@@ -1104,6 +1205,50 @@ async function persistStripeCheckoutSession(
   if (result.count !== 1) {
     throw new StripeCheckoutConflictError(
       'A encomenda foi alterada durante a iniciação do pagamento',
+    )
+  }
+}
+
+/**
+ * Repõe a referência da sessão Stripe numa retoma. O guard de escrita
+ * aceita a encomenda sem referência (primeiro pagamento) bem como uma
+ * sessão Stripe anterior ainda não paga, e deteta alterações
+ * concorrentes.
+ */
+async function persistStripeRetryCheckoutSession(
+  orderId: string,
+  userId: string,
+  status: string,
+  sessionId: string,
+  db?: StripeCheckoutDbClient,
+) {
+  const client =
+    getStripeCheckoutDbClient(db)
+
+  const result =
+    await client.order.updateMany({
+      where: {
+        id: orderId,
+        userId,
+        status,
+        paymentStatus: 'PENDING',
+        paymentProvider: {
+          in: [
+            null,
+            STRIPE_PAYMENT_PROVIDER,
+          ],
+        },
+      },
+      data: {
+        paymentProvider:
+          STRIPE_PAYMENT_PROVIDER,
+        paymentReference: sessionId,
+      },
+    })
+
+  if (result.count !== 1) {
+    throw new StripeCheckoutConflictError(
+      'A encomenda foi alterada durante a retoma do pagamento',
     )
   }
 }
@@ -1155,6 +1300,110 @@ export async function initiateStripeCheckoutForOrder(
 
   return {
     orderId: projection.orderId,
+    sessionId: session.sessionId,
+    sessionUrl: session.sessionUrl,
+  }
+}
+
+/**
+ * URLs da sessão de retoma. O URL de sucesso é construído pela rota
+ * através de uma função porque o número da encomenda só fica conhecido
+ * depois de carregar a projeção da base de dados.
+ */
+export type StripeRetryCheckoutUrls = {
+  buildSuccessUrl: (orderNumber: string) => string
+  cancelUrl: string
+}
+
+export type StripeRetriedCheckoutSession = {
+  orderId: string
+  orderNumber: string
+  sessionId: string
+  sessionUrl: string | null
+}
+
+function normalizeStripeOrderId(
+  value: unknown,
+): string {
+  const normalized =
+    typeof value === 'string'
+      ? value.trim()
+      : ''
+
+  if (
+    !normalized ||
+    normalized.length > 64
+  ) {
+    throw new StripeValidationError(
+      'orderId',
+      'Encomenda inválida',
+    )
+  }
+
+  return normalized
+}
+
+/**
+ * Retoma do pagamento: cria uma NOVA sessão de Checkout para uma
+ * encomenda própria com pagamento pendente e repõe a referência da
+ * sessão na encomenda. O stock foi reservado na criação da encomenda e
+ * permanece reservado enquanto esta não é cancelada; a validação de
+ * valores garante que a sessão cobra exatamente artigos + portes. Uma
+ * referência Stripe anterior (sessão expirada ou abandonada) é
+ * substituída pela nova; fornecedores de pagamento distintos são
+ * recusados. Se a persistência falhar por alteração concorrente, a nova
+ * sessão externa fica sem efeito (o webhook apenas confirma encomendas
+ * com a referência registada).
+ */
+export async function retryStripeCheckoutForOrder(
+  orderId: unknown,
+  userId: string,
+  urls: StripeRetryCheckoutUrls,
+  dependencies?: {
+    db?: StripeCheckoutDbClient
+    stripeClient?: StripeClient
+  },
+): Promise<StripeRetriedCheckoutSession> {
+  const normalizedOrderId =
+    normalizeStripeOrderId(orderId)
+
+  const projection =
+    await loadStripeRetriableOrderProjection(
+      normalizedOrderId,
+      userId,
+      dependencies?.db,
+    )
+
+  const session =
+    await createStripeCheckoutSession(
+      {
+        orderId: projection.orderId,
+        orderNumber:
+          projection.orderNumber,
+        customerEmail:
+          projection.customerEmail,
+        items: projection.items,
+        successUrl:
+          urls.buildSuccessUrl(
+            projection.orderNumber,
+          ),
+        cancelUrl: urls.cancelUrl,
+      },
+      dependencies?.stripeClient,
+    )
+
+  await persistStripeRetryCheckoutSession(
+    projection.orderId,
+    userId,
+    projection.status,
+    session.sessionId,
+    dependencies?.db,
+  )
+
+  return {
+    orderId: projection.orderId,
+    orderNumber:
+      projection.orderNumber,
     sessionId: session.sessionId,
     sessionUrl: session.sessionUrl,
   }
