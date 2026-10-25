@@ -1152,3 +1152,73 @@ por causa da verificação de compatibilidade. Fixtures
 1488cc/50kW/1994→2000), BMW Série 1 F20 116d (N47D20C1,
 1995cc/85kW/2011→2015); ligações
 `BM-2-44-MPACK-SD1G` → 116d e `bicos` → 1.5 TD Sport.
+
+## 24. Épico 3 — Stripe Checkout & Real Transactions: arquitetura e lições (tarefa de 2026-10-25)
+
+Épico completo nos três commits de `master`: `5090c5e`
+(extensões de pagamento no schema + serviço Stripe +
+`POST /api/checkout/stripe` + webhook assinado), `b39ee05`
+(checkout front-end com redireção para a sessão,
+`/checkout/sucesso` + `/checkout/cancelado` e detalhe da
+encomenda por número) e `9f8d1c3` (histórico
+`/conta/encomendas` com retoma
+`POST /api/checkout/stripe/retry`). Gate final: tsc limpo;
+2184 testes (151 ficheiros + 1 skipped) + 3 skipped; lint
+limpo; build limpo com `/api/checkout/stripe/retry` (ƒ) e
+`/conta/encomendas` (○).
+
+**Stock Reservation vs. Webhook Fulfillment** — o stock é
+reservado SINCRONAMENTE dentro do pedido que cria a
+encomenda: `createCheckoutOrder` valida disponibilidade e
+reserva num único `prisma.$transaction` na execução do
+pedido (qualquer falta → 409 imediato, sem oversell), e
+o carrinho do servidor é esvaziado no mesmo fluxo. O webhook
+`checkout.session.completed` nunca toca em stock: apenas
+confirma o pagamento (`recordVerifiedPayment` marca
+`paymentStatus PAID` e regista o evento
+`PAYMENT_CONFIRMED`, com guard sobre a referência
+registada). Esta separação é o coração do desenho: nem a
+reentrega do webhook, nem a duplicação de sessões, nem a
+criação concorrente de encomendas conseguem
+duplo-decrementar stock — quem cancela (`cancelUserOrder`)
+é quem devolve a reserva, uma única vez.
+
+**Webhook Security & Offline Testing** — a verificação usa
+a SDK oficial por default: `verifyStripeWebhookEvent`
+chama `stripe.webhooks.constructEvent` com o corpo CRU do
+pedido (nunca JSON re-parseado, como o Stripe exige) +
+`stripe-signature` + `STRIPE_WEBHOOK_SECRET`; qualquer
+falha → `StripeWebhookAuthenticationError` → 400. Para
+testes offline usa-se
+`stripe.webhooks.generateTestHeaderString({ payload,
+secret })`: gera cabeçalhos de assinatura VÁLIDOS para o
+payload exato, permitindo exercitar todo o caminho do
+handler (verificação incluída) sem servidor nem túnel —
+`/api/webhooks/stripe/route.signed.test.ts` assina eventos
+reais (pagamento confirmado, valores divergentes,
+metadados estragados) em vez de mockar superficialmente a
+resposta da SDK; os eventos com valores/metadados
+incoerentes são recusados antes de qualquer escrita.
+
+**Concurrency & Retry Guards** — toda a mutação do
+pagamento passa por `updateMany` com guarda sobre o estado
+lido e `count === 1` obrigatório. Primeiro pagamento:
+`persistStripeCheckoutSession` exige
+`paymentProvider/paymentReference` a null. Retoma
+(`persistStripeRetryCheckoutSession`, etapa 3): guard
+`{ id, userId, status lido, paymentStatus PENDING,
+paymentProvider in [null, 'STRIPE'] }` → repõe
+`paymentReference` para a NOVA sessão; count ≠ 1 → 409
+`CHECKOUT_CONFLICT` e a sessão externa fica sem efeito
+porque o webhook só confirma encomendas com a referência
+registada. A troca de referência respeita
+`@@unique([paymentProvider, paymentReference])` com
+segurança porque cada sessão nova tem id fresco; a retoma
+só vale para `paymentStatus PENDING` com provider
+null|STRIPE (sessões expiradas/abandonadas podem ser
+substituídas, outros fornecedores — ex.: `PFA_SIMULATED`
+— são recusados com 409). Guardas partilhadas pela
+criação e pela retoma moram num único loader
+(`findStripeOrderProjection`: encomenda própria, estado
+pagável, pagamento por iniciar, soma artigos+portes ===
+total como validação de integridade da reserva).
