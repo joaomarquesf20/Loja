@@ -1222,3 +1222,96 @@ criação e pela retoma moram num único loader
 (`findStripeOrderProjection`: encomenda própria, estado
 pagável, pagamento por iniciar, soma artigos+portes ===
 total como validação de integridade da reserva).
+
+## 25. Épico 4 — Admin Backoffice & Management Dashboard: arquitetura e lições (tarefa de 2026-10-25)
+
+Épico completo nos quatro commits de `master`: `88065ac`
+(seção "Painel" na navegação admin, breadcrumb e métrica
+de produtos ativos no dashboard), `51aee75` (coluna de
+intervalo de preço por variantes + paginação com clamp na
+listagem de produtos), `dc61ad7` (pesquisa, filtros de
+estado/pagamento e paginação na listagem de encomendas) e
+`5fa3073` (gestão de clientes de topo a fundo: serviço,
+API e páginas `/admin/users`). Gate final: tsc limpo;
+2233 testes (160 ficheiros: 159 passed + 1 skipped) + 3
+skipped; lint limpo; build limpo com `/admin/users`,
+`/admin/users/[id]`, `/api/admin/users` e
+`/api/admin/users/[id]` (ƒ) no route map.
+
+**Database-Driven Authorization Guards** — nenhuma
+proteção em middleware de edge (não consegue validar
+`role`/`isActive` na base de dados por pedido): as rotas de
+administração são protegidas em camadas combinadas. (1)
+Guard ao nível do layout server-side
+(`src/app/admin/layout.tsx`): `getServerSession` →
+`redirect('/login')` sem sessão e `notFound()` quando
+`session.user.role !== 'ADMIN'`. (2) Guard server-side
+central `requireAdmin()` (`src/server/admin-auth.ts`):
+além da sessão, lê o utilizador NA BASE DE DADOS em cada
+pedido e exige `isActive: true` + `role === 'ADMIN'` —
+desativar uma conta ou revogar um papel surte efeito no
+pedido seguinte, sem redeploy nem relogin; as rotas
+mapeiam `UnauthorizedError`/`ForbiddenError` → 401/403 e
+as páginas server-side repetem a verificação. (3)
+Verificação atómica quando há mutação: `updateAdminUser`
+lê papel/estado e aplica a alteração dentro do mesmo
+`$transaction`, e o motor de encomendas
+(`applyAdminOrderAction` + reposição de stock em
+`cancelOrderAndRestoreStock`) executa leitura de guard +
+escrita na mesma transação — elimina a janela TOCTOU
+entre "validar" e "afetar".
+
+**Safe Clamped Pagination** — padrão de casa para
+listagens de backoffice (`PRODUCTS_PAGE_SIZE`,
+`ORDERS_PAGE_SIZE`, `USERS_PAGE_SIZE` = 10): a fonte de
+realidade é sempre a lista FILTRADA (memo `filteredX`) e
+os índices derivam no render — `pageCount = max(1,
+ceil(filteredX.length / size))` e `currentPage = min(page,
+pageCount - 1)` — nunca se persiste a página. Assim,
+filtros, transições e ações em massa que encolhem a lista
+nunca deixam "página fantasma" fora dos limites: a página
+em excesso colapsa sozinha para a última válida. O reset
+(`setPage(0)`) vive nos handlers dos controlos de filtro
+(onChange), NÃO em effects — o lint
+`react-hooks/set-state-in-effect` proíbe `setState`
+montado por efeito (cascading renders). Navegação em
+`nav[aria-label="Paginação de …"]` ("Página X de Y" +
+Anterior/Seguinte com `disabled` nas margens) só quando
+`pageCount > 1`, e dois estados vazios distintos: sem
+dados ("Ainda não existem …") vs sem correspondências
+após filtro ("Nenhuma … corresponde aos filtros" +
+"Limpar filtros"). Transições in-place via `setOrders` /
+`setUsers` mantêm a página visível coerente porque o mem
+deriva sempre de `orders`/`users` atualizados.
+
+**Administrative Self-Protection Safeguards** — a gestão
+de papel/estado de conta (`updateAdminUser` em
+`src/server/admin-users.ts`) impede que um administrador
+remova o seu próprio papel ADMIN ou desative a própria
+conta ativa, em três camadas. (1) Serviço: dentro de
+`db.$transaction` funcional (padrão
+`order-cancellation.ts`) — `findUnique` do alvo + guard
+`current.id === actingUserId && (remove papel ADMIN OU
+isActive: false)` → `AdminUserSelfUpdateError` ANTES do
+`update`; como o `requireAdmin()` já exige
+`isActive: true`, a regra de autoproteção fecha o cenário
+de lockout: quando o executor é outro ADMIN ativo,
+existem sempre ≥2 admins ativos por definição — a única
+conta que poderia ficar num estado de acesso incompatível
+é a do executor. A rota PATCH passa
+`session.user.id` como `actingUserId`. Como a verificação
+e o update vivem na mesma transação, um utilizador apagado
+entre leitura e escrita dá 404 determinística
+(`AdminUserNotFoundError`), nunca P2025 → 500. (2) API:
+`/api/admin/users/[id]` PATCH valida com Zod
+(`adminUserUpdateSchema`: role enum + isActive + refine
+"pelo menos um campo"; `readJsonBody` com limite 8 KB)
+e mapeia 409/404/400/413 com mensagens pt-PT, ZodError →
+400 com `fieldErrors` por caminho de campo. (3) Cliente:
+`user-detail-client.tsx` duplica o guard ANTES de qualquer
+pedido (imediato via role="alert", sem `fetch` nem
+`window.confirm`) e a ficha identifica a conta própria
+("Esta é a sua própria conta: papel e estado não podem
+ser alterados."), com `window.confirm` mockado nos testes
+jsdom (`Not implemented` devolve undefined e abortaria o
+fluxo).
