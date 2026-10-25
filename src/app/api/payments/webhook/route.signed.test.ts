@@ -14,6 +14,14 @@ import {
 // Só o serviço de encomendas é substituído (sem base de dados).
 // A verificação de assinatura é a implementação real.
 vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderConfirmationEmail:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {}
@@ -38,6 +46,9 @@ import {
   recordVerifiedPayment,
   recordVerifiedPaymentFailure,
 } from '@/server/order-lifecycle'
+import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
 import { POST } from './route'
 
 const mockRecordVerifiedPayment =
@@ -49,6 +60,10 @@ const mockRecordVerifiedPaymentFailure =
   vi.mocked(
     recordVerifiedPaymentFailure,
   )
+
+const mockSendOrderConfirmationEmail = vi.mocked(
+  sendOrderConfirmationEmail,
+)
 
 const secret =
   '0123456789abcdef0123456789abcdef'
@@ -188,6 +203,14 @@ describe(
           amount: '128.50',
           currency: 'EUR',
         })
+
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+          paymentEventSinceMs:
+            expect.any(Number),
+        })
       },
     )
 
@@ -226,6 +249,10 @@ describe(
 
         expect(
           mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderConfirmationEmail,
         ).not.toHaveBeenCalled()
       },
     )

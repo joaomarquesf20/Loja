@@ -1282,6 +1282,152 @@ Próximos passos (pós-etapa):
 - Fechar o épico com o utilizador (discussão da
   Etapa 5 ou § do knowledge.md).
 
+## Épico 5 — Etapa 1 (concluída): Emails transacionais — serviço, templates e triggers
+
+Data: 2026-10-25 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: serviço Resend em
+`src/server/email.ts` com erro seguro e fallback
+de simulação; templates React Email
+(confirmação com artigos, preços, morada e
+número de encomenda); ligar o disparo ao
+webhook Stripe (`checkout.session.completed`)
+e aos eventos de ciclo de vida; testes; gate
+completa; atualizar CHECKPOINT.md.
+
+Descoberta (a base já existia, commitada desde
+2f171fc/3dc04e5):
+- `src/server/email.ts` (+ `email.test.ts`) e
+  templates `src/emails/order-confirmation.tsx`,
+  `order-status-update.tsx`, `brand.ts`
+  (+testes) já completos e foram mantidos
+  como estão: contrato "nunca lançam"
+  (`EmailSendOutcome` sent/skipped/error),
+  deteção de webhooks repetidos via evento
+  `PAYMENT_CONFIRMED` + janela
+  `paymentEventSinceMs` (tolerância +5 s) e
+  modo de simulação sem `RESEND_API_KEY`
+  (email registado no log, nunca enviado).
+- Lacunas reais encontradas: dependências fora
+  do `package.json` (`npm ls` marcava-as
+  extraneous — um `npm ci` limpo quebraria o
+  build), vars em falta no `.env.example` e
+  **zero chamadores** — os emails nunca eram
+  disparados.
+
+Novidades:
+- Dependências: `resend@^6.34.1` +
+  `@react-email/components@^1.0.12` em
+  dependencies; `@react-email/render@^2.1.1`
+  em devDependencies (import direto apenas
+  nos testes; produção usa só components).
+- `.env.example`: `RESEND_API_KEY=""` e
+  `EMAIL_FROM=""` com comentário pt-PT (sem
+  chave → modo de simulação).
+- Disparo ligado em 5 rotas (serviço agnóstico;
+  captura `paymentEventSinceMs = Date.now()`
+  ANTES da escrita, chamada `await` DEPOIS —
+  o email é auxiliar: nunca muda a resposta
+  do fulfillment):
+  - `/api/webhooks/stripe`
+    (`checkout.session.completed`) →
+    `sendOrderConfirmationEmail({ orderId:
+    order.id, paymentEventSinceMs })`; falha
+    de `recordVerifiedPayment` impede o
+    email; reentregas idempotentes do Stripe
+    disparam de novo e a SUPRESSÃO vive no
+    serviço (evento `PAYMENT_CONFIRMED`
+    anterior à janela).
+  - `/api/payments/webhook` → igual, só no
+    `PAYMENT_PAID` (em `PAYMENT_FAILED` não
+    há confirmação).
+  - `/api/payments/simulate` → igual (demo
+    segue o mesmo contrato dos webhooks).
+  - `/api/admin/orders/[id]/transition` →
+    `sendOrderStatusUpdateEmail({ orderId })`
+    após CANCEL/REFUND_PAYMENT/ação.
+  - `/api/admin/orders/[id]/ready-for-pickup`
+    → igual após `markOrderReadyForPickup`.
+
+Testes (7 ficheiros editados; sem casos novos —
+asserções dentro dos testes existentes):
+- `webhooks/stripe/route.test.ts`: mock
+  `@/server/email`; confirmação chamada com
+  `{ orderId: 'order-1', paymentEventSinceMs:
+  expect.any(Number) }`, ×2 no teste
+  idempotente (supressão é do serviço) e
+  not-called em evento não tratado, sessão
+  sem pagamento e conflito 409.
+- `payments/webhook/route.test.ts`: mock;
+  chamada no caminho PAID, not-called no
+  FAILED.
+- `payments/webhook/route.signed.test.ts`:
+  mock; chamada no PAID assinado (round-trip
+  real), not-called no FAILED.
+- `payments/webhook/route.unique-violation.test.ts`:
+  mock isolado — o serviço de email real
+  voltaria a chamar `prisma.order.findUnique`
+  (stub) e quebraria a contagem exata de
+  2 chamadas.
+- `payments/simulate/route.test.ts`: mock;
+  chamada no sucesso, not-called nos 404 de
+  produção.
+- `admin/orders/[id]/transition/route.test.ts`:
+  mock `sendOrderStatusUpdateEmail`; chamada
+  nas 3 ações bem-sucedidas, not-called no
+  401.
+- `admin/orders/[id]/ready-for-pickup/route.test.ts`:
+  chamada no sucesso, not-called no 409.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2233 passed** + 3 skipped (160
+ficheiros: 159 passed + 1 skipped — mesmos
+totais do baseline, +asserções); `npm run
+lint` limpo; `npm run build` limpo
+(rotas de email ƒ).
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- Transacional = auxiliar ao fulfillment: o
+  disparo é `await`, mas o contrato do serviço
+  é nunca lançar (`EmailSendOutcome`) — uma
+  falha de envio não muda a resposta (200) nem
+  o estado da encomenda.
+- Deduplicação por janela temporal: a rota
+  captura `paymentEventSinceMs` ANTES do
+  registo e o serviço compara o `createdAt`
+  do evento `PAYMENT_CONFIRMED` (+5 s);
+  como `recordVerifiedPayment` é idempotente
+  e devolve o mesmo estado numa reentrega,
+  a rota dispara sempre o email e quem
+  decide suprimir é o serviço.
+- Dependências de código commitado: `resend`/
+  `@react-email` estavam em node_modules como
+  extraneous — instalar sempre com
+  `npm install pkg@versão` para atualizar
+  package.json + package-lock.json em
+  conjunto.
+- `@react-email/render` apenas em
+  devDependencies (import só nos testes);
+  produção importa `@react-email/components`.
+- `vi.mock` tem de cobrir também I/O real
+  acedido indiretamente pelo sut: no teste de
+  violação de unicidade o email real
+  reconsultaria o stub de prisma e
+  desorganizaria as contagens
+  `mockResolvedValueOnce`.
+
+Próximos passos (pós-etapa):
+- Commit desta etapa quando o utilizador
+  pedir (ficheiros: package.json +
+  package-lock.json, .env.example, 5 routes,
+  7 route tests, CHECKPOINT.md).
+- Continuar o Épico 5 com o utilizador
+  (silenciar notificações de estado está
+  também ligado; follow-up: notificações de
+  falha de pagamento).
+
 
 
 

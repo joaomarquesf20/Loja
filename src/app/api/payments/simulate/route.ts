@@ -4,6 +4,9 @@ import {
   readJsonBody,
 } from '@/server/http-request'
 import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -169,6 +172,9 @@ export async function POST(
         getOrderId(body),
       )
 
+    const paymentEventSinceMs =
+      Date.now()
+
     const order =
       await recordVerifiedPayment({
         orderId:
@@ -180,6 +186,15 @@ export async function POST(
         amount: initiated.amount,
         currency: PAYMENT_CURRENCY,
       })
+
+    // Mesmo contrato dos webhooks: o pagamento simulado confirma a encomenda
+    // e o cliente recebe a confirmação por email (auxiliar, nunca lança).
+    await sendOrderConfirmationEmail(
+      {
+        orderId: order.id,
+        paymentEventSinceMs,
+      },
+    )
 
     return Response.json(
       {

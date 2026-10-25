@@ -37,6 +37,14 @@ vi.mock(
 )
 
 vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderConfirmationEmail:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {}
@@ -65,6 +73,9 @@ import {
   initiateSimulatedPayment,
 } from '@/server/payment-initiation'
 import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
+import {
   UnauthorizedUserError,
   requireActiveUserId,
 } from '@/server/user-auth'
@@ -82,6 +93,10 @@ const mockRecordVerifiedPayment =
   vi.mocked(
     recordVerifiedPayment,
   )
+
+const mockSendOrderConfirmationEmail = vi.mocked(
+  sendOrderConfirmationEmail,
+)
 
 function request(
   body: unknown = {
@@ -179,6 +194,16 @@ describe(
           amount: '128.50',
           currency: 'EUR',
         })
+
+        // Pagamento simulado também confirma por email (mesmo contrato dos
+        // webhooks), com a janela temporal para supressão de repetidos.
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+          paymentEventSinceMs:
+            expect.any(Number),
+        })
       },
     )
 
@@ -238,6 +263,9 @@ describe(
           expect(
             mockRecordVerifiedPayment,
           ).not.toHaveBeenCalled()
+          expect(
+            mockSendOrderConfirmationEmail,
+          ).not.toHaveBeenCalled()
         } finally {
           vi.unstubAllEnvs()
         }
@@ -271,6 +299,9 @@ describe(
           ).not.toHaveBeenCalled()
           expect(
             mockRecordVerifiedPayment,
+          ).not.toHaveBeenCalled()
+          expect(
+            mockSendOrderConfirmationEmail,
           ).not.toHaveBeenCalled()
         } finally {
           vi.unstubAllEnvs()

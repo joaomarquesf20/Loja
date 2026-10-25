@@ -16,6 +16,14 @@ vi.mock('@/server/db', () => ({
 }))
 
 vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderConfirmationEmail:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {
@@ -46,10 +54,17 @@ import {
   OrderLifecycleValidationError,
   recordVerifiedPayment,
 } from '@/server/order-lifecycle'
+import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
 import { POST } from './route'
 
 const mockRecordVerifiedPayment =
   vi.mocked(recordVerifiedPayment)
+
+const mockSendOrderConfirmationEmail = vi.mocked(
+  sendOrderConfirmationEmail,
+)
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -201,6 +216,21 @@ describe(
           amount: '205.90',
           currency: 'EUR',
         })
+
+        // A confirmação por email entra após o registo do pagamento, com a
+        // janela temporal capturada antes do registo para detetar entregas
+        // repetidas do webhook.
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledTimes(1)
+
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+          paymentEventSinceMs:
+            expect.any(Number),
+        })
       },
     )
 
@@ -238,6 +268,12 @@ describe(
 
         expect(
           mockRecordVerifiedPayment,
+        ).toHaveBeenCalledTimes(2)
+
+        // O webhook dispara o email a cada entrega confirmada; a supressão
+        // de repetidos vive no serviço de email (evento PAYMENT_CONFIRMED).
+        expect(
+          mockSendOrderConfirmationEmail,
         ).toHaveBeenCalledTimes(2)
       },
     )
@@ -337,6 +373,10 @@ describe(
         expect(
           mockRecordVerifiedPayment,
         ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).not.toHaveBeenCalled()
       },
     )
 
@@ -364,6 +404,10 @@ describe(
 
         expect(
           mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderConfirmationEmail,
         ).not.toHaveBeenCalled()
       },
     )
@@ -455,6 +499,10 @@ describe(
           error:
             'O pagamento confirmado não corresponde ao pagamento iniciado para a encomenda',
         })
+
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).not.toHaveBeenCalled()
       },
     )
 

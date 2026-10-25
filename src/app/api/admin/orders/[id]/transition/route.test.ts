@@ -20,6 +20,14 @@ vi.mock(
   },
 )
 
+vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderStatusUpdateEmail:
+      vi.fn(),
+  }),
+)
+
 
 vi.mock(
   '@/server/order-cancellation',
@@ -86,6 +94,9 @@ import {
   OrderLifecycleValidationError,
   applyAdminOrderAction,
 } from '@/server/order-lifecycle'
+import {
+  sendOrderStatusUpdateEmail,
+} from '@/server/email'
 import { POST } from './route'
 
 const mockRequireAdmin =
@@ -104,6 +115,11 @@ const mockRefundSimulatedPayment =
 const mockApplyAdminOrderAction =
   vi.mocked(
     applyAdminOrderAction,
+  )
+
+const mockSendOrderStatusUpdateEmail =
+  vi.mocked(
+    sendOrderStatusUpdateEmail,
   )
 
 function context(
@@ -232,6 +248,13 @@ describe(
           'order-1',
           'CONFIRM',
         )
+
+        // Toda ação administrativa bem-sucedida notifica o cliente por email.
+        expect(
+          mockSendOrderStatusUpdateEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+        })
       },
     )
 
@@ -274,6 +297,12 @@ describe(
         expect(
           mockApplyAdminOrderAction,
         ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderStatusUpdateEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+        })
       },
     )
 
@@ -320,6 +349,12 @@ describe(
         expect(
           mockApplyAdminOrderAction,
         ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderStatusUpdateEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+        })
       },
     )
 
@@ -345,6 +380,10 @@ describe(
 
         expect(
           mockApplyAdminOrderAction,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          mockSendOrderStatusUpdateEmail,
         ).not.toHaveBeenCalled()
 
         expect(

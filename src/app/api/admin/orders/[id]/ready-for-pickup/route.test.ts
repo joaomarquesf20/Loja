@@ -21,6 +21,14 @@ vi.mock(
 )
 
 vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderStatusUpdateEmail:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {
@@ -61,6 +69,9 @@ import {
   OrderLifecycleValidationError,
   markOrderReadyForPickup,
 } from '@/server/order-lifecycle'
+import {
+  sendOrderStatusUpdateEmail,
+} from '@/server/email'
 import { POST } from './route'
 
 const mockRequireAdmin =
@@ -69,6 +80,11 @@ const mockRequireAdmin =
 const mockMarkOrderReadyForPickup =
   vi.mocked(
     markOrderReadyForPickup,
+  )
+
+const mockSendOrderStatusUpdateEmail =
+  vi.mocked(
+    sendOrderStatusUpdateEmail,
   )
 
 function context(
@@ -162,6 +178,12 @@ describe(
         ).toHaveBeenCalledWith(
           'order-1',
         )
+
+        expect(
+          mockSendOrderStatusUpdateEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+        })
       },
     )
 
@@ -201,6 +223,10 @@ describe(
         ).toHaveBeenCalledWith(
           'order-1',
         )
+
+        expect(
+          mockSendOrderStatusUpdateEmail,
+        ).not.toHaveBeenCalled()
       },
     )
 

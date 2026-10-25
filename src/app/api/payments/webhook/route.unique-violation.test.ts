@@ -51,6 +51,13 @@ vi.mock('@/server/db', () => ({
   },
 }))
 
+// O serviço de email fica isolado: o teste conta chamadas exatas ao prisma
+// e o email real voltaria a consultar a encomenda para a montar.
+vi.mock('@/server/email', () => ({
+  sendOrderConfirmationEmail:
+    vi.fn(),
+}))
+
 import {
   createUniqueConstraintViolation,
 } from '../../../../../test/prisma-error-fixtures'

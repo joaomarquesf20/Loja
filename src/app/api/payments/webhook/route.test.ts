@@ -24,6 +24,14 @@ vi.mock(
 )
 
 vi.mock(
+  '@/server/email',
+  () => ({
+    sendOrderConfirmationEmail:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
   '@/server/order-lifecycle',
   () => {
     class OrderLifecycleValidationError extends Error {
@@ -72,6 +80,9 @@ import {
   PaymentWebhookValidationError,
   verifyPaymentWebhookRequest,
 } from '@/server/payment-webhook'
+import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
 import { POST } from './route'
 
 const mockVerifyPaymentWebhookRequest =
@@ -88,6 +99,10 @@ const mockRecordVerifiedPaymentFailure =
   vi.mocked(
     recordVerifiedPaymentFailure,
   )
+
+const mockSendOrderConfirmationEmail = vi.mocked(
+  sendOrderConfirmationEmail,
+)
 
 function request() {
   return new Request(
@@ -197,6 +212,20 @@ describe(
           amount: '128.50',
           currency: 'EUR',
         })
+
+        // Pagamento pago notifica o cliente por email, com a janela temporal
+        // capturada antes do registo para o serviço suprimir repetidos.
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledTimes(1)
+
+        expect(
+          mockSendOrderConfirmationEmail,
+        ).toHaveBeenCalledWith({
+          orderId: 'order-1',
+          paymentEventSinceMs:
+            expect.any(Number),
+        })
       },
     )
 
@@ -243,6 +272,11 @@ describe(
 
         expect(
           mockRecordVerifiedPayment,
+        ).not.toHaveBeenCalled()
+
+        // Falha de pagamento não envia confirmação.
+        expect(
+          mockSendOrderConfirmationEmail,
         ).not.toHaveBeenCalled()
       },
     )

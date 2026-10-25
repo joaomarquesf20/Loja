@@ -2,6 +2,9 @@ import {
   RequestPayloadTooLargeError,
 } from '@/server/http-request'
 import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -177,6 +180,9 @@ export async function POST(
         event.paymentReference,
     }
 
+    const paymentEventSinceMs =
+      Date.now()
+
     const order =
       event.type ===
       'PAYMENT_FAILED'
@@ -190,6 +196,20 @@ export async function POST(
             currency:
               event.currency,
           })
+
+    if (
+      event.type ===
+      'PAYMENT_PAID'
+    ) {
+      // Auxiliar ao fulfillment: o serviço de email nunca lança e a deteção
+      // de entregas repetidas impede confirmações em duplicado.
+      await sendOrderConfirmationEmail(
+        {
+          orderId: order.id,
+          paymentEventSinceMs,
+        },
+      )
+    }
 
     return Response.json(
       {

@@ -1,4 +1,7 @@
 import {
+  sendOrderConfirmationEmail,
+} from '@/server/email'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -224,6 +227,12 @@ export async function POST(
       )
     }
 
+    // Capturado imediatamente ANTES do registo do pagamento: combina com o
+    // evento PAYMENT_CONFIRMED para o serviço de email detetar entregas
+    // repetidas do webhook e não reenviar a confirmação.
+    const paymentEventSinceMs =
+      Date.now()
+
     const order =
       await recordVerifiedPayment({
         orderId: session.orderId,
@@ -234,6 +243,15 @@ export async function POST(
         amount: session.amount,
         currency: session.currency,
       })
+
+    // Auxiliar ao fulfillment: o serviço de email nunca lança e uma falha
+    // de envio não deve impedir a confirmação (200) da entrega.
+    await sendOrderConfirmationEmail(
+      {
+        orderId: order.id,
+        paymentEventSinceMs,
+      },
+    )
 
     return Response.json(
       {

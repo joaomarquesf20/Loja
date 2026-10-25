@@ -9,6 +9,9 @@ import {
   readJsonBody,
 } from '@/server/http-request'
 import {
+  sendOrderStatusUpdateEmail,
+} from '@/server/email'
+import {
   cancelOrderAndRestoreStock,
 } from '@/server/order-cancellation'
 import {
@@ -180,6 +183,12 @@ export async function POST(
               id,
               action,
             )
+
+    // Notificação transacional por email após qualquer alteração de estado
+    // administrativa (auxiliar, nunca lança; mostra o estado atual).
+    await sendOrderStatusUpdateEmail({
+      orderId: order.id,
+    })
 
     return Response.json(
       order,

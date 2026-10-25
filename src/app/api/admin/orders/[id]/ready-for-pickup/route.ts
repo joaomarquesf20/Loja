@@ -4,6 +4,9 @@ import {
   requireAdmin,
 } from '@/server/admin-auth'
 import {
+  sendOrderStatusUpdateEmail,
+} from '@/server/email'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -89,6 +92,11 @@ export async function POST(
       await markOrderReadyForPickup(
         id,
       )
+
+    // Notificação transacional por email (auxiliar, nunca lança).
+    await sendOrderStatusUpdateEmail({
+      orderId: order.id,
+    })
 
     return Response.json(
       order,
