@@ -262,7 +262,7 @@ export default function SiteHeader({
           className="flex w-fit shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <Image
-            src="/brand/pfautoparts-logo-horizontal.png"
+            src="/brand/pfautoparts-logo-horizontal-dark.png"
             alt=""
             width={256}
             height={42}
