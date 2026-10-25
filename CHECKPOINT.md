@@ -915,9 +915,112 @@ Próximos passos (pós-etapa):
   sales-dashboard.tsx + test, admin-navigation.tsx,
   layout.tsx, page.test.tsx, CHECKPOINT.md).
 - Etapa 2 do épico a definir com o utilizador (candidatos
-  já no route map: gestão de encomendas AP I de transição,
+  já no route map: gestão de encomendas API de transição,
   importação, definições comerciais) + atualização de
   `knowledge.md` com a § do épico.
+
+
+# Checkpoint - 25/10/2026 — Epic 4: Admin Product Catalog & Variant Management (cont.)
+
+Etapa 2 — Admin Product Catalog & Variant Management:
+**COMPLETA** (não commitada; commit fica para pedido do
+utilizador).
+
+Estado da exploração (a gestão de catálogo já existia):
+- Listagem `/admin/products` (guard redirect/notFound no
+  page.tsx + `ProductsClient`): carrega
+  `GET /api/admin/products/manage` (`requireAdmin()` →
+  `listAdminProducts`) + categorias/fabricantes; pesquisa
+  por nome/SKU/marca/categoria, filtros de categoria,
+  fabricante e estado (Ativos/Inativos), métricas por
+  linha (nº de variantes, stock total + variantes
+  esgotadas), estado Ativo/Inativo, menu por linha
+  (Editar, Preview, Duplicar, Ativar/Desativar, Eliminar
+  com confirmação) e ações em massa (ativar/desativar/
+  eliminar via `POST /api/admin/products/bulk`) com
+  seleção que opera sobre o resultado filtrado.
+- Editor/criador: `/admin/products/new` e
+  `/admin/products/[id]` renderizam
+  `ProductEditorClient` (`POST /api/admin/products` /
+  `PATCH /api/admin/products/[id]`) com produto (nome,
+  descrição, categoria, fabricante, estado, portes) e
+  gestão completa no mesmo ecrã: variantes (SKU, preço,
+  stock, especificações, imagens via
+  `product-image-manager`) e compatibilidade veicular
+  ligada/desligada (`ProductVehicleCompatibilityEditor` +
+  `/api/admin/products/[id]/compatibilities`); duplicação
+  (`[id]/duplicate`) e eliminar/arquivar
+  (`[id]/manage` PATCH/DELETE preservando histórico de
+  encomendas).
+- Serviço `admin-products.ts`: schemas Zod por payload
+  (produto/variantes/compatibilidades/imagens/bulk),
+  transações atómicas no criar/atualizar/eliminar/bulk/
+  duplicar (`$transaction`), erros tipados mapeados em
+  401/403/400 (com `fieldErrors`)/409/500 e stacks de
+  teste de serviço + rotas já extensivos.
+
+Lacunas reais fechadas nesta etapa (só na listagem):
+- **Preço por produto**: coluna nova "Preço" com
+  intervalo min–max das variantes ("169,90 € –
+  219,90 €") ou valor único quando só há um preço
+  (`tabular-nums`); `AdminProduct.variants[].price` já
+  vinha no payload — faltava exibi-lo.
+- **Paginação**: cortes de 10 por página
+  (`PRODUCTS_PAGE_SIZE`), `pageCount`/`currentPage` com
+  clamp seguro no render (eliminações/ação em massa que
+  encolhem a última página não deixam página fantasma),
+  reset da página dentro dos handlers dos 4 filtros
+  (pesquisa/categoria/fabricante/estado) — mount via
+  effect foi rejeitado pelo lint
+  (`react-hooks/set-state-in-effect`) — e controlos
+  `nav[aria-label="Paginação dos produtos"]`
+  (Anterior/Seguinte com disabled + "Página X de Y")
+  apenas quando >1 página. "Selecionar todos os produtos
+  visíveis" continua a cobrir o RESULTADO FILTRADO
+  completo (inclui páginas além da atual, coerente com a
+  toolbar em massa).
+
+Testes (+1 teste, asserções novas):
+- `products-client.test.tsx`: 10 testes (antes 9) —
+  intervalo de preço nas duas linhas do fixture
+  (multi-variante "169,90 € – 219,90 €" e valor único
+  "289,90 €") + teste novo de paginação com 12 produtos
+  (10 na pág. 1, Anterior disabled, Seguinte → "Página 2
+  de 2" com Produto 11/12 e Seguinte disabled,
+  contador "12 de 12 produtos", filtro de pesquisa
+  recolhe para 1 página e esconde a nav).
+- Autorização/validação/transações: cobertura
+  pré-existente mantida (route.test.ts de products,
+  `[id]`, manage, bulk, duplicate, compatibilities +
+  `admin-products.test.ts`); nada duplicado nesta
+  etapa — ver secção da Etapa 1 e §18 do knowledge.md.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2198
+passed** (155 ficheiros: 154 passed + 1 skipped) + 3
+skipped (baseline 2197 → +1 teste); `npm run lint` limpo;
+`npm run build` limpo — route map intacto, produtos
+admin ƒ.
+
+Lições desta etapa (para `knowledge.md` em § futura):
+- Paginação client-side sobre lista carregada em bloco:
+  clamp de `currentPage` contra `pageCount` no render
+  evita página fantasma quando as ações em massa
+  encolhem a lista; reset de página deve viver nos
+  handlers dos filtros, não num effect
+  (`react-hooks/set-state-in-effect` é erro de lint).
+- Métricas por linha "grátis": o payload admin já
+  devolve variantes com price/stock — colunas de
+  intervalo min–max derivam no cliente sem tocar na API
+  (`Intl.NumberFormat('pt-PT', EUR)`).
+
+Próximos passos (pós-etapa):
+- Commit da etapa 2 quando o utilizador pedir
+  (modificados: products-client.tsx,
+  products-client.test.tsx, CHECKPOINT.md).
+- Etapa 3 do épico a definir com o utilizador
+  (candidatos: encomendas avançado, definições
+  comerciais, importação) + § do épico no
+  `knowledge.md` no fecho.
 
 
 

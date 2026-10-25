@@ -78,6 +78,37 @@ function stockSummary(
   }`
 }
 
+const PRODUCTS_PAGE_SIZE = 10
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat(
+    'pt-PT',
+    {
+      style: 'currency',
+      currency: 'EUR',
+    },
+  ).format(value)
+}
+
+function priceSummary(
+  product: AdminProduct,
+) {
+  const prices = product.variants.map(
+    (variant) => Number(variant.price),
+  )
+
+  if (prices.length === 0) {
+    return '—'
+  }
+
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+
+  return min === max
+    ? formatMoney(min)
+    : `${formatMoney(min)} – ${formatMoney(max)}`
+}
+
 export default function ProductsClient() {
   const [products, setProducts] =
     useState<AdminProduct[]>([])
@@ -105,6 +136,7 @@ export default function ProductsClient() {
   const [status, setStatus] = useState(
     'all',
   )
+  const [page, setPage] = useState(0)
   const selectAllRef =
     useRef<HTMLInputElement>(null)
   const router = useRouter()
@@ -221,6 +253,24 @@ export default function ProductsClient() {
       ),
     [filteredProducts],
   )
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(
+      filteredProducts.length /
+        PRODUCTS_PAGE_SIZE,
+    ),
+  )
+  const currentPage = Math.min(
+    page,
+    pageCount - 1,
+  )
+  const pagedProducts =
+    filteredProducts.slice(
+      currentPage * PRODUCTS_PAGE_SIZE,
+      (currentPage + 1) * PRODUCTS_PAGE_SIZE,
+    )
+
   const activeSelectedIds = useMemo(
     () => {
       const visible = new Set(
@@ -658,6 +708,7 @@ export default function ProductsClient() {
             onChange={(event) => {
               setSearch(event.target.value)
               setSelectedIds([])
+              setPage(0)
             }}
             placeholder="Nome, SKU ou marca"
             className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
@@ -671,6 +722,7 @@ export default function ProductsClient() {
             onChange={(event) => {
               setCategoryId(event.target.value)
               setSelectedIds([])
+              setPage(0)
             }}
             className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
           >
@@ -697,6 +749,7 @@ export default function ProductsClient() {
                 event.target.value,
               )
               setSelectedIds([])
+              setPage(0)
             }}
             className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
           >
@@ -723,6 +776,7 @@ export default function ProductsClient() {
             onChange={(event) => {
               setStatus(event.target.value)
               setSelectedIds([])
+              setPage(0)
             }}
             className="rounded-md border border-black/12 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-[#121417]"
           >
@@ -866,6 +920,9 @@ export default function ProductsClient() {
                   <th className="px-4 py-3 font-black">
                     Categoria
                   </th>
+                  <th className="px-4 py-3 font-black">
+                    Preço
+                  </th>
                   <th className="px-4 py-3 text-center font-black">
                     Variantes
                   </th>
@@ -881,7 +938,7 @@ export default function ProductsClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/6">
-                {filteredProducts.map((product) => (
+                {pagedProducts.map((product) => (
                   <tr key={product.id}>
                     <td className="px-4 py-4">
                       <input
@@ -928,6 +985,11 @@ export default function ProductsClient() {
                     <td className="px-4 py-4">
                       {product.category.name}
                     </td>
+                    <td className="px-4 py-4 tabular-nums">
+                      {priceSummary(
+                        product,
+                      )}
+                    </td>
                     <td className="px-4 py-4 text-center font-semibold">
                       {product.variants.length}
                     </td>
@@ -969,6 +1031,48 @@ export default function ProductsClient() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {pageCount > 1 && (
+          <nav
+            aria-label="Paginação dos produtos"
+            className="flex items-center justify-between gap-3 border-t border-black/8 px-5 py-3"
+          >
+            <p className="text-xs font-semibold text-[#687078]">
+              Página {currentPage + 1} de{' '}
+              {pageCount}
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                aria-label="Página anterior"
+                disabled={
+                  currentPage === 0 || bulkBusy
+                }
+                onClick={() =>
+                  setPage(currentPage - 1)
+                }
+                className="rounded-md border border-black/12 bg-white px-3 py-1.5 text-sm font-bold transition hover:border-black/30 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                aria-label="Página seguinte"
+                disabled={
+                  currentPage >=
+                    pageCount - 1 || bulkBusy
+                }
+                onClick={() =>
+                  setPage(currentPage + 1)
+                }
+                className="rounded-md border border-black/12 bg-white px-3 py-1.5 text-sm font-bold transition hover:border-black/30 disabled:opacity-50"
+              >
+                Seguinte
+              </button>
+            </div>
+          </nav>
         )}
       </section>
     </div>

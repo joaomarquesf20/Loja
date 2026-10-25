@@ -347,6 +347,21 @@ describe('ProductsClient', () => {
         '12 em stock · 1 variante esgotada',
       ),
     ).toBeInTheDocument()
+    expect(
+      productRow.getByText(
+        '169,90 € – 219,90 €',
+      ),
+    ).toBeInTheDocument()
+
+    const suspensionRow = screen
+      .getByText('Molas Suspension')
+      .closest('tr') as HTMLTableRowElement
+
+    expect(
+      within(suspensionRow).getByText(
+        '289,90 €',
+      ),
+    ).toBeInTheDocument()
     fireEvent.click(
       productRow.getByRole('button', {
         name: 'Ações para Japan Racing JR11',
@@ -730,5 +745,117 @@ describe('ProductsClient', () => {
     expect(
       screen.queryByText('Japan Racing JR11'),
     ).not.toBeInTheDocument()
+  })
+
+  test('pagina a lista e volta à primeira página ao filtrar', async () => {
+    const paginated = Array.from(
+      { length: 12 },
+      (_, index) => ({
+        ...products[0]!,
+        id: `product-page-${index}`,
+        name: `Produto ${index + 1}`,
+        sku: `PAG-${index + 1}`,
+      }),
+    )
+
+    fetchMock.mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input.toString()
+
+        if (
+          url === '/api/admin/products/manage'
+        ) {
+          return jsonResponse(paginated)
+        }
+
+        if (
+          url === '/api/admin/categories'
+        ) {
+          return jsonResponse(
+            paginated.map((product) => ({
+              id: product.category.id,
+              name: product.category.name,
+              slug: product.category.slug,
+            })),
+          )
+        }
+
+        if (
+          url === '/api/admin/product-brands'
+        ) {
+          return jsonResponse([])
+        }
+
+        throw new Error(
+          `Pedido não mockado: ${url}`,
+        )
+      },
+    )
+
+    render(<ProductsClient />)
+    await waitForProducts()
+
+    expect(
+      screen.getByText('Produto 1'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Produto 10'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Produto 11'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Página 1 de 2'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Página anterior',
+      }),
+    ).toBeDisabled()
+    expect(
+      screen.getByText('12 de 12 produtos'),
+    ).toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Página seguinte',
+      }),
+    )
+
+    expect(
+      screen.getByText('Página 2 de 2'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Produto 11'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Produto 12'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Produto 10'),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Página seguinte',
+      }),
+    ).toBeDisabled()
+
+    fireEvent.change(
+      screen.getByLabelText('Pesquisar'),
+      { target: { value: 'Produto 11' } },
+    )
+
+    expect(
+      screen.getByText('1 de 12 produtos'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Página \d de \d/),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Produto 11'),
+    ).toBeInTheDocument()
   })
 })
