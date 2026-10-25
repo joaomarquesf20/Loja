@@ -15,6 +15,10 @@ const navigation = [
     exact: true,
   },
   {
+    href: '/admin/inventory',
+    label: 'Inventário',
+  },
+  {
     href: '/admin/orders',
     label: 'Encomendas',
   },

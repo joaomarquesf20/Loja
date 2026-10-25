@@ -26,6 +26,10 @@ const areas = [
     label: 'Produtos',
   },
   {
+    href: '/admin/inventory',
+    label: 'Inventário',
+  },
+  {
     href: '/admin/orders',
     label: 'Encomendas',
   },
@@ -137,6 +141,35 @@ describe(
         expect(
           linkFor(
             'Painel',
+          ).getAttribute(
+            'aria-current',
+          ),
+        ).toBeNull()
+      },
+    )
+
+    test(
+      'ativa o inventário nas suas subpáginas',
+      () => {
+        mocks.usePathname.mockReturnValue(
+          '/admin/inventory/repor',
+        )
+
+        render(
+          <AdminNavigation />,
+        )
+
+        expect(
+          linkFor(
+            'Inventário',
+          ).getAttribute(
+            'aria-current',
+          ),
+        ).toBe('page')
+
+        expect(
+          linkFor(
+            'Produtos',
           ).getAttribute(
             'aria-current',
           ),

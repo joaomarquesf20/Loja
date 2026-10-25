@@ -17,11 +17,15 @@ import {
   DEFAULT_LOW_STOCK_LIMIT,
   DEFAULT_LOW_STOCK_THRESHOLD,
   InventoryNotFoundError,
+  getInventoryOverview,
+  inventoryOverviewQuerySchema,
   listLowStockVariants,
   updateVariantStock,
   type InventoryClient,
+  type InventoryTransactionClient,
   type VariantRecord,
 } from './inventory'
+import { ZodError } from 'zod'
 
 function createVariantRecord(
   overrides: Partial<
@@ -49,6 +53,26 @@ function createClient() {
 
   const update = vi.fn()
 
+  const count = vi.fn()
+
+  // Tipagem funcional do `$transaction` (padrão de admin-users.test):
+  // o callback recebe diretamente o fake client de transação.
+  const $transaction = vi.fn(
+    (
+      callback: (
+        transaction: InventoryTransactionClient,
+      ) => Promise<unknown>,
+    ) =>
+      callback({
+        productVariant: {
+          findMany,
+          findUnique,
+          update,
+          count,
+        },
+      }),
+  )
+
   const client: InventoryClient =
     {
       productVariant: {
@@ -56,6 +80,8 @@ function createClient() {
         findUnique,
         update,
       },
+      $transaction: $transaction as unknown as
+        InventoryClient['$transaction'],
     }
 
   return {
@@ -63,6 +89,8 @@ function createClient() {
     findMany,
     findUnique,
     update,
+    count,
+    $transaction,
   }
 }
 
@@ -687,6 +715,629 @@ describe(
                 result.variant.stock,
               ).toBe(stock)
             }
+          },
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'Inventário — vista de administração e transações (Épico 6)',
+  () => {
+    function overviewRowsFor(
+      threshold: number,
+    ) {
+      return [
+        createVariantRecord({
+          id: 'variant-ruptura',
+          sku: 'AAA-001',
+          stockQuantity: 0,
+        }),
+        createVariantRecord({
+          id: 'variant-baixo',
+          sku: 'BBB-002',
+          stockQuantity: 2,
+        }),
+        createVariantRecord({
+          id: 'variant-limite',
+          sku: 'CCC-003',
+          stockQuantity: threshold,
+        }),
+        createVariantRecord({
+          id: 'variant-disponivel',
+          sku: 'DDD-004',
+          stockQuantity:
+            threshold + 1,
+        }),
+      ]
+    }
+
+    describe(
+      'inventoryOverviewQuerySchema',
+      () => {
+        test(
+          'aplica o limiar padrão com entradas ausentes ou vazias',
+          () => {
+            for (const value of [
+              undefined,
+              null,
+              '',
+              '   ',
+            ]) {
+              expect(
+                inventoryOverviewQuerySchema.parse(
+                  {
+                    threshold:
+                      value,
+                  },
+                ),
+              ).toEqual({
+                threshold:
+                  DEFAULT_LOW_STOCK_THRESHOLD,
+              })
+            }
+          },
+        )
+
+        test(
+          'aceita inteiros escritos como texto dentro dos limites',
+          () => {
+            expect(
+              inventoryOverviewQuerySchema.parse(
+                { threshold: '7' },
+              ),
+            ).toEqual({
+              threshold: 7,
+            })
+
+            expect(
+              inventoryOverviewQuerySchema.parse(
+                { threshold: 99 },
+              ),
+            ).toEqual({
+              threshold: 99,
+            })
+          },
+        )
+
+        test(
+          'rejeita texto não numérico e frações',
+          () => {
+            for (const value of [
+              'abc',
+              '2.5',
+              2.5,
+            ]) {
+              expect(() =>
+                inventoryOverviewQuerySchema.parse(
+                  {
+                    threshold:
+                      value,
+                  },
+                ),
+              ).toThrow(
+                ZodError,
+              )
+            }
+          },
+        )
+
+        test(
+          'rejeita limiares fora de [1, 99]',
+          () => {
+            for (const value of [
+              0,
+              -3,
+              100,
+              '0',
+              '100',
+            ]) {
+              expect(() =>
+                inventoryOverviewQuerySchema.parse(
+                  {
+                    threshold:
+                      value,
+                  },
+                ),
+              ).toThrow(
+                ZodError,
+              )
+            }
+          },
+        )
+      },
+    )
+
+    describe(
+      'getInventoryOverview',
+      () => {
+        let client: InventoryClient
+        let count: ReturnType<
+          typeof vi.fn
+        >
+        let findMany: ReturnType<
+          typeof vi.fn
+        >
+
+        beforeEach(() => {
+          const created =
+            createClient()
+
+          client =
+            created.client
+
+          count =
+            created.count
+
+          findMany =
+            created.findMany
+        })
+
+        function stubCounts({
+          total,
+          low,
+          out,
+        }: {
+          total: number
+          low: number
+          out: number
+        }) {
+          count
+            .mockResolvedValueOnce(
+              total,
+            )
+            .mockResolvedValueOnce(
+              low,
+            )
+            .mockResolvedValueOnce(
+              out,
+            )
+
+          findMany.mockResolvedValue(
+            [],
+          )
+        }
+
+        test(
+          'devolve os KPIs da vista com o snapshot numa única transação',
+          async () => {
+            stubCounts({
+              total: 50,
+              low: 8,
+              out: 3,
+            })
+
+            const result =
+              await getInventoryOverview(
+                undefined,
+                client,
+              )
+
+            expect(result.kpis).toEqual(
+              {
+                totalSkus: 50,
+                inStockCount: 39,
+                lowStockCount: 8,
+                outOfStockCount: 3,
+              },
+            )
+
+            expect(
+              result.threshold,
+            ).toBe(
+              DEFAULT_LOW_STOCK_THRESHOLD,
+            )
+
+            // Três contadores (total, stock baixo, sem stock).
+            expect(
+              count,
+            ).toHaveBeenCalledTimes(
+              3,
+            )
+
+            expect(
+              count,
+            ).toHaveBeenNthCalledWith(
+              1,
+              {
+                where: {
+                  isActive: true,
+                  product: {
+                    isActive: true,
+                  },
+                },
+              },
+            )
+
+            expect(
+              count,
+            ).toHaveBeenNthCalledWith(
+              2,
+              {
+                where: {
+                  isActive: true,
+                  product: {
+                    isActive: true,
+                  },
+                  stockQuantity: {
+                    gte: 1,
+                    lte: DEFAULT_LOW_STOCK_THRESHOLD,
+                  },
+                },
+              },
+            )
+
+            expect(
+              count,
+            ).toHaveBeenNthCalledWith(
+              3,
+              {
+                where: {
+                  isActive: true,
+                  product: {
+                    isActive: true,
+                  },
+                  stockQuantity: 0,
+                },
+              },
+            )
+          },
+        )
+
+        test(
+          'calcula o estado de cada variante a partir do limiar',
+          async () => {
+            count.mockResolvedValue(
+              4,
+            )
+
+            findMany.mockResolvedValue(
+              overviewRowsFor(
+                DEFAULT_LOW_STOCK_THRESHOLD,
+              ),
+            )
+
+            const result =
+              await getInventoryOverview(
+                undefined,
+                client,
+              )
+
+            expect(
+              result.variants,
+            ).toEqual([
+              expect.objectContaining(
+                {
+                  variantId:
+                    'variant-ruptura',
+                  status:
+                    'OUT_OF_STOCK',
+                },
+              ),
+              expect.objectContaining(
+                {
+                  variantId:
+                    'variant-baixo',
+                  status:
+                    'LOW_STOCK',
+                },
+              ),
+              expect.objectContaining(
+                {
+                  variantId:
+                    'variant-limite',
+                  status:
+                    'LOW_STOCK',
+                },
+              ),
+              expect.objectContaining(
+                {
+                  variantId:
+                    'variant-disponivel',
+                  status:
+                    'IN_STOCK',
+                },
+              ),
+            ])
+          },
+        )
+
+        test(
+          'limiar configurado altera os contadores e os estados',
+          async () => {
+            count
+              .mockResolvedValueOnce(
+                4,
+              )
+              .mockResolvedValueOnce(
+                3,
+              )
+              .mockResolvedValueOnce(
+                1,
+              )
+
+            findMany.mockResolvedValue(
+              overviewRowsFor(10),
+            )
+
+            const result =
+              await getInventoryOverview(
+                { threshold: 10 },
+                client,
+              )
+
+            expect(
+              result.threshold,
+            ).toBe(10)
+
+            expect(
+              result.kpis,
+            ).toEqual({
+              totalSkus: 4,
+              inStockCount: 0,
+              lowStockCount: 3,
+              outOfStockCount: 1,
+            })
+
+            // O stock baixo passa a cobrir 1..10.
+            expect(
+              count,
+            ).toHaveBeenNthCalledWith(
+              2,
+              {
+                where: {
+                  isActive: true,
+                  product: {
+                    isActive: true,
+                  },
+                  stockQuantity: {
+                    gte: 1,
+                    lte: 10,
+                  },
+                },
+              },
+            )
+
+            const statuses =
+              Object.fromEntries(
+                result.variants.map(
+                  (row) => [
+                    row.variantId,
+                    row.status,
+                  ],
+                ),
+              )
+
+            expect(
+              statuses,
+            ).toEqual({
+              'variant-ruptura':
+                'OUT_OF_STOCK',
+              'variant-baixo':
+                'LOW_STOCK',
+              'variant-limite':
+                'LOW_STOCK',
+              'variant-disponivel':
+                'IN_STOCK',
+            })
+          },
+        )
+
+        test(
+          'limita a listagem ao teto de variantes por consulta',
+          async () => {
+            stubCounts({
+              total: 1000,
+              low: 0,
+              out: 0,
+            })
+
+            await getInventoryOverview(
+              undefined,
+              client,
+            )
+
+            expect(
+              findMany,
+            ).toHaveBeenCalledWith(
+              expect.objectContaining(
+                {
+                  take: 1000,
+                  orderBy: [
+                    {
+                      stockQuantity:
+                        'asc',
+                    },
+                    {
+                      sku: 'asc',
+                    },
+                  ],
+                },
+              ),
+            )
+          },
+        )
+
+        test(
+          'rejeita limiares inválidos com ZodError antes de tocar na base de dados',
+          async () => {
+            for (const threshold of [
+              'abc',
+              0,
+              100,
+            ]) {
+              await expect(
+                getInventoryOverview(
+                  {
+                    threshold,
+                  },
+                  client,
+                ),
+              ).rejects.toThrow(
+                ZodError,
+              )
+            }
+
+            expect(
+              count,
+            ).not.toHaveBeenCalled()
+
+            expect(
+              findMany,
+            ).not.toHaveBeenCalled()
+          },
+        )
+      },
+    )
+
+    describe(
+      'updateVariantStock — transação',
+      () => {
+        test(
+          'a leitura do stock anterior e a escrita correm na mesma transação',
+          async () => {
+            const created =
+              createClient()
+
+            created.findUnique.mockResolvedValue(
+              createVariantRecord({
+                stockQuantity: 3,
+              }),
+            )
+
+            created.update.mockResolvedValueOnce(
+              createVariantRecord({
+                stockQuantity: 9,
+              }),
+            )
+
+            const result =
+              await updateVariantStock(
+                {
+                  variantId:
+                    'variant-1',
+                  stock: 9,
+                },
+                created.client,
+              )
+
+            expect(
+              created.$transaction,
+            ).toHaveBeenCalledTimes(
+              1,
+            )
+
+            expect(
+              result,
+            ).toEqual({
+              previousStock: 3,
+              variant:
+                expect.objectContaining(
+                  {
+                    variantId:
+                      'variant-1',
+                    stock: 9,
+                  },
+                ),
+            })
+
+            expect(
+              created.findUnique,
+            ).toHaveBeenCalledTimes(
+              1,
+            )
+
+            expect(
+              created.update,
+            ).toHaveBeenCalledTimes(
+              1,
+            )
+          },
+        )
+
+        test(
+          'transação tem acesso aos contadores e à listagem completos',
+          async () => {
+            const created =
+              createClient()
+
+            created.count.mockResolvedValue(
+              7,
+            )
+
+            created.findMany.mockResolvedValueOnce(
+              [
+                createVariantRecord(),
+              ],
+            )
+
+            const result =
+              await created.client.$transaction(
+                async (transaction) => {
+                  const total =
+                    await transaction.productVariant.count(
+                      {
+                        where: {
+                          isActive: true,
+                          product: {
+                            isActive:
+                              true,
+                          },
+                        },
+                      },
+                    )
+
+                  const rows =
+                    await transaction.productVariant.findMany(
+                      {
+                        where: {
+                          isActive: true,
+                          product: {
+                            isActive:
+                              true,
+                          },
+                        },
+                        orderBy: [
+                          {
+                            stockQuantity:
+                              'asc',
+                          },
+                          {
+                            sku: 'asc',
+                          },
+                        ],
+                        take: 5,
+                        select: {
+                          id: true,
+                          sku: true,
+                          stockQuantity:
+                            true,
+                          product: {
+                            select: {
+                              id: true,
+                              name: true,
+                              slug: true,
+                            },
+                          },
+                        },
+                      },
+                    )
+
+                  return {
+                    total,
+                    rows,
+                  }
+                },
+              )
+
+            expect(result.total).toBe(
+              7,
+            )
+
+            expect(
+              result.rows,
+            ).toHaveLength(1)
           },
         )
       },

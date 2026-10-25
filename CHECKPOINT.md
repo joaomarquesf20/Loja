@@ -1588,6 +1588,206 @@ Próximos passos (pós-etapa):
   CHECKPOINT.md).
 - Continuar o Épico 5 com o utilizador.
 
+## Épico 6 — Etapa 1 (concluída): Gestão avançada de inventário e alertas de stock baixo
+
+Data: 2026-10-25 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: serviço de inventário
+com consultas de stock baixo (limiar
+configurável) e itens sem stock com validação
+Zod; dashboard `/admin/inventory` com KPIs
+(Total SKUs, Stock baixo, Sem stock),
+listagem por variante com estado e filtros
+rápidos; endpoints e ajustes protegidos com
+`requireAdmin()` e transações atómicas; testes
+e gate completa.
+
+Descoberta (reutilização de código existente):
+- Um sistema de inventário já existia (de
+  uma "etapa 7" anterior): `src/server/
+  inventory.ts` com `listLowStockVariants`
+  (limiar padrão 5, validado 1..99 por
+  normalizeLowStockThreshold, limit 20/100),
+  `updateVariantStock` (stock absoluto +
+  previousStock), `/api/admin/inventory`
+  (GET lista de low stock + PATCH correção
+  rápida, já com `requireAdmin()`) e o
+  componente `inventory-alerts.tsx` montado
+  no painel `/admin` (line 114).
+- Gaps reais desta etapa: listagem COMPLETA
+  com estados IN_STOCK/LOW_STOCK/OUT_OF_STOCK,
+  KPIs de topo, página dedicada
+  `/admin/inventory` (+ entrada "Inventário"
+  na navegação), validação Zod e transação
+  atómica no update de stock (antes era
+  findUnique + update sem $transaction).
+- O esquema NÃO tem coluna de limiar por
+  variante (ProductVariant só tem
+  stockQuantity Int @default(0) + isActive):
+  o limiar "configurável" fica ao nível do
+  pedido (default 5, 1..99), sem migração
+  Prisma nesta etapa. Uma coluna por variante
+  pode ser follow-up do épico.
+
+Novidades (8 ficheiros):
+- `src/server/inventory.ts`: import de Zod;
+  `inventoryOverviewQuerySchema`
+  (z.preprocess para ausente/vazio → default
+  5; z.coerce.number().int().min(1).max(99),
+  mensagens pt-PT no campo); tipos
+  `InventoryStatus` (IN_STOCK/LOW_STOCK/
+  OUT_OF_STOCK), `InventoryRow`, `InventoryKpis`,
+  `InventoryOverview`, `MAX_INVENTORY_ROWS = 1000`;
+  `getInventoryOverview` (3 contadores +
+  listagem ordenada por criticalidade na
+  MESMA transação de leitura — KPIs coerentes
+  com a listagem; estados derivados por:
+  0 → OUT_OF_STOCK, 1..limiar → LOW_STOCK,
+  > limiar → IN_STOCK; inStockCount =
+  total - low - out, clamp a 0);
+  `InventoryTransactionClient` (count/findMany/
+  findUnique/update) e `InventoryClient`
+  ganha `$transaction<T>`; `updateVariantStock`
+  refatorado para correr findUnique + update
+  DENTRO de `$transaction` (correções
+  concorrentes nunca intercalam leitura/
+  escrita). Contratos antigos intactos
+  (inventory-alerts continua funcional).
+- `GET /api/admin/inventory/overview`:
+  `requireAdmin()` (401/403), `?threshold=`
+  validado pelo serviço (ZodError → 400
+  'Dados inválidos' + fieldErrors, padrão
+  da rota users/[id]), resposta plana
+  `{ threshold, kpis, variants }` (200);
+  500 seguro para erros inesperados. O PATCH
+  de correção rápida continua em
+  `/api/admin/inventory` (reutilizado pelo
+  novo dashboard).
+- `src/app/admin/inventory/page.tsx`:
+  sessão (redirect '/login') +ADMIN
+  (notFound), cabeçalho + LogoutButton +
+  cliente (padrão orders/page.tsx).
+- `inventory-client.tsx`: 3 cartões KPI
+  (Total de SKUs / Stock baixo / Sem stock,
+  com legenda do limiar configurado);
+  filtros rápidos (pesquisa por SKU/produto
+  + estado) filtrados no cliente com reset
+  de página e 'Limpar filtros'; limiar
+  editável (input numérico 1..99 commitado
+  em blur/Enter — inválido reverte com
+  role="alert" e NÃO recarrega); tabela
+  Produto/SKU/Stock atual/Estado (badges:
+  Disponível cinza, Stock baixo âmbar, Sem
+  stock vermelho)/Correção rápida (input por
+  linha + Guardar → PATCH `/api/admin/
+  inventory` → notice 'Stock de X guardado
+  (prev → next unidades).' + recarrega
+  overview para os KPIs refletirem); paginação
+  cliente 20/página com clamp/reset e
+  contador 'X de M SKUs' (precedente
+  users-client).
+- `admin-navigation.tsx`: área 'Inventário'
+  (/admin/inventory, ativação por prefixo)
+  entre Produtos e Encomendas.
+
+Testes (+26):
+- `inventory.test.ts`: fixture ganha count +
+  `$transaction` funcional (callback com o
+  fake client de transação, padrão
+  admin-users.test); +11 testes: schema Zod
+  (default em ausente/vazio, inteiros como
+  texto, rejeita frações/não numérico e
+  limiares fora de [1,99]); overview KPIs
+  com contadores exatos (3 counts com
+  wheres por KPI, 3ª chamada stockQuantity 0),
+  estados das linhas com limiar 5 e 10,
+  teto take 1000 + orderBy criticalidade,
+  ZodError antes de tocar na BD; update
+  transacional ($transaction chamada 1× e
+  findUnique/update no cliente de transação).
+- `overview/route.test.ts` (7): 200 plano
+  (threshold ausente → undefined), threshold
+  da query como string cru para o serviço,
+  400 com ZodError real do schema mocked
+  (fieldErrors.threshold), 401, 403, 500
+  seguro.
+- `inventory-client.test.tsx` (7, jsdom +
+  fetch stub + createJsonResponse): KPIs com
+  valores via cartão (closest div), estados
+  e legenda com limiar; filtros estado +
+  pesquisa + vazios ('Limpar filtros'
+  restore); paginação 25 SKUs (Página 1 de 2,
+  Seguinte, SKU-021 vs SKU-001); correção
+  rápida guarda PATCH {variantId, stock} e
+  recarrega overview (2 GETs), role="status";
+  erro do servidor em role="alert"; mudança
+  de limiar recarrega com `?threshold=10`;
+  limiar inválido reverte para 5 e não
+  recarrega (só 1 call).
+- `admin-navigation.test.tsx`: fixture +1
+  área + teste de prefixo
+  '/admin/inventory/repor'.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2299 passed** + 3 skipped (164
+ficheiros: 163 passed + 1 skipped — +26
+testes); `npm run lint` limpo; `npm run
+build` limpo — route map com
+`/admin/inventory` ƒ e
+`/api/admin/inventory/overview` ƒ.
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- Funcão com validação "descritiva manual"
+  + nova validação Zod pode coexistir: o
+  legado mantém normalizeLowStockThreshold
+  (com InventoryValidationError por campo) e
+  a vista NOVA entra por schema Zod no
+  serviço (rota mapeia ZodError → 400 com
+  fieldErrors, padrão users/[id]) — não
+  reescrever contratos commitados sem
+  necessidade.
+- `z.preprocess` resolve coerções com
+  ausência/'' → undefined antes de
+  z.coerce.number().int().min().max().default()
+  — evita NaN de coerce sobre undefined.
+- KPI + listagem numa única $transaction de
+  leitura: contadores e linhas coincidem no
+  mesmo snapshot; contagem 'disponível'
+  derivada (total - low - out) em vez de um
+  4.º count — menos uma query e zero
+  inconsistência.
+- Clientes tipados por forma (structural
+  doubles): ao acrescentar `$transaction` ao
+  InventoryClient, o fixture de teste passou
+  a incluí-lo com callback funcional tipado
+  contra `InventoryTransactionClient` —
+  padrão admin-users.test (cast `as unknown
+  as` no client composto).
+- Client component NÃO pode importar valores
+  (constantes) de módulos server-side
+  (`@/server/inventory` puxa prisma): usar
+  `import type` apenas e replicar constantes
+  pequenas no cliente.
+- lookup de labels no cliente: KPI/badges
+  verificados nos testes por `closest('div')`
+  com getAllByText[0] (o KPI vem antes da
+  tabela na ordem do DOM) para evitar
+  colisões de texto (badge vs título vs
+  opção do select).
+
+Próximos passos (pós-etapa):
+- Commit da etapa 1 quando o utilizador
+  pedir (ficheiros: inventory.ts(+test),
+  api/admin/inventory/overview/**,
+  admin/inventory/**, admin-navigation.tsx
+  (+test), CHECKPOINT.md).
+- Continuar o Épico 6 com o utilizador
+  (follow-up possível: limiar por variante
+  via migração Prisma, histórico de ajustes
+  de stock).
+
 
 
 
