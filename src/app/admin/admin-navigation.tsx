@@ -19,6 +19,10 @@ const navigation = [
     label: 'Encomendas',
   },
   {
+    href: '/admin/users',
+    label: 'Clientes',
+  },
+  {
     href: '/admin/catalog',
     label: 'Catálogo',
   },

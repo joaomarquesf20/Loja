@@ -1125,6 +1125,163 @@ Próximos passos (pós-etapa):
 - Etapa 4 do épico a definir com o utilizador +
   § do épico no `knowledge.md` no fecho.
 
+## Épico 4 — Etapa 4 (concluída): Gestão de clientes e contas
+
+Data: 2026-10-25 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: vista admin `/admin/users` com
+listagem de clientes/papéis/estado, pesquisa, filtros e
+paginação; ficha individual com histórico/despesa e ações
+seguras de papel/atividade; endpoints protegidos com
+`requireAdmin()` + Zod + transação; testes + gate
+completo.
+
+Exploração (não existia nada — construção nova):
+- `prisma/schema.prisma`: `User` (id, email, name?,
+  `role` enum ADMIN/SELLER/BUYER default BUYER,
+  `isActive`, tentativas de login, createdAt) e
+  `Order.userId?` (nullable — hóspedes) — contagem e
+  despesa vêm do utilizador, não de alterações de schema.
+- `requireAdmin()` (`admin-auth.ts`) reutilizado como
+  está (sessão + `isActive` + papel ADMIN).
+
+Novidades (9 ficheiros + 2 editados):
+- **Serviço** `src/server/admin-users.ts` (estilo
+  `admin-orders.ts`): tipos + selects
+  (`satisfies Prisma.UserSelect/OrderSelect`),
+  `AdminUserClient` estreito (user findMany/
+  findUnique + order aggregate) e `$transaction<T>`
+  funcional no update (padrão
+  `order-cancellation.ts`); erros
+  tipados `AdminUserNotFoundError` (404),
+  `AdminUserSelfUpdateError` (409),
+  `AdminUserValidationError` (400). `listAdminUsers`
+  (createdAt desc + `_count.orders`),
+  `getAdminUserById` (ficha + últimas 10 encomendas +
+  despesa paga via `order.aggregate(paymentStatus
+  PAID)`), `updateAdminUser` (Zod
+  `adminUserUpdateSchema` —
+  role enum/isActive/refine "pelo menos um campo";
+  guarda dentro da `$transaction`: ID desconhecido →
+  404 antes do update; ninguém pode demover ou
+  desativar a PRÓPRIA conta — evita lockout do último
+  admin; update único e atómico).
+- **API** `/api/admin/users` (GET; {users}) e
+  `/api/admin/users/[id]` (GET {user} + PATCH {user};
+  `readJsonBody` com limite de 8 KB como a rota
+  transition; mapa 401/403/400 ZodFieldErrors
+  (caminho.issue)/400 validação/JSON/413/404/409/500).
+  PATCH passa `session.user.id` como
+  `actingUserId` para a regra de autoproteção.
+- **Páginas** `/admin/users/page.tsx` +
+  `users-client.tsx`: tabela Todas as contas (nome
+  com fallback "Sem nome"/email, papel,
+  estado, nº de encomendas, data de registo, Ver
+  ficha), pesquisa nome/email (`toLocaleLowerCase
+  pt-PT`), selects Papel + Estado da conta
+  (Ativas/Inativas), `USERS_PAGE_SIZE = 10` com
+  clamp+reset nos handlers (padrão da casa),
+  contador "X de M utilizadores", botão Atualizar
+  no cabeçalho da secção, nav "Paginação dos
+  utilizadores" e dois estados vazios + Limpar
+  filtros.
+- **Ficha** `/admin/users/[id]/page.tsx` +
+  `user-detail-client.tsx`: perfil (papel/estado
+  como badges, registado em), métricas Encomendas/
+  Despesa paga (`formatMoney` "128.00 €")/Papel
+  atual, gestão (select papel + "Guardar papel"
+  desativado quando inalterado; toggle Ativar/
+  Desativar com `window.confirm` — guard
+  CLIENTE duplica a regra de autoproteção e a
+  ficha avisa que é a conta do próprio admin),
+  lista Encomendas recentes com links para
+  `/admin/orders/[id]` (estados mostrados com os
+  mesmos labels pt-PT do cliente de encomendas).
+  Sucesso via role="status" e falhas via
+  role="alert" (a partir de fieldErrors é
+  escolhida a primeira mensagem por campo).
+- **Nav** `admin-navigation.tsx`: área nova
+  "Clientes" (não-exata, subpáginas acendem) +
+  fixture do teste atualizada (+1 área).
+
+Testes (+33; 6 ficheiros novos/editados):
+- `admin-users.test.ts` (9): listagem/desc/count,
+  ficha (aggregate PAID + take 10 + trim), null
+  sum→"0.00", transação aplica papel+estado,
+  ZodError (papel inválido, corpo vazio,
+  isActive não-booleano), 404 antes do update,
+  autoproteção (3 vias) + permitir ADMIN/ativo
+  ao próprio, ID vazio.
+- `route.test.ts` GET (200/401/403/500) e
+  `[id]/route.test.ts` (11): ficha 200 (JSON
+  serializa Date→ISO na asserção)/404/401;
+  PATCH 200 com actingUserId 'admin-1', 400
+  ZodError com fieldErrors (`new ZodError([
+  { code: 'custom', path: ['role'], … }
+  ])`), 404, 409, 400 JSON inválido, 403,
+  400 ID vazio.
+- `users-client.test.tsx` (4): carga+linha
+  (asserção por `closest('tr')` — evita
+  colisão option do select/thead), pesquisa
+  nome+email e filtros papel/estado+estado
+  vazio+Limpar filtros, paginação (12 → 2
+  páginas), erro 403.
+- `user-detail-client.test.tsx` (5): perfil/
+  despesa (getAllByText — duas ocorrências),
+  PATCH papel, autoproteção SEM fetch nem
+  confirm, desativar/ativar com
+  `vi.spyOn(window, 'confirm')` (jsdom "Not
+  implemented: Window's confirm()" — sem mock
+  devolve undefined e bloqueia antes do
+  PATCH), erro 403 do servidor.
+- Nova pasta completa `src/app/admin/users/**`
+  e `src/app/api/admin/users/**`.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest`:
+  run **2233 passed** (160 ficheiros: 159 passed
+  + 1 skipped) + 3 skipped (baseline 2200 →
+  +33 testes); `npm run lint` limpo (após
+  remover 'aggregate' não usado); `npm run
+  build` limpo — route map com `/admin/users`,
+  `/admin/users/[id]`, `/api/admin/users`,
+  `/api/admin/users/[id]` ƒ.
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- Mocks de classes de erro com mensagem no
+  corpo da resposta: quando `error.message`
+  vai na resposta, o mock em `vi.mock` tem de
+  receber a mensagem
+  (`new AdminUserSelfUpdateError('…')`) ou
+  a asserção compara com ''.
+- jsdom: mockar `window.confirm`
+  (`vi.spyOn(window, 'confirm')`) — sem mock
+  regista "Not implemented" e devolve
+  undefined, mudando o fluxo (nem chegou ao
+  fetch).
+- jsdom: fixtures que passam por `Response.json`
+  no teste: `Date` sai como ISO — comparar com
+  `.toISOString()` na asserção.
+- Client-side `getByLabelText` vs textos repetidos
+  (labels de opção no select + células da tabela):
+  ou `getAllByText` ou âncoras por linha
+  (`closest('tr')` + `toHaveTextContent`).
+- Tipagem de `$transaction` funcional no mock:
+  `callback(value)` direto (tipar o callback com
+  o formato do fake client) — `as never` no
+  retorno quebra `mockImplementationOnce`
+  (Promise<never> ≠ never).
+
+Próximos passos (pós-etapa):
+- Commit da etapa 4 quando o utilizador pedir
+  (ficheiros: admin-users.ts(+test),
+  api/admin/users/**(+tests),
+  admin/users/**(+tests), admin-navigation.tsx
+  (+test), CHECKPOINT.md).
+- Fechar o épico com o utilizador (discussão da
+  Etapa 5 ou § do knowledge.md).
+
 
 
 
