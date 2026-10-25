@@ -18,6 +18,7 @@ function createOverview(
     averageOrderValue:
       '165.00',
     pendingOrders: 3,
+    activeProducts: 12,
     ordersByStatus: [
       {
         status: 'PENDING',
@@ -200,6 +201,22 @@ describe(
         expect(
           screen.getByText(
             'Pendentes: 3',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Produtos ativos',
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            /^12$/,
+          ),
+        ).toBeInTheDocument()
+        expect(
+          screen.getByText(
+            'Visíveis na loja',
           ),
         ).toBeInTheDocument()
 

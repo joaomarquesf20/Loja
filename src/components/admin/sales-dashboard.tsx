@@ -167,7 +167,7 @@ export default function SalesDashboard(
       aria-label="Resumo de vendas"
       className="space-y-5"
     >
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Faturação total"
           value={formatMoney(
@@ -190,6 +190,14 @@ export default function SalesDashboard(
             overview.totalOrders,
           )}
           hint={`Pendentes: ${overview.pendingOrders}`}
+        />
+
+        <MetricCard
+          label="Produtos ativos"
+          value={String(
+            overview.activeProducts,
+          )}
+          hint="Visíveis na loja"
         />
 
         <MetricCard

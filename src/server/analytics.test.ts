@@ -64,6 +64,7 @@ type AnalyticsFixtures =
       shippingName: string
       shippingEmail: string
     }>
+    activeProducts?: number
   }
 
 function createAnalyticsClient(
@@ -148,6 +149,20 @@ function createAnalyticsClient(
         },
       ),
     },
+    product: {
+      count: vi.fn<
+        (
+          args: {
+            where?: {
+              isActive: boolean
+            }
+          },
+        ) => Promise<number>
+      >(
+        async () =>
+          fixtures.activeProducts ?? 0,
+      ),
+    },
   }
 
   return {
@@ -162,6 +177,8 @@ function createAnalyticsClient(
       client.orderItem.groupBy,
     findMany:
       client.order.findMany,
+    count:
+      client.product.count,
   }
 }
 
@@ -195,6 +212,7 @@ describe(
           averageOrderValue:
             '0.00',
           pendingOrders: 0,
+          activeProducts: 0,
           ordersByStatus: [],
           ordersByPaymentStatus:
             [],
@@ -345,6 +363,7 @@ describe(
                   },
                 },
               ],
+              activeProducts: 9,
             },
           )
 
@@ -373,6 +392,9 @@ describe(
         expect(
           overview.pendingOrders,
         ).toBe(3)
+        expect(
+          overview.activeProducts,
+        ).toBe(9)
 
         expect(
           overview.ordersByStatus,
@@ -452,6 +474,7 @@ describe(
           aggregate,
           itemGroupBy,
           findMany,
+          count,
         } =
           createAnalyticsClient()
 
@@ -483,6 +506,17 @@ describe(
           _sum: { total: true },
           _count:
             { _all: true },
+        })
+
+        expect(
+          count,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+        expect(
+          count.mock.calls[0][0],
+        ).toEqual({
+          where: { isActive: true },
         })
 
         const topProductGroupByCall =

@@ -89,6 +89,7 @@ function overviewStub() {
     averageOrderValue:
       '165.00',
     pendingOrders: 3,
+    activeProducts: 12,
     ordersByStatus: [
       {
         status: 'PENDING',
@@ -178,6 +179,12 @@ describe(
         expect(
           screen.getByText(
             /^330,00/,
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Produtos ativos',
           ),
         ).toBeInTheDocument()
 

@@ -808,4 +808,117 @@ Próximos passos (pós-etapa):
   registo das lições em `knowledge.md` (§ nova).
 
 
+# Checkpoint - 25/10/2026 — Epic 4: Admin Backoffice & Management Dashboard
+
+Etapa 1 — Admin Authentication, Layout & Core Shell:
+**COMPLETA** (não commitada; commit fica para pedido do
+utilizador).
+
+Estado da exploração (o backoffice já existia — §18):
+- Guard de autorização já estava implementado:
+  `requireAdmin()` em `src/server/admin-auth.ts` (sessão →
+  `prisma.user` role + isActive → `UnauthorizedError` 401 /
+  `ForbiddenError` 403, com 9 testes em `admin-auth.test.ts`
+  cobrindo sem sessão, id em branco, user removido, admin
+  inativo, BUYER/SELLER → Forbidden, ADMIN ativo → ok).
+  Layout e páginas admin repetem o check server-side:
+  sem sessão → `redirect('/login')`; role ≠ ADMIN →
+  `notFound()` (404, não revela existência do backoffice).
+  Todas as rotas `/api/admin/**` chamam `requireAdmin()` e
+  mapeiam os erros para 401/403 (padrão
+  `handleError` em cada route.ts).
+- **Decisão: NÃO adicionar `src/middleware.ts`** — um
+  middleware edge não consegue validar role/isActive na
+  base de dados por request; o padrão da casa (guard em
+  server layout/components + `requireAdmin` nas APIs)
+  cumpre o objetivo de bloquear não-admins com
+  redirect/404/401/403.
+
+Lacunas reais fechadas nesta etapa:
+- Nav sem entrada explícita para o Dashboard: adicionado
+  item **'Painel'** (`/admin`, `exact: true`) como primeira
+  entrada do `AdminNavigation` (antes só o logo ligava à
+  raiz).
+- Breadcrumb global: componente cliente novo
+  `src/app/admin/admin-breadcrumb.tsx` (`usePathname`) —
+  "Admin › Produtos › Novo produto" p. ex. Map de segmentos
+  estáveis (products, orders, catalog, categories,
+  product-brands 'Marcas de produto', commercial-settings,
+  vehicle-* com os títulos reais das páginas, new, import);
+  ids de detalhe desconhecidos são ignorados (o título real
+  vive na página); renderiza null no `/admin` e quando
+  nenhum segmento é reconhecido. Ligado no `layout.tsx`
+  acima do `{children}` (`space-y-5` não cria margem
+  fantasma em children null).
+- Métrica "produtos ativos" em falta no dashboard:
+  `SalesOverview` ganhou `activeProducts: number` via
+  `product.count({ where: { isActive: true } })` enxertado
+  no `Promise.all` de `getSalesOverview` (7 queries em
+  paralelo; `AnalyticsClient` estendido com o delegate
+  `product`). Cartão novo **"Produtos ativos"** (hint
+  "Visíveis na loja") como 5.º MetricCard no
+  `SalesDashboard` (grid `md:grid-cols-2 xl:grid-cols-5`).
+  As outras métricas do ponto 3 já existiam: encomendas
+  totais, faturação (pagas não canceladas), pendentes a
+  requerer atenção (hint "Pendentes: N" + InventoryAlerts
+  de stock), valor médio, últimos 30 dias, tendência
+  mensal.
+- "Ver loja ↗" (href `/`, target _blank) e logout já
+  existiam no header; responsividade da shell intacta
+  (aside sticky 230px no lg, nav overflow-x no mobile).
+
+Testes novos (+13 / 3 ficheiros):
+- `admin-navigation.test.tsx` (4): renderiza as 6 áreas
+  (incl. Painel) com hrefs; Painel ativo apenas no caminho
+  exato (em subpáginas de secções exact não acende nada);
+  ativação por prefixo nas subpáginas de Encomendas; Painel
+  ativo na raiz.
+- `admin-breadcrumb.test.tsx` (6): null na raiz; "Admin" +
+  secção com `aria-current`; caminho completo
+  (Produtos › Novo produto); ids desconhecidos
+  skipados sem crumbs falsos; etiquetas de veículos e
+  definições; null com nenhum segmento reconhecido.
+- `layout.test.tsx` (3): sem sessão → `redirect('/login')`;
+  role BUYER → `notFound()` (redirect não chamado); ADMIN →
+  shell completa (nav com Painel/Produtos, breadcrumb
+  "Caminho de navegação", Ver loja '/', botão Sair, conteúdo
+  filho).
+- Alterados: `analytics.test.ts` (fixture/asserção
+  `activeProducts: 9` + `count` chamado 1× com
+  `isActive: true`); `sales-dashboard.test.tsx` e
+  `page.test.tsx` (stubs com `activeProducts: 12` +
+  asserções do cartão "Produtos ativos").
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2197
+passed** (155 ficheiros: 154 passed + 1 skipped) + 3
+skipped (baseline 2184/152 ficheiros → +13 testes, +3
+ficheiros); `npm run lint` limpo; `npm run build` limpo —
+route map intacto, todas as `/admin*` ƒ dynamic.
+
+Lições desta etapa (para `knowledge.md` em § futura):
+- Breadcrumb por `usePathname` + map de segmentos: mapear
+  apenas segmentos estáveis e renderizar null quando nada
+  é reconhecido — páginas de detalhe mantêm os seus
+  títulos, nunca aparecem ids crus no caminho.
+- O flag `exact` preexistente em "Produtos" muda as
+  expetativas de `aria-current` por rota: nos testes de
+  navegação não assumir prefix matching universal —
+  `/admin/products/new` não acende a secção.
+- `space-y-*` ignora children que renderizam null:
+  componentes opcionais no layout (breadcrumb na raiz)
+  podem renderizar null sem margens fantasma.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 1 quando o utilizador pedir (novos:
+  admin-breadcrumb.tsx + test, admin-navigation.test.tsx,
+  layout.test.tsx; modificados: analytics.ts + test,
+  sales-dashboard.tsx + test, admin-navigation.tsx,
+  layout.tsx, page.test.tsx, CHECKPOINT.md).
+- Etapa 2 do épico a definir com o utilizador (candidatos
+  já no route map: gestão de encomendas AP I de transição,
+  importação, definições comerciais) + atualização de
+  `knowledge.md` com a § do épico.
+
+
+
 

@@ -73,6 +73,7 @@ export type SalesOverview =
     totalOrders: number
     averageOrderValue: string
     pendingOrders: number
+    activeProducts: number
     ordersByStatus: StatusCount[]
     ordersByPaymentStatus: PaymentStatusCount[]
     topProducts: TopProduct[]
@@ -221,6 +222,18 @@ export interface AnalyticsClient {
       },
     ): Promise<TopProductRow[]>
   }
+  /**
+   * Cartão "Produtos ativos" do painel: número de produtos
+   * visíveis na loja (`isActive: true`), independente do stock
+   * dos variantes.
+   */
+  product: {
+    count(args: {
+      where: {
+        isActive: boolean
+      }
+    }): Promise<number>
+  }
 }
 
 function getClient(
@@ -324,6 +337,7 @@ export async function getSalesOverview(
     topProductRows,
     trendRows,
     recentOrderRows,
+    activeProducts,
   ] =
     await Promise.all([
       db.order.aggregate({
@@ -403,6 +417,9 @@ export async function getSalesOverview(
           shippingName: true,
           shippingEmail: true,
         },
+      }),
+      db.product.count({
+        where: { isActive: true },
       }),
     ])
 
@@ -544,6 +561,7 @@ export async function getSalesOverview(
         paidOrders,
       ),
     pendingOrders,
+    activeProducts,
     ordersByStatus,
     ordersByPaymentStatus,
     topProducts,

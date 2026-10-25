@@ -7,6 +7,7 @@ import {
 import type { ReactNode } from 'react'
 
 import { authOptions } from '@/server/auth'
+import AdminBreadcrumb from './admin-breadcrumb'
 import AdminNavigation from './admin-navigation'
 import LogoutButton from './logout-button'
 
@@ -64,7 +65,10 @@ export default async function AdminLayout({
           <AdminNavigation />
         </aside>
 
-        <div className="min-w-0">{children}</div>
+        <div className="min-w-0 space-y-5">
+          <AdminBreadcrumb />
+          {children}
+        </div>
       </div>
     </div>
   )
