@@ -352,7 +352,8 @@ Próximos passos (pós-épico):
 # Checkpoint - 24/10/2026 — Epic 3: Stripe Checkout & Real Transactions
 
 Etapa 1 — Order Schema & Stripe Service Foundation: **COMPLETA**
-(não commitada; `master` @ `ddfabbc` + trabalho novo sem commit).
+(commitada (`5090c5e`) e pushed; alterações em 16 ficheiros,
++4619/−407).
 
 Estado:
 - `prisma/schema.prisma`: campo aditivo `Order.paidAt DateTime?`
@@ -507,6 +508,154 @@ Próximos passos (pós-etapa):
 - Etapa 2 do épico: frontend do checkout com Stripe
   (redireção para a sessão) e página /checkout/sucesso,
   consumindo `checkoutSession.url`, e finalização do fluxo.
+
+---
+
+# Checkpoint - 24/10/2026 — Epic 3: Stripe Checkout & Real Transactions (cont.)
+
+Etapa 2 — Front-end Checkout Integration & Success/Cancel Flows:
+**COMPLETA** (não commitada; commit da etapa 1 feito em `5090c5e`
+e pushed para `master`).
+
+Estado:
+- Cliente de checkout (`checkout-client.tsx`) movido ao fluxo
+  Stripe real. O botão "Criar encomenda" faz
+  `POST /api/checkout/stripe` com o mesmo corpo de sempre
+  (fulfillment + payment + `expectedFingerprint` do preview
+  vigente). Em 201 o corpo
+  `{ order, checkoutSession: { id, url } }` é validado por
+  parser estrito (`isCheckoutOrder` + `isSafeCheckoutUrl`
+  http/https — nunca esquemas do tipo `javascript:`) e o browser
+  é navegado integralmente para `checkoutSession.url` via
+  `redirectToExternalUrl` — novo módulo
+  `src/lib/redirect.ts` isolado
+  (`window.location.href = url`) para os testes poderem mockar
+  a navegação sem tocar no `location` do jsdom
+  (propriedade unforgeable).
+- Feedback e estados: erro do servidor (stock esgotado,
+  carrinho alterado, Stripe indisponível, rede) mostrado em
+  `role="alert"` com o `error`/`code` da API; o botão fica
+  "A redirecionar para o pagamento..." durante a navegação
+  (sem `finally` no sucesso, para não reativar o botão antes de
+  a página sair). 409 limpa o preview e volta a exigir
+  "Calcular total" explícito, mantendo a fila anti-duplo-registo
+  (`pendingAction`).
+- Fluxo simulado REMOVIDO do cliente: estados
+  `order`/`payment`/`paymentError`, `requestPaymentInitiation`,
+  `handleRetryPayment`, `PendingAction 'payment'`, parser
+  `PaymentInitiation` e o bloco de UI "Encomenda criada" /
+  "Pagamento iniciado em modo de demonstração" foram eliminados.
+  As APIs simuladas (POST /api/checkout, /api/payments/initiate,
+  /api/payments/simulate) continuam disponíveis para dev,
+  apenas já não são chamadas pelo checkout UI.
+- URLs de retorno da rota Stripe (`POST /api/checkout/stripe`)
+  apontam agora para as páginas novas do epic: cancelamento
+  `/checkout/cancelado` (o `?pagamento=cancelado` foi retirado;
+  teste da rota atualizado). Sucesso mantém
+  `/checkout/sucesso?order={orderNumber}&session_id=
+  {CHECKOUT_SESSION_ID}`.
+- Página de sucesso `src/app/checkout/sucesso/page.tsx`
+  (force-dynamic + metadata) com `sucesso-client.tsx`:
+  valida os parâmetros do retorno (`order` no formato
+  `^[A-Za-z0-9-]{1,64}$`, `session_id` a começar por `cs_`) —
+  qualquer falha dá "Confirmação inválida" SEM tocar na API;
+  carrega o detalhe em `GET /api/orders/{orderNumber}`
+  (401 → "Sessão expirada" com `callbackUrl` da mesma
+  confirmação; 404/500 → `role="alert"` com mensagem da API e
+  links de escape); painel de confirmação (`role="status"`)
+  com número da encomenda, estado do pagamento (PAID →
+  "Pagamento confirmado"; PENDING → "A aguardar confirmação do
+  Stripe" + nota de que o webhook pode demorar alguns segundos
+  — a racing-condition do redirect é tratada sem polling),
+  itens (qty × nome, SKU, opções de variante, subtotal de
+  linha) e totais (subtotal/portes/IVA/total em EUR
+  pt-PT). Ao aterrar com 200 válido chama
+  `clearGuestCart()`.
+- Página de cancelamento `src/app/checkout/cancelado/page.tsx`
+  (estática ○ no build): painel amarelo "Pagamento cancelado"
+  com links "Continuar a comprar" (/), "Voltar ao carrinho"
+  (/carrinho) e "Ver as minhas encomendas" (/conta), e nota
+  honesta de que a encomenda criada antes do redirect ficou
+  PENDING na conta (reserve-on-order; o carrinho do servidor
+  já tinha sido esvaziado na criação da encomenda).
+- Serviço novo: `getUserOrder(userId, orderNumber, client?)`
+  em `src/server/orders.ts` (§13 — `OrderClient.findFirst`
+  adicionado à interface, `OrderField` estendido com
+  'orderNumber', `normalizeOrderNumber` trim/≤64) — seleciona
+  por `where: { userId, orderNumber }` com o `orderSelect`
+  existente (itens + eventos), devolve null quando não é da
+  própria conta. Rota `GET /api/orders/[id]`
+  (`src/app/api/orders/[id]/route.ts`) com o padrão da casa
+  (401/400/404/500 + `console.error` com tag própria) — 404
+  encomendas de outras contas, sem revelar a sua existência.
+- Carrinho local: `clearGuestCart()` nova em
+  `src/lib/guest-cart.ts` — remove apenas a chave
+  `pfautoparts:guest-cart` (sem reagir a tentativa de fusão
+  pendente, que é mantida intacta).
+- Stack de testes: `sucesso-client.test.tsx` (8: 3 de
+  validação de parâmetros sem fetch; confirmação + limpeza do
+  carrinho; PENDING; 401 com callbackUrl exato; 404 mantém
+  carrinho local; shape inválido → erro genérico),
+  `/api/orders/[id]/route.test.ts` (5: 401/200/404/400/500),
+  `guest-cart.test.ts` (+3 clearGuestCart: limpa/ignora vazio/
+  preserva merge receipt), `cancelado/page.test.tsx` (1), e
+  reescritas no fluxo do checkout: `checkout-client.test.tsx`
+  (mock `@/lib/redirect`; testes de entrega/levantamento →
+  POST stripe + redirect asserted; conflito 409 → preview
+  invalidado + recurso com fingerprint fresh; NOVO "permite
+  nova tentativa depois de o Stripe devolver erro temporário"
+  (502 → alert + re-POST ao stripe); NOVO "não navega quando o
+  URL da sessão Stripe não é http(s)" (`javascript:` → erro e
+  sem redirect); asserts "sem /api/checkout nem
+  /api/payments/initiate"), `checkout-payment-client.test.tsx`
+  (termos de prestações validados no POST stripe + redirect
+  mockado) e `stripe/route.test.ts` (cancelUrl).
+- Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2151
+  passed** (149 ficheiros: 148 passed + 1 skipped) + 3 skipped
+  (baseline 2134 → +17); `npm run lint` limpo; `npm run
+  build` limpo — route map com `/checkout/sucesso` (ƒ),
+  `/checkout/cancelado` (○ static), `/api/orders/[id]` (ƒ) e
+  sitemap ○ 1h intacto.
+
+Lições desta etapa (para `knowledge.md`):
+- Next.js não permite dois nomes de segmento dinâmico
+  diferentes ao mesmo nível: `/api/orders/[id]` já existia
+  (cancel), por isso o detalhe por NÚMERO de encomenda ficou
+  na mesma rota `[id]` — o nome do segmento é um placeholder;
+  a semântica fica no serviço (`getUserOrder` por
+  orderNumber).
+- Navegação full-page para host externo (Stripe) deve viver
+  num módulo próprio (`src/lib/redirect.ts`): o `location`
+  do jsdom é unforgeable — mockar o módulo nos testes é
+  neutro e firme, enquanto `window.location.href` direto é
+  testável apenas por efeitos colaterais não observáveis.
+- Não é preciso `useSearchParams`/Suspense nas páginas de
+  retorno: a casa já lê `window.location.search`
+  diretamente (padrão login/registar), e os testes controlam
+  a query com `window.history.replaceState`.
+- Com redirect no caminho de sucesso, o `finally` que
+  reativa o botão é contraproducente (flash de UI antes da
+  navegação): trata erro→`setPendingAction(null)` no catch e
+  deixa o estado "pending" congelado no caminho feliz.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 2 quando o utilizador pedir (novos:
+  src/lib/redirect.ts, src/lib/guest-cart.ts clear,
+  /api/orders/[id] + test, /checkout/sucesso page+client+test,
+  /checkout/cancelado page+test; modificados:
+  checkout-client.tsx e seus 2 test files, stripe route+test,
+  server/orders.ts, src/lib/guest-cart.test.ts,
+  CHECKPOINT.md).
+- Preencher `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` no
+  `.env` com chaves do dashboard e testar o fluxo real
+  (cartão de teste 4242…, webhook local via tunnel) — as
+  chaves continuam vazias, dev devolve 500
+  STRIPE_NOT_CONFIGURED até lá.
+- Possíveis continuações do épico: botão "pagar de novo"
+  para encomendas PENDING (reutilizar
+  `initiateStripeCheckoutForOrder`), middleware de
+  verificação da sessão na página de sucesso, e registo das
+  lições em `knowledge.md` (§ nova).
 
 
 

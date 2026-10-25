@@ -30,6 +30,21 @@ vi.mock(
   }),
 )
 
+const redirectMocks = vi.hoisted(
+  () => ({
+    redirectToExternalUrl:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
+  '@/lib/redirect',
+  () => ({
+    redirectToExternalUrl:
+      redirectMocks.redirectToExternalUrl,
+  }),
+)
+
 import { CheckoutClient } from './checkout-client'
 
 function jsonResponse(
@@ -112,30 +127,10 @@ function createOrder(
   }
 }
 
-function createPayment(
-  overrides?: Partial<{
-    paymentMethod:
-      | 'CARD'
-      | 'INSTALLMENTS'
-    installmentCount:
-      number | null
-    amount: string
-  }>,
-) {
+function createCheckoutSession() {
   return {
-    payment: {
-      orderId: 'order-1',
-      paymentStatus:
-        'PENDING',
-      paymentMethod: 'CARD',
-      installmentCount: null,
-      paymentProvider:
-        'PFA_SIMULATED',
-      paymentReference:
-        'pfa_sim_reference',
-      amount: '105.90',
-      ...overrides,
-    },
+    id: 'cs_test_123',
+    url: 'https://stripe.test/pagar',
   }
 }
 
@@ -179,6 +174,7 @@ describe(
     beforeEach(() => {
       fetchMock.mockReset()
       navigationMocks.replace.mockReset()
+      redirectMocks.redirectToExternalUrl.mockReset()
 
       vi.stubGlobal(
         'fetch',
@@ -445,33 +441,39 @@ describe(
         expect(
           fetchMock.mock.calls.filter(
             ([url]) =>
-              url === '/api/checkout',
+              url ===
+              '/api/checkout/stripe',
           ),
         ).toHaveLength(1)
 
-        fetchMock
-          .mockResolvedValueOnce(
-            jsonResponse(
-              {
-                order:
-                  createOrder(),
-              },
-              201,
-            ),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              createPayment(),
-            ),
-          )
+        fetchMock.mockResolvedValueOnce(
+          jsonResponse(
+            {
+              order:
+                createOrder(),
+              checkoutSession:
+                createCheckoutSession(),
+            },
+            201,
+          ),
+        )
 
         fireEvent.click(
           freshCheckoutButton,
         )
 
-        await screen.findByText(
-          'pfa_sim_reference',
-        )
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(5)
 
         const finalOptions =
           fetchMock.mock.calls[4]?.[1] as
@@ -490,28 +492,19 @@ describe(
         })
 
         expect(
-          fetchMock,
-        ).toHaveBeenCalledTimes(6)
-
-        expect(
-          fetchMock.mock.calls[5]?.[0],
-        ).toBe(
-          '/api/payments/initiate',
-        )
-
-        expect(
-          JSON.parse(
-            String(
-              (
-                fetchMock.mock.calls[5]?.[1] as
-                  | RequestInit
-                  | undefined
-              )?.body,
-            ),
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url ===
+              '/api/payments/initiate',
           ),
-        ).toEqual({
-          orderId: 'order-1',
-        })
+        ).toHaveLength(0)
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url === '/api/checkout',
+          ),
+        ).toHaveLength(0)
       },
     )
 
@@ -1658,7 +1651,7 @@ describe(
     )
 
     test(
-      'cria encomenda de entrega com fingerprint e método aceites',
+      'submete o checkout de entrega ao Stripe e navega para o pagamento',
       async () => {
         fetchMock
           .mockResolvedValueOnce(
@@ -1679,13 +1672,10 @@ describe(
               {
                 order:
                   createOrder(),
+                checkoutSession:
+                  createCheckoutSession(),
               },
               201,
-            ),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              createPayment(),
             ),
           )
 
@@ -1728,50 +1718,37 @@ describe(
           checkoutButton,
         )
 
-        expect(
-          await screen.findByText(
-            'Encomenda criada',
-          ),
-        ).toBeTruthy()
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
 
         expect(
-          screen.getByText(
-            'PFA-ABC123',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          screen.getByText(
-            'Entrega ao domicílio',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          await screen.findByText(
-            'pfa_sim_reference',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          fetchMock.mock.calls[3]?.[0],
+          fetchMock.mock.calls[2]?.[0],
         ).toBe(
-          '/api/payments/initiate',
+          '/api/checkout/stripe',
         )
 
-        const initiationOptions =
-          fetchMock.mock.calls[3]?.[1] as
-            | RequestInit
-            | undefined
+        expect(
+          redirectMocks
+            .redirectToExternalUrl,
+        ).toHaveBeenCalledTimes(1)
 
         expect(
-          JSON.parse(
-            String(
-              initiationOptions?.body,
-            ),
+          fetchMock,
+        ).toHaveBeenCalledTimes(3)
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url ===
+              '/api/payments/initiate',
           ),
-        ).toEqual({
-          orderId: 'order-1',
-        })
+        ).toHaveLength(0)
 
         const options =
           fetchMock.mock.calls[2]?.[1] as
@@ -1815,7 +1792,7 @@ describe(
     )
 
     test(
-      'cria encomenda de levantamento sem enviar morada',
+      'submete o checkout de levantamento ao Stripe sem morada',
       async () => {
         fetchMock
           .mockResolvedValueOnce(
@@ -1839,15 +1816,10 @@ describe(
                   createOrder(
                     'PICKUP',
                   ),
+                checkoutSession:
+                  createCheckoutSession(),
               },
               201,
-            ),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              createPayment({
-                amount: '100.00',
-              }),
             ),
           )
 
@@ -1905,50 +1877,37 @@ describe(
           ),
         )
 
-        expect(
-          await screen.findByText(
-            'Encomenda criada',
-          ),
-        ).toBeTruthy()
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
 
         expect(
-          screen.getByText(
-            'Levantamento em loja',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          screen.getByText(
-            /pagamento ser confirmado/,
-          ),
-        ).toBeTruthy()
-
-        expect(
-          await screen.findByText(
-            'pfa_sim_reference',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          fetchMock.mock.calls[3]?.[0],
+          fetchMock.mock.calls[2]?.[0],
         ).toBe(
-          '/api/payments/initiate',
+          '/api/checkout/stripe',
         )
 
-        const initiationOptions =
-          fetchMock.mock.calls[3]?.[1] as
-            | RequestInit
-            | undefined
+        expect(
+          redirectMocks
+            .redirectToExternalUrl,
+        ).toHaveBeenCalledTimes(1)
 
         expect(
-          JSON.parse(
-            String(
-              initiationOptions?.body,
-            ),
+          fetchMock,
+        ).toHaveBeenCalledTimes(3)
+
+        expect(
+          fetchMock.mock.calls.filter(
+            ([url]) =>
+              url ===
+              '/api/payments/initiate',
           ),
-        ).toEqual({
-          orderId: 'order-1',
-        })
+        ).toHaveLength(0)
 
         const options =
           fetchMock.mock.calls[2]?.[1] as
@@ -1979,7 +1938,7 @@ describe(
     )
 
     test(
-      'repete apenas a iniciação do pagamento quando a encomenda já foi criada',
+      'permite nova tentativa depois de o Stripe devolver erro temporário',
       async () => {
         fetchMock
           .mockResolvedValueOnce(
@@ -1998,19 +1957,11 @@ describe(
           .mockResolvedValueOnce(
             jsonResponse(
               {
-                order:
-                  createOrder(),
-              },
-              201,
-            ),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              {
                 error:
-                  'Falha temporária no pagamento',
+                  'O pagamento por Stripe falhou temporariamente',
+                code: 'STRIPE_UNAVAILABLE',
               },
-              500,
+              502,
             ),
           )
 
@@ -2055,19 +2006,26 @@ describe(
             'alert',
           ),
         ).toHaveTextContent(
-          'Falha temporária no pagamento',
+          'O pagamento por Stripe falhou temporariamente',
         )
 
         expect(
           fetchMock.mock.calls.filter(
             ([url]) =>
-              url === '/api/checkout',
+              url ===
+              '/api/checkout/stripe',
           ),
         ).toHaveLength(1)
 
         fetchMock.mockResolvedValueOnce(
           jsonResponse(
-            createPayment(),
+            {
+              order:
+                createOrder(),
+              checkoutSession:
+                createCheckoutSession(),
+            },
+            201,
           ),
         )
 
@@ -2076,46 +2034,27 @@ describe(
             'button',
             {
               name:
-                'Tentar iniciar pagamento novamente',
+                'Criar encomenda',
             },
           ),
         )
 
-        expect(
-          await screen.findByText(
-            'pfa_sim_reference',
-          ),
-        ).toBeTruthy()
-
-        expect(
-          fetchMock.mock.calls.filter(
-            ([url]) =>
-              url === '/api/checkout',
-          ),
-        ).toHaveLength(1)
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
 
         expect(
           fetchMock.mock.calls.filter(
             ([url]) =>
               url ===
-              '/api/payments/initiate',
+              '/api/checkout/stripe',
           ),
         ).toHaveLength(2)
-
-        const retryOptions =
-          fetchMock.mock.calls[4]?.[1] as
-            | RequestInit
-            | undefined
-
-        expect(
-          JSON.parse(
-            String(
-              retryOptions?.body,
-            ),
-          ),
-        ).toEqual({
-          orderId: 'order-1',
-        })
       },
     )
 
@@ -2243,7 +2182,7 @@ describe(
     )
 
     test(
-      'painel de sucesso mostra entrega expressa quando a encomenda foi expressa',
+      'não navega quando o URL da sessão Stripe não é http(s)',
       async () => {
         fetchMock
           .mockResolvedValueOnce(
@@ -2266,18 +2205,14 @@ describe(
           .mockResolvedValueOnce(
             jsonResponse(
               {
-                order: {
-                  ...createOrder(),
-                  shippingMethod:
-                    'EXPRESS',
+                order:
+                  createOrder(),
+                checkoutSession: {
+                  id: 'cs_test_123',
+                  url: 'javascript:alert(1)',
                 },
               },
               201,
-            ),
-          )
-          .mockResolvedValueOnce(
-            jsonResponse(
-              createPayment(),
             ),
           )
 
@@ -2318,10 +2253,27 @@ describe(
         )
 
         expect(
-          await screen.findByText(
-            'Entrega expressa ao domicílio',
+          await screen.findByRole(
+            'alert',
           ),
-        ).toBeTruthy()
+        ).toHaveTextContent(
+          'Resposta inválida do servidor',
+        )
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        ).toBeEnabled()
+
+        expect(
+          redirectMocks
+            .redirectToExternalUrl,
+        ).not.toHaveBeenCalled()
       },
     )
   },

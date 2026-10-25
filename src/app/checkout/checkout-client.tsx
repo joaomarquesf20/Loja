@@ -9,6 +9,9 @@ import {
 } from 'react'
 
 import {
+  redirectToExternalUrl,
+} from '@/lib/redirect'
+import {
   getShippingMethodOptions,
 } from '@/lib/shipping-methods'
 
@@ -76,14 +79,14 @@ type CheckoutOrder = {
   paymentStatus: string
 }
 
-type PaymentInitiation = {
-  orderId: string
-  paymentStatus: 'PENDING'
-  paymentMethod: PaymentMethod
-  installmentCount: number | null
-  paymentProvider: 'PFA_SIMULATED'
-  paymentReference: string
-  amount: string
+type StripeCheckoutSession = {
+  id: string
+  url: string
+}
+
+type StripeCheckoutCreation = {
+  order: CheckoutOrder
+  checkoutSession: StripeCheckoutSession
 }
 
 type LoadMode =
@@ -96,7 +99,6 @@ type PendingAction =
   | 'address'
   | 'preview'
   | 'checkout'
-  | 'payment'
   | null
 
 type CheckoutFulfillmentRequestInput =
@@ -364,77 +366,59 @@ async function parsePreview(
   return body.preview
 }
 
-async function parseOrder(
-  response: Response,
-): Promise<CheckoutOrder> {
-  const body: unknown =
-    await response.json()
-
+/**
+ * O utilizador sai da aplicação para a página de pagamento alojada no
+ * Stripe. Antes de despoletar essa navegação valida-se que o URL é
+ * http(s), para nunca executarmos esquemas perigosos (ex.: javascript:)
+ * que cheguem a partir do servidor.
+ */
+function isSafeCheckoutUrl(
+  value: unknown,
+): value is string {
   if (
-    !isRecord(body) ||
-    !isCheckoutOrder(
-      body.order,
-    )
+    typeof value !== 'string' ||
+    value.length === 0
   ) {
-    throw new Error(
-      'Resposta inválida do servidor',
-    )
+    return false
   }
 
-  return body.order
+  try {
+    const url = new URL(value)
+
+    return (
+      url.protocol === 'http:' ||
+      url.protocol === 'https:'
+    )
+  } catch {
+    return false
+  }
 }
 
-function isPaymentInitiation(
+function isStripeCheckoutSession(
   value: unknown,
-): value is PaymentInitiation {
+): value is StripeCheckoutSession {
   if (!isRecord(value)) {
     return false
   }
 
-  const validInstallments =
-    value.paymentMethod === 'CARD'
-      ? value.installmentCount === null
-      : (
-          value.paymentMethod ===
-            'INSTALLMENTS' &&
-          typeof value.installmentCount ===
-            'number' &&
-          Number.isSafeInteger(
-            value.installmentCount,
-          ) &&
-          value.installmentCount >= 2 && value.installmentCount <= 12
-        )
-
   return (
-    typeof value.orderId === 'string' &&
-    value.orderId.length > 0 &&
-    value.paymentStatus === 'PENDING' &&
-    isPaymentMethod(
-      value.paymentMethod,
-    ) &&
-    validInstallments &&
-    value.paymentProvider ===
-      'PFA_SIMULATED' &&
-    typeof value.paymentReference ===
-      'string' &&
-    value.paymentReference.startsWith(
-      'pfa_sim_',
-    ) &&
-    typeof value.amount === 'string' &&
-    value.amount.length > 0
+    typeof value.id === 'string' &&
+    value.id.length > 0 &&
+    isSafeCheckoutUrl(value.url)
   )
 }
 
-async function parsePaymentInitiation(
+async function parseCheckoutSessionResponse(
   response: Response,
-): Promise<PaymentInitiation> {
+): Promise<StripeCheckoutCreation> {
   const body: unknown =
     await response.json()
 
   if (
     !isRecord(body) ||
-    !isPaymentInitiation(
-      body.payment,
+    !isCheckoutOrder(body.order) ||
+    !isStripeCheckoutSession(
+      body.checkoutSession,
     )
   ) {
     throw new Error(
@@ -442,7 +426,11 @@ async function parsePaymentInitiation(
     )
   }
 
-  return body.payment
+  return {
+    order: body.order,
+    checkoutSession:
+      body.checkoutSession,
+  }
 }
 
 function formatPrice(
@@ -549,23 +537,6 @@ export function CheckoutClient() {
     useState<CheckoutPreview | null>(
       null,
     )
-
-  const [order, setOrder] =
-    useState<CheckoutOrder | null>(
-      null,
-    )
-
-  const [payment, setPayment] =
-    useState<PaymentInitiation | null>(
-      null,
-    )
-
-  const [
-    paymentError,
-    setPaymentError,
-  ] = useState<string | null>(
-    null,
-  )
 
   const [
     pendingAction,
@@ -1102,50 +1073,6 @@ export function CheckoutClient() {
     }
   }
 
-  async function requestPaymentInitiation(
-    orderId: string,
-  ) {
-    const response =
-      await fetch(
-        '/api/payments/initiate',
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify({
-            orderId,
-          }),
-        },
-      )
-
-    if (!response.ok) {
-      throw new Error(
-        await getResponseError(
-          response,
-          'Não foi possível iniciar o pagamento',
-        ),
-      )
-    }
-
-    const initiatedPayment =
-      await parsePaymentInitiation(
-        response,
-      )
-
-    if (
-      initiatedPayment.orderId !==
-      orderId
-    ) {
-      throw new Error(
-        'Resposta inválida do servidor',
-      )
-    }
-
-    return initiatedPayment
-  }
-
   async function handleCheckout() {
     if (
       pendingAction ||
@@ -1163,12 +1090,11 @@ export function CheckoutClient() {
 
     setPendingAction('checkout')
     setError(null)
-    setPaymentError(null)
 
     try {
       const response =
         await fetch(
-          '/api/checkout',
+          '/api/checkout/stripe',
           {
             method: 'POST',
             headers: {
@@ -1184,7 +1110,9 @@ export function CheckoutClient() {
         )
 
       if (!response.ok) {
-        // 409 significa que os termos aceites já não são atuais.
+        // 409 significa que o preview deixou de ser atual
+        // (stock/carrinho alterados): volta a exigir um
+        // cálculo explícito do total antes de submeter.
         if (response.status === 409) {
           setPreview(null)
         }
@@ -1196,68 +1124,24 @@ export function CheckoutClient() {
         )
       }
 
-      const createdOrder =
-        await parseOrder(response)
-
-      setOrder(createdOrder)
-      setPayment(null)
-      setPendingAction('payment')
-
-      try {
-        const initiatedPayment =
-          await requestPaymentInitiation(
-            createdOrder.id,
-          )
-
-        setPayment(
-          initiatedPayment,
+      const creation =
+        await parseCheckoutSessionResponse(
+          response,
         )
-      } catch (caughtPaymentError) {
-        setPaymentError(
-          caughtPaymentError instanceof
-            Error
-            ? caughtPaymentError.message
-            : 'Não foi possível iniciar o pagamento',
-        )
-      }
+
+      // Navegação completa para a página de pagamento alojada no
+      // Stripe. O pendingAction mantém-se ativo enquanto o browser
+      // sai da aplicação; em erro é libertado abaixo.
+      redirectToExternalUrl(
+        creation.checkoutSession.url,
+      )
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
           ? caughtError.message
-          : 'Não foi possível criar a encomenda',
-      )
-    } finally {
-      setPendingAction(null)
-    }
-  }
-
-  async function handleRetryPayment() {
-    if (
-      !order ||
-      pendingAction
-    ) {
-      return
-    }
-
-    setPendingAction('payment')
-    setPaymentError(null)
-
-    try {
-      const initiatedPayment =
-        await requestPaymentInitiation(
-          order.id,
-        )
-
-      setPayment(
-        initiatedPayment,
-      )
-    } catch (caughtError) {
-      setPaymentError(
-        caughtError instanceof Error
-          ? caughtError.message
           : 'Não foi possível iniciar o pagamento',
       )
-    } finally {
+
       setPendingAction(null)
     }
   }
@@ -1314,155 +1198,6 @@ export function CheckoutClient() {
         <p className="mt-2 text-sm text-red-800">
           {error}
         </p>
-      </div>
-    )
-  }
-
-  if (order) {
-    const completedPaymentMethod =
-      order.paymentMethod ??
-      paymentMethod
-    const completedInstallmentCount =
-      order.installmentCount ??
-      (completedPaymentMethod ===
-      'INSTALLMENTS'
-        ? Number(installmentCount)
-        : null)
-
-    return (
-      <div
-        role="status"
-        className="rounded-xl border border-green-200 bg-green-50 p-6"
-      >
-        <h2 className="text-xl font-semibold text-green-950">
-          Encomenda criada
-        </h2>
-
-        <p className="mt-2 text-sm text-green-900">
-          Número da encomenda:{' '}
-          <strong>
-            {order.orderNumber}
-          </strong>
-        </p>
-
-        <p className="mt-2 text-sm text-green-900">
-          Método:{' '}
-          <strong>
-            {order.fulfillmentMethod ===
-            'PICKUP'
-              ? 'Levantamento em loja'
-              : order.shippingMethod ===
-                  'EXPRESS'
-                ? 'Entrega expressa ao domicílio'
-                : 'Entrega ao domicílio'}
-          </strong>
-        </p>
-
-        <p className="mt-2 text-sm text-green-900">
-          Pagamento:{' '}
-          <strong>
-            {completedPaymentMethod ===
-            'CARD'
-              ? 'Cartão'
-              : `Pagamento em ${completedInstallmentCount} prestações`}
-          </strong>
-        </p>
-
-        <p className="mt-2 text-sm text-green-900">
-          Total:{' '}
-          <strong>
-            {formatPrice(
-              order.total,
-            )}
-          </strong>
-        </p>
-
-        {pendingAction ===
-          'payment' &&
-        !payment ? (
-          <p className="mt-3 text-sm text-green-900">
-            A iniciar pagamento...
-          </p>
-        ) : null}
-
-        {payment ? (
-          <div className="mt-4 rounded-lg border border-green-300 bg-white/70 p-4 text-sm text-green-950">
-            <p className="font-semibold">
-              Pagamento iniciado em modo
-              de demonstração.
-            </p>
-
-            <p className="mt-2">
-              Referência:{' '}
-              <code className="break-all font-mono">
-                {payment.paymentReference}
-              </code>
-            </p>
-
-            <p className="mt-1 text-xs text-green-800">
-              Fornecedor simulado:
-              {' '}
-              {payment.paymentProvider}
-            </p>
-          </div>
-        ) : null}
-
-        {paymentError ? (
-          <div
-            role="alert"
-            className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"
-          >
-            <p className="font-semibold">
-              A encomenda foi criada,
-              mas o pagamento ainda não
-              foi iniciado.
-            </p>
-
-            <p className="mt-2">
-              {paymentError}
-            </p>
-
-            <button
-              type="button"
-              disabled={
-                pendingAction !== null
-              }
-              onClick={() =>
-                void handleRetryPayment()
-              }
-              className="mt-3 rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pendingAction ===
-              'payment'
-                ? 'A iniciar pagamento...'
-                : 'Tentar iniciar pagamento novamente'}
-            </button>
-          </div>
-        ) : null}
-
-        {order.paymentStatus ===
-        'PENDING' ? (
-          <p className="mt-3 text-sm text-green-900">
-            Pagamento pendente de
-            confirmação.
-          </p>
-        ) : null}
-
-        {order.fulfillmentMethod ===
-        'PICKUP' ? (
-          <p className="mt-2 text-sm text-green-900">
-            O levantamento só ficará
-            disponível depois de o
-            pagamento ser confirmado.
-          </p>
-        ) : null}
-
-        <Link
-          href="/conta"
-          className="mt-5 inline-flex rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800"
-        >
-          Ver a minha conta
-        </Link>
       </div>
     )
   }
@@ -2337,7 +2072,7 @@ export function CheckoutClient() {
             >
               {pendingAction ===
               'checkout'
-                ? 'A criar encomenda...'
+                ? 'A redirecionar para o pagamento...'
                 : 'Criar encomenda'}
             </button>
           </div>

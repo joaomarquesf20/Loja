@@ -401,6 +401,25 @@ export function writeGuestCart(
   persistGuestCart(items)
 }
 
+/**
+ * Limpa o carrinho local sem reagir a tentativas de fusão pendentes.
+ * Usado ao aterrar numa compra confirmada: o carrinho do servidor
+ * responsável fica vazio e qualquer estado local velho é um resíduo.
+ */
+export function clearGuestCart() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.removeItem(
+      GUEST_CART_STORAGE_KEY,
+    )
+  } catch {
+    // storage indisponível — nada a limpar.
+  }
+}
+
 export function addGuestCartItem(
   productId: string,
   quantity = 1,

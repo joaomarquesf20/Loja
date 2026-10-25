@@ -470,7 +470,7 @@ describe('/api/checkout/stripe', () => {
     expect(
       urls.cancelUrl,
     ).toBe(
-      'http://localhost:3000/checkout?pagamento=cancelado',
+      'http://localhost:3000/checkout/cancelado',
     )
   })
 

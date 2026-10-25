@@ -2,6 +2,7 @@ import { prisma } from './db'
 
 export type OrderField =
   | 'userId'
+  | 'orderNumber'
 
 export type OrderFulfillmentMethod =
   | 'DELIVERY'
@@ -220,6 +221,14 @@ export interface OrderClient {
       }
       select: OrderSelect
     }): Promise<OrderRecord[]>
+
+    findFirst(args: {
+      where: {
+        userId: string
+        orderNumber: string
+      }
+      select: OrderSelect
+    }): Promise<OrderRecord | null>
   }
 }
 
@@ -498,4 +507,68 @@ export async function listUserOrders(
   return orders.map(
     mapOrder,
   )
+}
+
+function normalizeOrderNumber(
+  value: unknown,
+) {
+  if (typeof value !== 'string') {
+    throw new OrderValidationError(
+      'orderNumber',
+      'Encomenda inválida',
+    )
+  }
+
+  const normalizedValue =
+    value.trim()
+
+  if (
+    !normalizedValue ||
+    normalizedValue.length > 64
+  ) {
+    throw new OrderValidationError(
+      'orderNumber',
+      'Encomenda inválida',
+    )
+  }
+
+  return normalizedValue
+}
+
+/**
+ * Detalhe de uma encomenda do utilizador, resolvida pelo número de
+ * encomenda (ex.: PFA-ABC123). O filtro inclui o userId: encomendas de
+ * outras contas devolvem null, sem lados a revelarem a sua existência.
+ */
+export async function getUserOrder(
+  userId: string,
+  orderNumber: string,
+  client?: OrderClient,
+): Promise<UserOrder | null> {
+  const normalizedUserId =
+    normalizeUserId(userId)
+
+  const normalizedOrderNumber =
+    normalizeOrderNumber(
+      orderNumber,
+    )
+
+  const db =
+    getClient(client)
+
+  const order =
+    await db.order.findFirst({
+      where: {
+        userId: normalizedUserId,
+        orderNumber:
+          normalizedOrderNumber,
+      },
+      select: orderSelect,
+    })
+
+  if (!order) {
+    return null
+  }
+
+  return mapOrder(order)
 }

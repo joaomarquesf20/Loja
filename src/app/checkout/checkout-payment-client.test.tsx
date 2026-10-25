@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from '@testing-library/react'
 import {
   afterEach,
@@ -26,6 +27,21 @@ vi.mock(
       replace:
         navigationMocks.replace,
     }),
+  }),
+)
+
+const redirectMocks = vi.hoisted(
+  () => ({
+    redirectToExternalUrl:
+      vi.fn(),
+  }),
+)
+
+vi.mock(
+  '@/lib/redirect',
+  () => ({
+    redirectToExternalUrl:
+      redirectMocks.redirectToExternalUrl,
   }),
 )
 
@@ -100,6 +116,7 @@ describe(
     beforeEach(() => {
       fetchMock.mockReset()
       navigationMocks.replace.mockReset()
+      redirectMocks.redirectToExternalUrl.mockReset()
 
       vi.stubGlobal(
         'fetch',
@@ -342,25 +359,33 @@ describe(
             }),
           )
           .mockResolvedValueOnce(
-            jsonResponse({
-              order: {
-                id: 'order-1',
-                orderNumber:
-                  'PFA-ABC123',
-                fulfillmentMethod:
-                  'DELIVERY',
-                paymentMethod:
-                  'INSTALLMENTS',
-                installmentCount: 3,
-                subtotal: 100,
-                shippingCost: 5.9,
-                tax: 19.8,
-                total: 105.9,
-                status: 'PENDING',
-                paymentStatus:
-                  'PENDING',
+            jsonResponse(
+              {
+                order: {
+                  id: 'order-1',
+                  orderNumber:
+                    'PFA-ABC123',
+                  fulfillmentMethod:
+                    'DELIVERY',
+                  paymentMethod:
+                    'INSTALLMENTS',
+                  installmentCount: 3,
+                  subtotal: 100,
+                  shippingCost: 5.9,
+                  tax: 19.8,
+                  total: 105.9,
+                  status: 'PENDING',
+                  paymentStatus:
+                    'PENDING',
+                },
+                checkoutSession:
+                  {
+                    id: 'cs_test_123',
+                    url: 'https://stripe.test/pagar',
+                  },
               },
-            }, 201),
+              201,
+            ),
           )
 
         render(<CheckoutClient />)
@@ -414,13 +439,14 @@ describe(
           ),
         )
 
-        expect(
-          await screen.findByRole(
-            'status',
-          ),
-        ).toHaveTextContent(
-          'Pagamento em 3 prestações',
-        )
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
 
         expect(
           requestBody(2),

@@ -31,14 +31,13 @@ import {
  */
 
 /**
- * URLs de retorno para a sessão Stripe. A página de sucesso é construída
- * nos próximos passos do epic; a marca {CHECKOUT_SESSION_ID} é
+ * URLs de retorno para a sessão Stripe. A marca {CHECKOUT_SESSION_ID} é
  * substituída pelo próprio Stripe na resposta da sessão.
  */
 const STRIPE_CHECKOUT_SUCCESS_PATH =
   '/checkout/sucesso'
 const STRIPE_CHECKOUT_CANCEL_PATH =
-  '/checkout'
+  '/checkout/cancelado'
 const STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER =
   '{CHECKOUT_SESSION_ID}'
 
@@ -186,7 +185,7 @@ export async function POST(
         userId,
         {
           successUrl: `${base}${STRIPE_CHECKOUT_SUCCESS_PATH}?order=${encodeURIComponent(order.orderNumber)}&session_id=${STRIPE_CHECKOUT_SESSION_ID_PLACEHOLDER}`,
-          cancelUrl: `${base}${STRIPE_CHECKOUT_CANCEL_PATH}?pagamento=cancelado`,
+          cancelUrl: `${base}${STRIPE_CHECKOUT_CANCEL_PATH}`,
         },
       )
 

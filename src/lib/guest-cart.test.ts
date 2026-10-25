@@ -6,6 +6,7 @@ import {
 } from 'vitest'
 import {
   addGuestCartItem,
+  clearGuestCart,
   completeGuestCartMerge,
   discardGuestCartMergeAttempt,
   getOrCreateGuestCartMergeAttempt,
@@ -971,4 +972,70 @@ describe('Guest cart', () => {
       })
     },
   )
+
+  describe('clearGuestCart', () => {
+    test('remove todos os produtos do carrinho local', () => {
+      window.localStorage.setItem(
+        GUEST_CART_STORAGE_KEY,
+        JSON.stringify([
+          {
+            productId:
+              'product-1',
+            quantity: 2,
+          },
+          {
+            productId:
+              'product-2',
+            quantity: 1,
+          },
+        ]),
+      )
+
+      clearGuestCart()
+
+      expect(readGuestCart()).toEqual(
+        [],
+      )
+
+      expect(
+        window.localStorage.getItem(
+          GUEST_CART_STORAGE_KEY,
+        ),
+      ).toBeNull()
+    })
+
+    test('ignora carrinho inexistente', () => {
+      expect(() =>
+        clearGuestCart(),
+      ).not.toThrow()
+
+      expect(readGuestCart()).toEqual(
+        [],
+      )
+    })
+
+    test('preserva a tentativa de fusão pendente', () => {
+      window.localStorage.setItem(
+        GUEST_CART_MERGE_STORAGE_KEY,
+        JSON.stringify({
+          mergeKey:
+            'merge-key-1',
+          items: [
+            {
+              productId:
+                'product-1',
+              quantity: 1,
+            },
+          ],
+        }),
+      )
+
+      clearGuestCart()
+
+      expect(
+        readGuestCartMergeAttempt()
+          ?.mergeKey,
+      ).toBe('merge-key-1')
+    })
+  })
 })
