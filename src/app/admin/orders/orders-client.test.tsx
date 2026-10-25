@@ -788,5 +788,348 @@ describe(
         )
       },
     )
+
+    test(
+      'pesquisa encomendas por número e cliente e filtra por estado e pagamento',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            orders: [
+              createOrder(),
+              createOrder({
+                id: 'order-2',
+                orderNumber:
+                  'PFA-XYZ789',
+                shippingName:
+                  'Bruno Dias',
+                status: 'SHIPPED',
+              }),
+              createOrder({
+                id: 'order-3',
+                orderNumber:
+                  'PFA-DEF456',
+                shippingName:
+                  'Ana Costa',
+                paymentStatus:
+                  'PENDING',
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            '3 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Pesquisar',
+          ),
+          {
+            target: {
+              value: 'bruno',
+            },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            '1 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-XYZ789',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-ABC123',
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-DEF456',
+          ),
+        ).not.toBeInTheDocument()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Pesquisar',
+          ),
+          {
+            target: { value: '' },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            '3 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Estado da encomenda',
+          ),
+          {
+            target: {
+              value: 'SHIPPED',
+            },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            '1 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-XYZ789',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-ABC123',
+          ),
+        ).not.toBeInTheDocument()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Estado da encomenda',
+          ),
+          {
+            target: {
+              value: 'all',
+            },
+          },
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Pagamento',
+          ),
+          {
+            target: {
+              value: 'PENDING',
+            },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            '1 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-DEF456',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-ABC123',
+          ),
+        ).not.toBeInTheDocument()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Estado da encomenda',
+          ),
+          {
+            target: {
+              value: 'SHIPPED',
+            },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            'Nenhuma encomenda corresponde aos filtros',
+          ),
+        ).toBeInTheDocument()
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Limpar filtros',
+            },
+          ),
+        )
+
+        expect(
+          screen.getByText(
+            '3 de 3 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-XYZ789',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-DEF456',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'pagina a lista de encomendas',
+      async () => {
+        const orders = Array.from(
+          { length: 12 },
+          (_, index) =>
+            createOrder({
+              id: `order-${index + 1}`,
+              orderNumber: `PFA-${String(index + 1).padStart(4, '0')}`,
+            }),
+        )
+
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            orders,
+          }),
+        )
+
+        render(
+          <OrdersClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'PFA-0001',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            '12 de 12 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'Página 1 de 2',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-0012',
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Página anterior',
+            },
+          ),
+        ).toBeDisabled()
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Página seguinte',
+            },
+          ),
+        )
+
+        expect(
+          screen.getByText(
+            'Página 2 de 2',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-0011',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-0012',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            'PFA-0001',
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Página seguinte',
+            },
+          ),
+        ).toBeDisabled()
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Pesquisar',
+          ),
+          {
+            target: {
+              value: 'PFA-0011',
+            },
+          },
+        )
+
+        expect(
+          screen.getByText(
+            '1 de 12 encomendas',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.queryByText(
+            /Página \d de \d/,
+          ),
+        ).not.toBeInTheDocument()
+
+        expect(
+          screen.getByText(
+            'PFA-0011',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
   },
 )

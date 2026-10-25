@@ -1022,6 +1022,109 @@ Próximos passos (pós-etapa):
   comerciais, importação) + § do épico no
   `knowledge.md` no fecho.
 
+## Épico 4 — Etapa 3 (concluída): Gestão de encomendas e fulfillment
+
+Data: 2026-10-25 · Branch: `master` · Sem commit (aguarda
+pedido do utilizador).
+
+Pedido do utilizador: vista admin de gestão de encomendas
+com listagem por recência + filtros/pesquisa/paginação,
+detalhe com desdobramento completo e ações de fulfillment
+seguras, endpoints protegidos por `requireAdmin()` com
+transações atómicas, testes e gate completo.
+
+Exploração (o que já existia — não duplicar):
+- Ordenação por recência ✓: `listAdminOrders`
+  (`admin-orders.ts`) já faz `orderBy: { createdAt: 'desc' }`.
+- Segurança ✓: `/api/admin/orders` (GET), `[id]/transition`
+  (POST) e `[id]/ready-for-pickup` (POST) usam
+  `requireAdmin()` com mapeamento de erros para 401/403;
+  páginas `/admin/orders` e `/admin/orders/[id]` guardam
+  sessão/ADMIN no servidor (redirect/notFound).
+- Transações atómicas ✓: `applyAdminOrderAction`
+  (`order-lifecycle.ts`, várias `$transaction`,
+  valida transições de estado — 400 em transição inválida /
+  409 em conflito), `cancelOrderAndRestoreStock`
+  (`order-cancellation.ts`, repõe inventário), 
+  `refundSimulatedPayment` (`payment-refund.ts`).
+- Detalhe completo ✓ (`order-detail-client.tsx`): artigos
+  com nome/SKU@compra/variantes@compra/preço/quantidade/
+  classe de envio+tarifa/subtotal, entrega (morada,
+  método), pagamento (método, estado, fornecedor
+  Stripe vs `PFA_SIMULATED`, referência), totais,
+  histórico de eventos e ações via POST transition.
+
+Lacunas reais fechadas nesta etapa (só na listagem
+`orders-client.tsx`):
+- **Pesquisa**: campo `Pesquisar` (input search) sobre
+  `orderNumber`, `shippingName`, `shippingEmail`,
+  `shippingPhone`, case-insensitive via
+  `toLocaleLowerCase('pt-PT')`, trimmed.
+- **Filtros de estado**: selects "Estado da encomenda"
+  (8 estados, labels de `orderStatusLabels`) e "Pagamento"
+  (5 estados, `paymentStatusLabels`), ambos com opção
+  "Todos"; opções derivadas de `Object.entries` no módulo
+  (`orderStatusOptions`/`paymentStatusOptions`).
+- **Paginação**: `ORDERS_PAGE_SIZE = 10`,
+  `pageCount`/`currentPage` com clamp no render,
+  reset de página dentro dos handlers dos 3 controlos,
+  `nav[aria-label="Paginação das encomendas"]`
+  ("Página X de Y", Anterior/Seguinte com disabled nas
+  margens) apenas quando >1 página.
+- **UI**: secção de controlos nova (contador
+  "X de Y encomendas" + botão Atualizar movido para o
+  cabeçalho da secção, props mantidas); `.map` sobre
+  `pagedOrders` (memo `filteredOrders` deriva de
+  pedidos+filtros — transições in-place via `setOrders`
+  continuam visíveis); dois estados vazios: "Ainda não
+  existem encomendas." vs "Nenhuma encomenda corresponde
+  aos filtros" + botão "Limpar filtros" (realinha os 4
+  estados). Estilo cinza próprio do cliente de encomendas
+  (não reaproveitou a paleta do cliente de produtos).
+
+Testes (+2, ficheiro com 13 no total):
+- `orders-client.test.tsx`: teste novo "pesquisa
+  encomendas por número e cliente e filtra por estado e
+  pagamento" (3 encomendas mistas DRY: pesquisa por nome
+  "bruno" e por número "PFA-DEF456", filtro SHIPPED,
+  filtro de pagamento PENDING, estado vazio + clicar
+  "Limpar filtros" repõe tudo) — usou `fireEvent.change`
+  em `getByLabelText('Pesquisar')` / 'Estado da encomenda'
+  / 'Pagamento' e contagem "N de M encomendas".
+- Teste novo "pagina a lista de encomendas" (12 encomendas
+  via overrides; 10 na pág. 1, Anterior disabled, Seguinte
+  → "Página 2 de 2" com PFA-0011/0012 + Seguinte
+  disabled, pesquisa "PFA-0011" recolhe para 1 página e
+  esconde a nav via `queryByText(/Página \d de \d/)`).
+- Autorização/validação/transações: cobertura
+  pré-existente mantida (route.test.ts de orders +
+  transition + ready-for-pickup, order-detail-client,
+  lifecycle/cancellation/refund); nada duplicado — listagem
+  e filtros são client-side sobre o payload admin.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest run`: **2200
+passed** (155 ficheiros: 154 passed + 1 skipped) + 3
+skipped (baseline 2198 → +2 testes); `npm run lint`
+limpo; `npm run build` limpo — route map intacto, admin
+orders ƒ.
+
+Lições desta etapa (para `knowledge.md` em § futura):
+- Reset de página nos handlers dos filtros (não em
+  effects) confirma-se com regras React Hooks v4
+  (`react-hooks/set-state-in-effect`); com clamp de
+  `currentPage` no render o reset fica mesmo assim
+  observável via teste de contagem.
+- `getByLabelText` com `<label>` envolvente funciona bem
+  em blocos de controlo (pesquisa/estado/pagamento) sem
+  colidir com texto de conteúdo (ex.: "Estado: Expedida").
+
+Próximos passos (pós-etapa):
+- Commit da etapa 3 quando o utilizador pedir
+  (modificados: orders-client.tsx,
+  orders-client.test.tsx, CHECKPOINT.md).
+- Etapa 4 do épico a definir com o utilizador +
+  § do épico no `knowledge.md` no fecho.
+
 
 
 

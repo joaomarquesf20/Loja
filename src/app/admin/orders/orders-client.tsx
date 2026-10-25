@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import {
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 
@@ -111,6 +112,18 @@ const paymentStatusLabels:
   FAILED: 'Falhou',
   REFUNDED: 'Reembolsado',
 }
+
+const orderStatusOptions =
+  Object.entries(
+    orderStatusLabels,
+  ) as Array<[OrderStatus, string]>
+
+const paymentStatusOptions =
+  Object.entries(
+    paymentStatusLabels,
+  ) as Array<[PaymentStatus, string]>
+
+const ORDERS_PAGE_SIZE = 10
 
 const actionLabels:
   Record<AdminOrderAction, string> = {
@@ -436,6 +449,25 @@ export default function OrdersClient() {
     null,
   )
 
+  const [search, setSearch] =
+    useState('')
+
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState<
+    OrderStatus | 'all'
+  >('all')
+
+  const [
+    paymentFilter,
+    setPaymentFilter,
+  ] = useState<
+    PaymentStatus | 'all'
+  >('all')
+
+  const [page, setPage] = useState(0)
+
   useEffect(() => {
     let cancelled = false
 
@@ -485,6 +517,73 @@ export default function OrdersClient() {
       cancelled = true
     }
   }, [])
+
+  const filteredOrders =
+    useMemo(() => {
+      const query = search
+        .trim()
+        .toLocaleLowerCase(
+          'pt-PT',
+        )
+
+      return orders.filter((order) => {
+        const matchesQuery =
+          !query ||
+          [
+            order.orderNumber,
+            order.shippingName,
+            order.shippingEmail,
+            order.shippingPhone,
+          ].some((value) =>
+            value
+              .toLocaleLowerCase('pt-PT')
+              .includes(query),
+          )
+
+        const matchesStatus =
+          statusFilter ===
+            'all' ||
+          order.status ===
+            statusFilter
+
+        const matchesPayment =
+          paymentFilter ===
+            'all' ||
+          order.paymentStatus ===
+            paymentFilter
+
+        return (
+          matchesQuery &&
+          matchesStatus &&
+          matchesPayment
+        )
+      })
+    }, [
+      orders,
+      search,
+      statusFilter,
+      paymentFilter,
+    ])
+
+  const pageCount = Math.max(
+    1,
+    Math.ceil(
+      filteredOrders.length /
+        ORDERS_PAGE_SIZE,
+    ),
+  )
+
+  const currentPage = Math.min(
+    page,
+    pageCount - 1,
+  )
+
+  const pagedOrders =
+    filteredOrders.slice(
+      currentPage * ORDERS_PAGE_SIZE,
+      (currentPage + 1) *
+        ORDERS_PAGE_SIZE,
+    )
 
   async function refreshOrders() {
     if (
@@ -636,24 +735,111 @@ export default function OrdersClient() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          disabled={
-            refreshing ||
-            submittingOrderId !==
-              null
-          }
-          onClick={() =>
-            void refreshOrders()
-          }
-          className="rounded border px-3 py-2 text-sm disabled:opacity-50"
-        >
-          {refreshing
-            ? 'A atualizar...'
-            : 'Atualizar'}
-        </button>
-      </div>
+      <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-semibold">
+            {filteredOrders.length} de{' '}
+            {orders.length} encomendas
+          </p>
+
+          <button
+            type="button"
+            disabled={
+              refreshing ||
+              submittingOrderId !==
+                null
+            }
+            onClick={() =>
+              void refreshOrders()
+            }
+            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+          >
+            {refreshing
+              ? 'A atualizar...'
+              : 'Atualizar'}
+          </button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Pesquisar
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(
+                  event.target.value,
+                )
+                setPage(0)
+              }}
+              placeholder="Nº de encomenda, nome ou email"
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900"
+            />
+          </label>
+
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Estado da encomenda
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(
+                  event.target
+                    .value as
+                    OrderStatus | 'all',
+                )
+                setPage(0)
+              }}
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900"
+            >
+              <option value="all">
+                Todos
+              </option>
+
+              {orderStatusOptions.map(
+                ([value, label]) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Pagamento
+            <select
+              value={paymentFilter}
+              onChange={(event) => {
+                setPaymentFilter(
+                  event.target
+                    .value as
+                    PaymentStatus | 'all',
+                )
+                setPage(0)
+              }}
+              className="rounded border border-gray-300 px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900"
+            >
+              <option value="all">
+                Todos
+              </option>
+
+              {paymentStatusOptions.map(
+                ([value, label]) => (
+                  <option
+                    key={value}
+                    value={value}
+                  >
+                    {label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        </div>
+      </section>
 
       {error && (
         <div
@@ -664,14 +850,36 @@ export default function OrdersClient() {
         </div>
       )}
 
-      {orders.length === 0 ? (
-        <p className="rounded border p-4 text-gray-600">
-          Ainda não existem
-          encomendas.
-        </p>
+      {filteredOrders.length === 0 ? (
+        orders.length === 0 ? (
+          <p className="rounded border p-4 text-gray-600">
+            Ainda não existem
+            encomendas.
+          </p>
+        ) : (
+          <div className="rounded border p-4 text-center">
+            <p className="font-semibold">
+              Nenhuma encomenda
+              corresponde aos filtros
+            </p>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setStatusFilter('all')
+                setPaymentFilter('all')
+                setPage(0)
+              }}
+              className="mt-2 text-sm font-semibold text-blue-700 underline"
+            >
+              Limpar filtros
+            </button>
+          </div>
+        )
       ) : (
         <div className="space-y-5">
-          {orders.map(
+          {pagedOrders.map(
             (order) => {
               const actions =
                 getAvailableActions(
@@ -944,6 +1152,51 @@ export default function OrdersClient() {
                 </article>
               )
             },
+          )}
+
+          {pageCount > 1 && (
+            <nav
+              aria-label="Paginação das encomendas"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3"
+            >
+              <p className="text-sm font-semibold">
+                Página {currentPage + 1} de{' '}
+                {pageCount}
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  aria-label="Página anterior"
+                  disabled={currentPage === 0}
+                  onClick={() =>
+                    setPage(
+                      currentPage - 1,
+                    )
+                  }
+                  className="rounded border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+
+                <button
+                  type="button"
+                  aria-label="Página seguinte"
+                  disabled={
+                    currentPage >=
+                    pageCount - 1
+                  }
+                  onClick={() =>
+                    setPage(
+                      currentPage + 1,
+                    )
+                  }
+                  className="rounded border border-gray-300 px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  Seguinte
+                </button>
+              </div>
+            </nav>
           )}
         </div>
       )}
