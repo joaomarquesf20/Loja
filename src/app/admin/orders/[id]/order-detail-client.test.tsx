@@ -536,5 +536,400 @@ describe(
         confirmMock.mockRestore()
       },
     )
+
+    test(
+      'mostra a secção de emails com pré-visualização e reenvio',
+      () => {
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        expect(
+          screen.getByRole(
+            'heading',
+            {
+              name:
+                'Emails transacionais',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'heading',
+            {
+              name:
+                'Confirmação da encomenda',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getByRole(
+            'heading',
+            {
+              name:
+                'Atualização de estado',
+            },
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getAllByRole(
+            'button',
+            {
+              name:
+                'Pré-visualizar',
+            },
+          ),
+        ).toHaveLength(2)
+
+        expect(
+          screen.getAllByRole(
+            'button',
+            { name: 'Reenviar' },
+          ),
+        ).toHaveLength(2)
+      },
+    )
+
+    test(
+      'desativa a confirmação quando o pagamento não está pago',
+      () => {
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder({
+                paymentStatus:
+                  'PENDING',
+              })
+            }
+          />,
+        )
+
+        const previews =
+          screen.getAllByRole(
+            'button',
+            {
+              name:
+                'Pré-visualizar',
+            },
+          )
+
+        expect(previews).toHaveLength(
+          2,
+        )
+        expect(
+          previews[0],
+        ).toBeDisabled()
+        expect(
+          previews[1],
+        ).toBeEnabled()
+
+        const resends =
+          screen.getAllByRole(
+            'button',
+            { name: 'Reenviar' },
+          )
+
+        expect(
+          resends[0],
+        ).toBeDisabled()
+        expect(
+          resends[1],
+        ).toBeEnabled()
+
+        expect(
+          screen.getAllByText(
+            /Só disponível quando o pagamento está pago/,
+          ).length,
+        ).toBe(1)
+      },
+    )
+
+    test(
+      'pré-visualização renderiza o HTML do email no iframe com assunto e destinatário',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            preview: {
+              status: 'ready',
+              type:
+                'STATUS_UPDATE',
+              subject:
+                'PFAAutoParts: Atualização da encomenda PFA-ABC123',
+              recipient:
+                'cliente@example.com',
+              html:
+                '<html>Corpo do email</html>',
+            },
+          }),
+        )
+
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        fireEvent.click(
+          screen.getAllByRole(
+            'button',
+            {
+              name:
+                'Pré-visualizar',
+            },
+          )[1],
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/admin/orders/order-1/email-preview?type=STATUS_UPDATE',
+        )
+
+        const iframe =
+          await screen.findByTitle(
+            'Atualização de estado — pré-visualização do email',
+          )
+
+        expect(
+          iframe,
+        ).toHaveAttribute(
+          'srcdoc',
+          '<html>Corpo do email</html>',
+        )
+
+        expect(
+          screen.getByText(
+            'PFAAutoParts: Atualização da encomenda PFA-ABC123',
+          ),
+        ).toBeInTheDocument()
+
+        expect(
+          screen.getAllByText(
+            'cliente@example.com',
+          ).length,
+        ).toBeGreaterThanOrEqual(1)
+
+        expect(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Fechar pré-visualização',
+            },
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'explica em 200 por que a pré-visualização da confirmação não existe',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            preview: {
+              status:
+                'skipped',
+              reason:
+                'order-not-paid',
+              message:
+                'O email de confirmação só existe para encomendas pagas.',
+            },
+          }),
+        )
+
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        fireEvent.click(
+          screen.getAllByRole(
+            'button',
+            {
+              name:
+                'Pré-visualizar',
+            },
+          )[0],
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/admin/orders/order-1/email-preview?type=CONFIRMATION',
+        )
+
+        expect(
+          await screen.findByRole(
+            'status',
+          ),
+        ).toHaveTextContent(
+          'O email de confirmação só existe para encomendas pagas.',
+        )
+      },
+    )
+
+    test(
+      'reenvio com sucesso mostra a confirmação',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            resend: {
+              status: 'sent',
+              id: 'resend-1',
+            },
+          }),
+        )
+
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        fireEvent.click(
+          screen.getAllByRole(
+            'button',
+            {
+              name: 'Reenviar',
+            },
+          )[0],
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/admin/orders/order-1/email-resend',
+          expect.objectContaining(
+            {
+              method: 'POST',
+              body:
+                JSON.stringify({
+                  type:
+                    'CONFIRMATION',
+                }),
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            /reenviado com sucesso para cliente@example\.com/,
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'resposta de reenvio suprimido mostra a mensagem do servidor',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse({
+            resend: {
+              status:
+                'skipped',
+              reason:
+                'order-not-paid',
+              message:
+                'O email de confirmação só existe para encomendas pagas.',
+            },
+          }),
+        )
+
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        fireEvent.click(
+          screen.getAllByRole(
+            'button',
+            {
+              name: 'Reenviar',
+            },
+          )[0],
+        )
+
+        expect(
+          await screen.findByRole(
+            'status',
+          ),
+        ).toHaveTextContent(
+          'O email de confirmação só existe para encomendas pagas.',
+        )
+      },
+    )
+
+    test(
+      'reenvio que falha devolve o erro do servidor',
+      async () => {
+        fetchMock.mockResolvedValue(
+          createJsonResponse(
+            {
+              error:
+                'Encomenda não encontrada',
+            },
+            404,
+          ),
+        )
+
+        render(
+          <OrderDetailClient
+            initialOrder={
+              createOrder()
+            }
+          />,
+        )
+
+        fireEvent.click(
+          screen.getAllByRole(
+            'button',
+            {
+              name: 'Reenviar',
+            },
+          )[1],
+        )
+
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledWith(
+          '/api/admin/orders/order-1/email-resend',
+          expect.objectContaining(
+            {
+              method: 'POST',
+              body:
+                JSON.stringify({
+                  type:
+                    'STATUS_UPDATE',
+                }),
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Encomenda não encontrada',
+        )
+      },
+    )
   },
 )

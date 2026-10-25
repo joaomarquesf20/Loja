@@ -19,6 +19,8 @@ import {
   OrderStatusUpdateEmail,
 } from '@/emails/order-status-update'
 
+import { render } from '@react-email/render'
+
 /**
  * Serviço de emails transacionais: envia a confirmação de encomenda (quando o
  * pagamento é confirmado pelo webhook) e notificações de alteração de estado
@@ -968,4 +970,250 @@ export async function sendOrderStatusUpdateEmail(
       `atualização da encomenda ${orderId}`,
     )
   }
+}
+
+export type OrderEmailType =
+  | 'CONFIRMATION'
+  | 'STATUS_UPDATE'
+
+/**
+ * Desfecho da pré-visualização: um email pronto a mostrar (`ready`, com o
+ * HTML renderizado), um estado de negócio que o impede (`skipped`) ou uma
+ * falha de preparação (`error`). Como no envio, nunca lança.
+ */
+export type EmailPreviewOutcome =
+  | {
+      status: 'ready'
+      type: OrderEmailType
+      subject: string
+      recipient: string | null
+      html: string
+    }
+  | {
+      status: 'skipped'
+      reason:
+        | 'invalid-order-id'
+        | 'unsupported-type'
+        | 'order-not-found'
+        | 'order-not-paid'
+    }
+  | {
+      status: 'error'
+      error: string
+    }
+
+export type BuildOrderEmailPreviewInput = {
+  orderId: unknown
+  type: unknown
+}
+
+export type BuildOrderEmailPreviewOptions = {
+  /** Cliente de dados (Prisma) para carregar a encomenda. */
+  client?: EmailOrderClient
+}
+
+function isOrderEmailType(
+  value: unknown,
+): value is OrderEmailType {
+  return (
+    value === 'CONFIRMATION' ||
+    value === 'STATUS_UPDATE'
+  )
+}
+
+async function renderEmailHtml(
+  element: ReactElement,
+): Promise<string> {
+  return render(element)
+}
+
+/**
+ * Pré-visualiza um email transacional da encomenda: monta o template com os
+ * dados guardados e devolve o HTML renderizado, SEM contactar o fornecedor
+ * de envio. Independente de `RESEND_API_KEY`/`EMAIL_FROM` — um administrador
+ * consegue ver o email mesmo em modo de simulação. Os mesmos guardas do envio
+ * mantêm-se (ex.: a confirmação só existe para encomendas pagas), para a
+ * pré-visualização ser fiel ao que o reenvio produz. Nunca lança.
+ */
+export async function buildOrderEmailPreview(
+  input: BuildOrderEmailPreviewInput,
+  options: BuildOrderEmailPreviewOptions = {},
+): Promise<EmailPreviewOutcome> {
+  const orderId =
+    typeof input.orderId ===
+    'string'
+      ? input.orderId.trim()
+      : ''
+
+  if (!orderId) {
+    console.warn(
+      'Pré-visualização de email não gerada: identificador de encomenda inválido',
+    )
+
+    return {
+      status: 'skipped',
+      reason: 'invalid-order-id',
+    }
+  }
+
+  if (
+    !isOrderEmailType(input.type)
+  ) {
+    console.warn(
+      'Pré-visualização de email não gerada: tipo de email não suportado',
+    )
+
+    return {
+      status: 'skipped',
+      reason: 'unsupported-type',
+    }
+  }
+
+  const client =
+    getClient(options.client)
+
+  try {
+    const order =
+      await client.order.findUnique(
+        {
+          where: { id: orderId },
+          select: emailOrderSelect,
+        },
+      )
+
+    if (!order) {
+      console.warn(
+        `Pré-visualização de email não gerada: encomenda ${orderId} não encontrada`,
+      )
+
+      return {
+        status: 'skipped',
+        reason: 'order-not-found',
+      }
+    }
+
+    if (
+      input.type === 'CONFIRMATION'
+    ) {
+      if (
+        order.paymentStatus !==
+        'PAID'
+      ) {
+        console.warn(
+          `Pré-visualização de confirmação não gerada: pagamento da encomenda ${orderId} não está pago`,
+        )
+
+        return {
+          status: 'skipped',
+          reason: 'order-not-paid',
+        }
+      }
+
+      const built =
+        buildConfirmationEmailProps(
+          order,
+        )
+
+      if ('error' in built) {
+        console.error(
+          `Pré-visualização de confirmação não gerada: ${built.error} (encomenda ${orderId})`,
+        )
+
+        return {
+          status: 'error',
+          error: built.error,
+        }
+      }
+
+      return {
+        status: 'ready',
+        type: input.type,
+        subject: `${STORE_NAME}: Encomenda ${order.orderNumber} confirmada`,
+        recipient:
+          normalizeOptionalString(
+            order.shippingEmail,
+          ),
+        html: await renderEmailHtml(
+          OrderConfirmationEmail(
+            built.props,
+          ),
+        ),
+      }
+    }
+
+    return {
+      status: 'ready',
+      type: input.type,
+      subject: `${STORE_NAME}: Atualização da encomenda ${order.orderNumber}`,
+      recipient:
+        normalizeOptionalString(
+          order.shippingEmail,
+        ),
+      html: await renderEmailHtml(
+        OrderStatusUpdateEmail({
+          orderNumber:
+            order.orderNumber,
+          customerName:
+            order.shippingName,
+          status: order.status,
+          paymentStatus:
+            order.paymentStatus,
+          updatedAt:
+            order.updatedAt.toISOString(),
+        }),
+      ),
+    }
+  } catch (error) {
+    console.error(
+      `Erro na pré-visualização do email (encomenda ${orderId}):`,
+      error,
+    )
+
+    return {
+      status: 'error',
+      error:
+        error instanceof Error &&
+        error.message
+          ? error.message
+          : 'Erro na preparação do email',
+    }
+  }
+}
+
+/**
+ * Reenvio manual (ação administrativa): a deteção de entregas repetidas do
+ * webhook fica desativada quando `paymentEventSinceMs` é omitido — a intenção
+ * do administrador é forçar uma nova entrega. Os restantes guardas do envio
+ * (encomenda paga, destinatário, configuração) mantêm-se. Nunca lança.
+ */
+export async function resendOrderConfirmationEmail(
+  input: {
+    orderId: string
+  },
+  options: SendOrderConfirmationEmailOptions = {},
+): Promise<EmailSendOutcome> {
+  return sendOrderConfirmationEmail(
+    {
+      orderId: input.orderId,
+    },
+    options,
+  )
+}
+
+/**
+ * Reenvio manual do email de estado: mostra sempre o estado atual da
+ * encomenda, igual ao envio por ações administrativas. Nunca lança.
+ */
+export async function resendOrderStatusUpdateEmail(
+  input: {
+    orderId: string
+  },
+  options: SendOrderStatusUpdateEmailOptions = {},
+): Promise<EmailSendOutcome> {
+  return sendOrderStatusUpdateEmail(
+    {
+      orderId: input.orderId,
+    },
+    options,
+  )
 }

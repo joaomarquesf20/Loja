@@ -1428,6 +1428,166 @@ Próximos passos (pós-etapa):
   também ligado; follow-up: notificações de
   falha de pagamento).
 
+## Épico 5 — Etapa 2 (concluída): Pré-visualização e reenvio admin de emails
+
+Data: 2026-10-25 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: route segura de
+pré-visualização de emails da encomenda +
+secção no ecrã admin; ação administrativa de
+reenvio manual (confirmação/estado) com
+idempotência e tratamento de erros do serviço
+não-bloqueante; testes e gate completa.
+
+Design:
+- O REENVIO da confirmação já existia por
+  omissão no serviço: `sendOrderConfirmationEmail`
+  chamado SEM `paymentEventSinceMs` desativa a
+  deteção de entregas repetidas
+  (`isDuplicateConfirmation` → false) — a
+  intenção do admin é forçar nova entrega. Os
+  restantes guardas mantêm-se (só encomendas
+  pagas, destinatário, configuração). O
+  reenvio de estado mostra sempre o estado
+  atual. Cada chamada é uma tentativa
+  explícita e independente — sem estado na
+  base de dados, repetir é seguro.
+- A PRÉ-VISUALIZAÇÃO não envia nada: nova
+  função `buildOrderEmailPreview` reutiliza os
+  mesmos loaders/guardas (`emailOrderSelect`,
+  PAID na confirmação, `buildConfirmationEmailProps`)
+  e devolve `EmailPreviewOutcome`
+  (ready: subject/recipient/html; skipped;
+  error), nunca lança. Render via
+  `@react-email/render` (agora runtime, ver
+  dependências).
+
+Novidades (8 ficheiros):
+- `src/server/email.ts`: import de
+  `@react-email/render`; +`OrderEmailType`,
+  `EmailPreviewOutcome`,
+  `buildOrderEmailPreview`
+  (confirmação→paída, estado→qualquer; html
+  com os dados guardados, independente de
+  `RESEND_API_KEY`/`EMAIL_FROM`),
+  `resendOrderConfirmationEmail`
+  (reenvio forçado) e
+  `resendOrderStatusUpdateEmail`.
+- `GET /api/admin/orders/[id]/email-preview`:
+  `requireAdmin()` (401/403), tipo por query
+  `?type=CONFIRMATION|STATUS_UPDATE`;
+  ready→200 {preview:{status,type,subject,
+  recipient,html}}; skipped
+  order-not-found→404, invalid-order-id/
+  unsupported-type→400, order-not-paid→200
+  com message; error→500 seguro (log
+  server-side).
+- `POST /api/admin/orders/[id]/email-resend`:
+  `requireAdmin()` + `readJsonBody` 8 KB
+  (413/400), body `{type}` (400 'Dados
+  inválidos'); CONFIRMATION/STATUS_UPDATE →
+  serviço → sent/skipped(200 + message pt-PT)
+  /order-not-found(404)/error(500); mensagens
+  estáticas de skip no estilo da casa
+  ('Dados inválidos', 'Pedido demasiado
+  grande').
+- Cliente `order-detail-client.tsx`: secção
+  "Emails transacionais" (dois cartões,
+  conf./estado) com Pré-visualizar (GET →
+  iframe `srcDoc` + assunto/destinatário +
+  Fechar) e Reenviar (POST → role="status"
+  com resultado); confirmação desativada com
+  aviso quando o pagamento não está pago;
+  erros em role="alert".
+- package.json: `@react-email/render` movido
+  de devDependencies para dependencies (o
+  render agora corre no servidor em
+  produção).
+
+Testes (+40; 3 ficheiros novos/editados):
+- `email.test.ts` (+11): preview pronto para
+  confirmação (subject/recipient/base e HTML
+  com nº da encomenda) e estado; skipped
+  unsupported-type/invalid-order-id/
+  order-not-found/order-not-paid; error de
+  valores monetários e de exceção do cliente;
+  reenvio de confirmação com evento
+  PAYMENT_CONFIRMED antigo ENVIA (idempotência
+  do reenvio manual), guarda não-pago
+  mantido, reenvio de estado mostra estado
+  atual.
+- `email-preview` route.test.ts (10): 200
+  ready (assunto/recipient/html), tipo da
+  query, 404/400/200-not-paid, 500 seguro,
+  401/403/500 de requireAdmin.
+- `email-resend` route.test.ts (11): reenvio
+  CONFIRMATION chamado com `{orderId}` só
+  (sem paymentEventSinceMs — asserção de
+  força), reenvio STATUS_UPDATE, 200 skipped
+  (missing-api-key/order-not-paid com
+  message), 404, 400 tipo inválido/JSON
+  inválido, 413, 500 fornecedor, 401/403/500.
+- `order-detail-client.test.tsx` (+8):
+  secção + 2 cartões, desativação da
+  confirmação não paga, preview no iframe
+  (srcDoc + assunto + destinatário + Fechar),
+  skip explicado (role="status"), reenvio
+  com sucesso, message de skip no reenvio,
+  erro de reenvio (role="alert").
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2273 passed** + 3 skipped (162
+ficheiros: 161 passed + 1 skipped — +40
+testes); `npm run lint` limpo; `npm run
+build` limpo — route map com
+`/api/admin/orders/[id]/email-preview` ƒ e
+`/api/admin/orders/[id]/email-resend` ƒ.
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- Reenvio manual = omissão de
+  `paymentEventSinceMs`: a deteção de
+  repetidos do webhook é opt-in pelo
+  parâmetro, pelo que a mesma função serve
+  webhook (com janela) e reenvio admin (sem
+  janela) — nenhuma lógica nova para forçar
+  a entrega.
+- Pré-visualização ≠ envio: reutilizar os
+  guardas do envio (PAID na confirmação) faz
+  o preview ser fiel ao que o reenvio
+  produziria; e o preview é independente de
+  RESEND/EMAIL_FROM (mostra o template mesmo
+  em modo de simulação).
+- Quando o runtime passa a renderizar
+  templates no servidor, a dependência do
+  render sobe de devDependencies para
+  dependencies — senão `npm ci --omit=dev`
+  quebra em produção.
+- `requireAdmin()` devolve `Session`
+  (`session.user.id`): no mock de testes de
+  rota, `mockResolvedValue({ user: { id,
+  role } } as Awaited<ReturnType<typeof
+  requireAdmin>>)` como a rota transition.
+- Aviso TS2352 na conversão de session mocks:
+  construir a forma parcial de `{ user: … }`
+  em vez de `{ id, role }` solto (overlap
+  suficiente para o cast).
+- Sintaxe de describes/testes aninhados:
+  terminar o último teste com `)` (sem
+  vírgula) antes do fecho do bloco — vírgulas
+  a mais dão "Expression expected".
+
+Próximos passos (pós-etapa):
+- Commit da etapa 2 quando o utilizador
+  pedir (ficheiros: email.ts(+test),
+  api/admin/orders/[id]/email-preview/**,
+  api/admin/orders/[id]/email-resend/**,
+  admin/orders/[id]/order-detail-client.tsx
+  (+test), package.json + package-lock.json,
+  CHECKPOINT.md).
+- Continuar o Épico 5 com o utilizador.
+
 
 
 

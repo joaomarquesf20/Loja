@@ -218,6 +218,78 @@ const checkoutRegionLabels:
     'Internacional',
 }
 
+type OrderEmailType =
+  | 'CONFIRMATION'
+  | 'STATUS_UPDATE'
+
+type EmailPreviewReady = {
+  status: 'ready'
+  type: OrderEmailType
+  subject: string
+  recipient: string | null
+  html: string
+}
+
+type EmailPreviewSkipped = {
+  status: 'skipped'
+  reason: string
+  message: string
+}
+
+type EmailPreviewResponse = {
+  preview?:
+    | EmailPreviewReady
+    | EmailPreviewSkipped
+  error?: string
+}
+
+type EmailResendResponse = {
+  resend?:
+    | {
+        status: 'sent'
+        id: string
+      }
+    | {
+        status:
+          'skipped'
+        reason: string
+        message: string
+      }
+  error?: string
+}
+
+const emailCards: Array<{
+  type: OrderEmailType
+  title: string
+  description: string
+}> = [
+  {
+    type: 'CONFIRMATION',
+    title:
+      'Confirmação da encomenda',
+    description:
+      'Enviado automaticamente quando o pagamento fica pago.',
+  },
+  {
+    type: 'STATUS_UPDATE',
+    title:
+      'Atualização de estado',
+    description:
+      'Enviado após ações administrativas; mostra sempre o estado atual da encomenda.',
+  },
+]
+
+function getEmailCardTitle(
+  type: OrderEmailType,
+) {
+  return (
+    emailCards.find(
+      (card) =>
+        card.type === type,
+    )?.title ?? type
+  )
+}
+
 const shippingClassLabels:
   Record<ShippingClass, string> = {
   UNASSIGNED:
@@ -797,6 +869,218 @@ export default function OrderDetailClient({
     }
   }
 
+  const [
+    emailBusyType,
+    setEmailBusyType,
+  ] = useState<OrderEmailType | null>(
+    null,
+  )
+
+  const [
+    emailNotice,
+    setEmailNotice,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    emailError,
+    setEmailError,
+  ] = useState<string | null>(
+    null,
+  )
+
+  const [
+    emailPreviews,
+    setEmailPreviews,
+  ] = useState<
+    Partial<
+      Record<
+        OrderEmailType,
+        string
+      >
+    >
+  >({})
+
+  const [
+    emailPreviewMeta,
+    setEmailPreviewMeta,
+  ] = useState<
+    Partial<
+      Record<
+        OrderEmailType,
+        {
+          subject: string
+          recipient:
+            string | null
+        }
+      >
+    >
+  >({})
+
+  const [
+    emailPreviewOpen,
+    setEmailPreviewOpen,
+  ] = useState<OrderEmailType | null>(
+    null,
+  )
+
+  async function handleEmailPreview(
+    type: OrderEmailType,
+  ) {
+    if (emailBusyType) {
+      return
+    }
+
+    try {
+      setEmailBusyType(type)
+      setEmailError(null)
+      setEmailNotice(null)
+
+      const response =
+        await fetch(
+          `/api/admin/orders/${order.id}/email-preview?type=${type}`,
+        )
+
+      const body =
+        (await response.json()) as
+          | EmailPreviewResponse
+          | null
+
+      if (!response.ok) {
+        setEmailError(
+          body?.error ??
+            'Não foi possível obter a pré-visualização',
+        )
+
+        return
+      }
+
+      const preview =
+        body?.preview
+
+      if (!preview) {
+        setEmailError(
+          'Não foi possível obter a pré-visualização',
+        )
+
+        return
+      }
+
+      if (
+        preview.status ===
+        'skipped'
+      ) {
+        setEmailNotice(
+          preview.message,
+        )
+
+        return
+      }
+
+      setEmailPreviews(
+        (current) => ({
+          ...current,
+          [type]:
+            preview.html,
+        }),
+      )
+
+      setEmailPreviewMeta(
+        (current) => ({
+          ...current,
+          [type]: {
+            subject:
+              preview.subject,
+            recipient:
+              preview.recipient,
+          },
+        }),
+      )
+
+      setEmailPreviewOpen(type)
+    } catch {
+      setEmailError(
+        'Não foi possível obter a pré-visualização',
+      )
+    } finally {
+      setEmailBusyType(null)
+    }
+  }
+
+  async function handleEmailResend(
+    type: OrderEmailType,
+  ) {
+    if (emailBusyType) {
+      return
+    }
+
+    try {
+      setEmailBusyType(type)
+      setEmailError(null)
+      setEmailNotice(null)
+
+      const response =
+        await fetch(
+          `/api/admin/orders/${order.id}/email-resend`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body:
+              JSON.stringify({
+                type,
+              }),
+          },
+        )
+
+      const body =
+        (await response.json()) as
+          | EmailResendResponse
+          | null
+
+      if (!response.ok) {
+        setEmailError(
+          body?.error ??
+            'Não foi possível reenviar o email',
+        )
+
+        return
+      }
+
+      const resend =
+        body?.resend
+
+      if (!resend) {
+        setEmailError(
+          'Não foi possível reenviar o email',
+        )
+
+        return
+      }
+
+      if (
+        resend.status === 'sent'
+      ) {
+        setEmailNotice(
+          `Email "${getEmailCardTitle(type)}" reenviado com sucesso para ${order.shippingEmail}.`,
+        )
+
+        return
+      }
+
+      setEmailNotice(resend.message)
+    } catch {
+      setEmailError(
+        'Não foi possível reenviar o email',
+      )
+    } finally {
+      setEmailBusyType(null)
+    }
+  }
+
   return (
     <article className="space-y-6">
       <section className="rounded-lg border p-5">
@@ -964,6 +1248,177 @@ export default function OrderDetailClient({
             },
           )}
         </ol>
+      </section>
+
+      <section className="rounded-lg border p-5">
+        <h3 className="text-lg font-semibold">
+          Emails transacionais
+        </h3>
+
+        <p className="mt-1 text-sm text-gray-600">
+          Pré-visualização e reenvio manual dos emails
+          transacionais da encomenda. A pré-visualização usa
+          os dados guardados e não envia nada.
+        </p>
+
+        {emailNotice && (
+          <div
+            role="status"
+            className="mt-4 rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800"
+          >
+            {emailNotice}
+          </div>
+        )}
+
+        {emailError && (
+          <div
+            role="alert"
+            className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800"
+          >
+            {emailError}
+          </div>
+        )}
+
+        {emailCards.map(
+          (card) => {
+            const confirmationRequiresPayment =
+              card.type ===
+                'CONFIRMATION' &&
+              order.paymentStatus !==
+                'PAID'
+
+            const previewHtml =
+              emailPreviewOpen ===
+              card.type
+                ? emailPreviews[
+                    card.type
+                  ]
+                : undefined
+
+            const previewMeta =
+              emailPreviewOpen ===
+              card.type
+                ? emailPreviewMeta[
+                    card.type
+                  ]
+                : undefined
+
+            const buttonsDisabled =
+              emailBusyType !== null ||
+              confirmationRequiresPayment
+
+            return (
+              <div
+                key={card.type}
+                className="mt-4 rounded border p-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h4 className="font-medium">
+                      {card.title}
+                    </h4>
+
+                    <p className="text-sm text-gray-600">
+                      {
+                        card.description
+                      }
+                    </p>
+
+                    {confirmationRequiresPayment && (
+                      <p className="mt-2 text-sm text-amber-700">
+                        Só disponível quando
+                        o pagamento está
+                        pago.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        buttonsDisabled
+                      }
+                      onClick={() =>
+                        void handleEmailPreview(
+                          card.type,
+                        )
+                      }
+                      className="rounded border border-gray-400 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      {emailBusyType ===
+                      card.type
+                        ? 'A preparar…'
+                        : 'Pré-visualizar'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={
+                        buttonsDisabled
+                      }
+                      onClick={() =>
+                        void handleEmailResend(
+                          card.type,
+                        )
+                      }
+                      className="rounded bg-black px-3 py-2 text-sm text-white disabled:opacity-50"
+                    >
+                      {emailBusyType ===
+                      card.type
+                        ? 'A reenviar…'
+                        : 'Reenviar'}
+                    </button>
+                  </div>
+                </div>
+
+                {previewHtml &&
+                  previewMeta && (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-sm text-gray-600">
+                        Assunto:{' '}
+                        <span className="font-medium text-gray-900">
+                          {
+                            previewMeta.subject
+                          }
+                        </span>
+                      </p>
+
+                      <p className="text-sm text-gray-600">
+                        Destinatário:{' '}
+                        {
+                          previewMeta.recipient
+                        }
+                      </p>
+
+                      <iframe
+                        title={`${
+                          card.title
+                        } — pré-visualização do email`}
+                        srcDoc={
+                          previewHtml
+                        }
+                        className="h-[560px] w-full rounded border bg-white"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEmailPreviewOpen(
+                            null,
+                          )
+                        }
+                        className="text-sm text-blue-700 hover:underline"
+                      >
+                        Fechar
+                        pré-visualização
+                      </button>
+                    </div>
+                  )}
+              </div>
+            )
+          },
+        )}
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">

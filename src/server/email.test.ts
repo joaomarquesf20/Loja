@@ -24,6 +24,9 @@ import {
   EmailOrderRecord,
   EmailSendResponse,
   SendEmailDeliveryOptions,
+  buildOrderEmailPreview,
+  resendOrderConfirmationEmail,
+  resendOrderStatusUpdateEmail,
   sendOrderConfirmationEmail,
   sendOrderStatusUpdateEmail,
 } from './email'
@@ -1216,6 +1219,489 @@ describe(
             })
 
             consoleError.mockRestore()
+          },
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'Serviço de emails — pré-visualização e reenvio admin',
+  () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    describe(
+      'buildOrderEmailPreview',
+      () => {
+        test(
+          'confirmação: devolve HTML renderizado, assunto e destinatário sem contactar o fornecedor',
+          async () => {
+            const consoleInfo =
+              vi.spyOn(
+                console,
+                'info',
+              ).mockImplementation(
+                () => undefined,
+              )
+
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'CONFIRMATION',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toMatchObject({
+              status: 'ready',
+              type: 'CONFIRMATION',
+              subject:
+                'PFAAutoParts: Encomenda ORD-2026-1 confirmada',
+              recipient:
+                'maria@example.com',
+            })
+
+            if (
+              outcome.status ===
+              'ready'
+            ) {
+              expect(
+                typeof outcome.html,
+              ).toBe('string')
+
+              expect(
+                outcome.html,
+              ).toContain(
+                'ORD-2026-1',
+              )
+
+              expect(
+                outcome.html,
+              ).toContain(
+                'Maria Encomenda',
+              )
+            }
+
+            consoleInfo.mockRestore()
+          },
+        )
+
+        test(
+          'atualização de estado: disponível para qualquer encomenda existente',
+          async () => {
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'STATUS_UPDATE',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          status:
+                            'PENDING',
+                        },
+                      ),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toMatchObject({
+              status: 'ready',
+              type: 'STATUS_UPDATE',
+              subject:
+                'PFAAutoParts: Atualização da encomenda ORD-2026-1',
+              recipient:
+                'maria@example.com',
+            })
+
+            if (
+              outcome.status ===
+              'ready'
+            ) {
+              expect(
+                outcome.html,
+              ).toContain(
+                'ORD-2026-1',
+              )
+            }
+          },
+        )
+
+        test(
+          'salta com tipo de email não suportado',
+          async () => {
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'NEWSLETTER',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'skipped',
+              reason:
+                'unsupported-type',
+            })
+          },
+        )
+
+        test(
+          'salta com identificador de encomenda inválido',
+          async () => {
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId: '   ',
+                  type:
+                    'STATUS_UPDATE',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'skipped',
+              reason:
+                'invalid-order-id',
+            })
+          },
+        )
+
+        test(
+          'salta quando a encomenda não existe',
+          async () => {
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'STATUS_UPDATE',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      null,
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'skipped',
+              reason:
+                'order-not-found',
+            })
+          },
+        )
+
+        test(
+          'confirmação salta quando o pagamento não está pago',
+          async () => {
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'CONFIRMATION',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          paymentStatus:
+                            'PENDING',
+                        },
+                      ),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'skipped',
+              reason:
+                'order-not-paid',
+            })
+          },
+        )
+
+        test(
+          'confirmação produz desfecho de erro com valores monetários não confiáveis',
+          async () => {
+            const consoleError =
+              vi.spyOn(
+                console,
+                'error',
+              ).mockImplementation(
+                () => undefined,
+              )
+
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'CONFIRMATION',
+                },
+                {
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          total: money(
+                            '12.345',
+                          ),
+                        },
+                      ),
+                    ),
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'error',
+              error:
+                'Valores monetários da encomenda inválidos',
+            })
+
+            consoleError.mockRestore()
+          },
+        )
+
+        test(
+          'exceção do cliente de dados produz desfecho de erro sem lançar',
+          async () => {
+            const consoleError =
+              vi.spyOn(
+                console,
+                'error',
+              ).mockImplementation(
+                () => undefined,
+              )
+
+            const outcome =
+              await buildOrderEmailPreview(
+                {
+                  orderId:
+                    'order-1',
+                  type:
+                    'STATUS_UPDATE',
+                },
+                {
+                  client: {
+                    order: {
+                      findUnique:
+                        vi.fn(
+                          async () =>
+                            Promise.reject(
+                              new Error(
+                                'base de dados indisponível',
+                              ),
+                            ),
+                        ),
+                    },
+                  },
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'error',
+              error:
+                'base de dados indisponível',
+            })
+
+            consoleError.mockRestore()
+          },
+        )
+      },
+    )
+
+    describe(
+      'reenvio manual',
+      () => {
+        test(
+          'reenvio da confirmação ignora eventos PAYMENT_CONFIRMED antigos e envia',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            const outcome =
+              await resendOrderConfirmationEmail(
+                {
+                  orderId:
+                    'order-1',
+                },
+                {
+                  ...standardOptions(),
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          events: [
+                            {
+                              type: 'PAYMENT_CONFIRMED',
+                              createdAt:
+                                new Date(
+                                  '2026-10-01T00:00:00.000Z',
+                                ),
+                            },
+                          ],
+                        },
+                      ),
+                    ),
+                  emailClient,
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'sent',
+              id: 'resend-email-1',
+            })
+
+            expect(
+              emailClient.emails
+                .send,
+            ).toHaveBeenCalledTimes(
+              1,
+            )
+          },
+        )
+
+        test(
+          'reenvio da confirmação mantém o guarda de encomenda não paga',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            const outcome =
+              await resendOrderConfirmationEmail(
+                {
+                  orderId:
+                    'order-1',
+                },
+                {
+                  ...standardOptions(),
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          paymentStatus:
+                            'FAILED',
+                        },
+                      ),
+                    ),
+                  emailClient,
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'skipped',
+              reason:
+                'order-not-paid',
+            })
+
+            expect(
+              emailClient.emails
+                .send,
+            ).not.toHaveBeenCalled()
+          },
+        )
+
+        test(
+          'reenvio de estado mostra o estado atual da encomenda',
+          async () => {
+            const emailClient =
+              emailClientWith()
+
+            const outcome =
+              await resendOrderStatusUpdateEmail(
+                {
+                  orderId:
+                    'order-1',
+                },
+                {
+                  ...standardOptions(),
+                  client:
+                    orderClientWith(
+                      makeOrderRecord(
+                        {
+                          status:
+                            'SHIPPED',
+                        },
+                      ),
+                    ),
+                  emailClient,
+                },
+              )
+
+            expect(
+              outcome,
+            ).toEqual({
+              status: 'sent',
+              id: 'resend-email-1',
+            })
+
+            expect(
+              emailClient.emails
+                .send,
+            ).toHaveBeenCalledWith(
+              expect.objectContaining(
+                {
+                  subject:
+                    'PFAAutoParts: Atualização da encomenda ORD-2026-1',
+                },
+              ),
+            )
           },
         )
       },
