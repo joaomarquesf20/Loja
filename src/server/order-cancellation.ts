@@ -51,6 +51,30 @@ type VariantRestockArgs = {
   }
 }
 
+type VariantRestockReadArgs = {
+  where: {
+    id: string
+  }
+  select: {
+    stockQuantity: true
+  }
+}
+
+type VariantRestockRecord = {
+  stockQuantity: number
+}
+
+type StockMovementCreateArgs = {
+  data: {
+    variantId: string
+    type: 'RETURN'
+    quantityChange: number
+    previousStock: number
+    newStock: number
+    actorUserId: string | null
+  }
+}
+
 type CancellationOrderEventCreateArgs = {
   data: {
     orderId: string
@@ -79,11 +103,19 @@ export interface OrderCancellationTransactionClient {
     }>
   }
   productVariant: {
+    findUnique(
+      args: VariantRestockReadArgs,
+    ): Promise<VariantRestockRecord | null>
     updateMany(
       args: VariantRestockArgs,
     ): Promise<{
       count: number
     }>
+  }
+  stockMovement: {
+    create(
+      args: StockMovementCreateArgs,
+    ): Promise<{ id: string }>
   }
   orderEvent: {
     create(
@@ -351,8 +383,9 @@ function aggregateVariantRestockQuantities(
  * O Product já não tem campos de stock: a reposição acontece
  * exclusivamente nas variantes compradas.
  *
- * A alteração do estado e todos os incrementos de stock acontecem na
- * mesma transação. Um segundo cancelamento encontra CANCELLED e devolve
+ * A alteração do estado, todos os incrementos de stock e o registo do
+ * histórico de movimentos (`RETURN`) acontecem na mesma transação. Um
+ * segundo cancelamento encontra CANCELLED e devolve
  * o estado atual sem voltar a incrementar stock.
  *
  * Encomendas PAID/AUTHORIZED não são canceladas aqui: primeiro é
@@ -445,6 +478,21 @@ async function cancelOrderAndRestoreStockForOwner(
           item,
         ] of variantQuantities
       ) {
+        // Leitura do stock anterior na mesma transação: alimenta os
+        // campos previous/new do movimento de reposição.
+        const variantBefore =
+          await tx.productVariant.findUnique(
+            {
+              where: {
+                id:
+                  productVariantId,
+              },
+              select: {
+                stockQuantity: true,
+              },
+            },
+          )
+
         const restoredVariant =
           await tx.productVariant.updateMany(
             {
@@ -468,6 +516,31 @@ async function cancelOrderAndRestoreStockForOwner(
             'Não foi possível repor todo o stock das variantes da encomenda',
           )
         }
+
+        // Épico 6: movimento RETURN gravado na mesma transação do
+        // incremento; um rollback reverte também o histórico. O ator é
+        // o cliente quando é ele quem cancela a encomenda; nos
+        // cancelamentos feitos pela administração fica a `null`.
+        await tx.stockMovement.create(
+          {
+            data: {
+              variantId:
+                productVariantId,
+              type: 'RETURN',
+              quantityChange:
+                item.quantity,
+              previousStock:
+                variantBefore?.stockQuantity ??
+                0,
+              newStock:
+                (variantBefore?.stockQuantity ??
+                  0) +
+                item.quantity,
+              actorUserId:
+                ownerUserId ?? null,
+            },
+          },
+        )
       }
 
       await tx.orderEvent.create({

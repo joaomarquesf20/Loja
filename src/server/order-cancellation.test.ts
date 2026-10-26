@@ -66,9 +66,18 @@ function createClient() {
   const variantUpdateMany =
     vi.fn()
 
+  const variantFindUnique =
+    vi.fn()
+
   const createEvent =
     vi.fn().mockResolvedValue({
       id: 'event-1',
+    })
+
+  // Épico 6 — histórico de movimentos de stock na transação.
+  const createMovement =
+    vi.fn().mockResolvedValue({
+      id: 'movement-1',
     })
 
   const transaction =
@@ -86,8 +95,14 @@ function createClient() {
               orderUpdateMany,
           },
           productVariant: {
+            findUnique:
+              variantFindUnique,
             updateMany:
               variantUpdateMany,
+          },
+          stockMovement: {
+            create:
+              createMovement,
           },
           orderEvent: {
             create:
@@ -104,8 +119,10 @@ function createClient() {
       OrderCancellationClient,
     transaction,
     findUnique,
+    variantFindUnique,
     orderUpdateMany,
     variantUpdateMany,
+    createMovement,
     createEvent,
   }
 }
@@ -125,6 +142,8 @@ describe(
           findUnique,
           orderUpdateMany,
           variantUpdateMany,
+          variantFindUnique,
+          createMovement,
           createEvent,
         } = createClient()
 
@@ -135,6 +154,12 @@ describe(
         orderUpdateMany.mockResolvedValue({
           count: 1,
         })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 5,
+          },
+        )
 
         variantUpdateMany.mockResolvedValue(
           {
@@ -190,6 +215,22 @@ describe(
           },
         })
 
+        // Épico 6: movimento RETURN registado na mesma transação
+        // (cancelamento pela administração → ator null).
+        expect(
+          createMovement,
+        ).toHaveBeenCalledWith({
+          data: {
+            variantId:
+              'variant-1',
+            type: 'RETURN',
+            quantityChange: 2,
+            previousStock: 5,
+            newStock: 7,
+            actorUserId: null,
+          },
+        })
+
         expect(
           createEvent,
         ).toHaveBeenCalledWith({
@@ -215,6 +256,8 @@ describe(
           findUnique,
           orderUpdateMany,
           variantUpdateMany,
+          variantFindUnique,
+          createMovement,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -241,6 +284,12 @@ describe(
         orderUpdateMany.mockResolvedValue({
           count: 1,
         })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 4,
+          },
+        )
 
         variantUpdateMany.mockResolvedValue(
           {
@@ -269,6 +318,27 @@ describe(
             stockQuantity: {
               increment: 5,
             },
+          },
+        })
+
+        // Um movimento por variante, com a quantidade agregada.
+        expect(
+          createMovement,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+
+        expect(
+          createMovement,
+        ).toHaveBeenCalledWith({
+          data: {
+            variantId:
+              'variant-1',
+            type: 'RETURN',
+            quantityChange: 5,
+            previousStock: 4,
+            newStock: 9,
+            actorUserId: null,
           },
         })
       },
@@ -370,6 +440,8 @@ describe(
           findUnique,
           orderUpdateMany,
           variantUpdateMany,
+          variantFindUnique,
+          createMovement,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -379,6 +451,12 @@ describe(
         orderUpdateMany.mockResolvedValue({
           count: 1,
         })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 1,
+          },
+        )
 
         variantUpdateMany.mockResolvedValue(
           {
@@ -412,6 +490,23 @@ describe(
           data: {
             status:
               'CANCELLED',
+          },
+        })
+
+        // Cancelamento pelo próprio cliente → ator é o utilizador
+        // que cancelou.
+        expect(
+          createMovement,
+        ).toHaveBeenCalledWith({
+          data: {
+            variantId:
+              'variant-1',
+            type: 'RETURN',
+            quantityChange: 2,
+            previousStock: 1,
+            newStock: 3,
+            actorUserId:
+              'user-1',
           },
         })
       },
@@ -649,6 +744,8 @@ describe(
           findUnique,
           orderUpdateMany,
           variantUpdateMany,
+          variantFindUnique,
+          createMovement,
         } = createClient()
 
         findUnique.mockResolvedValue(
@@ -658,6 +755,12 @@ describe(
         orderUpdateMany.mockResolvedValue({
           count: 1,
         })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 5,
+          },
+        )
 
         variantUpdateMany.mockResolvedValue(
           {
@@ -674,6 +777,11 @@ describe(
           message:
             'Não foi possível repor todo o stock das variantes da encomenda',
         })
+
+        // A transação é revertida: nenhum movimento fica registado.
+        expect(
+          createMovement,
+        ).not.toHaveBeenCalled()
       },
     )
 

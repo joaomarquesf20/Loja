@@ -220,6 +220,12 @@ function createTransactionMock() {
     orderItem: {
       createMany: vi.fn(),
     },
+    // Épico 6 — histórico de movimentos de stock.
+    stockMovement: {
+      create: vi.fn(async () => ({
+        id: 'movement-1',
+      })),
+    },
   }
 }
 

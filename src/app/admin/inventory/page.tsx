@@ -51,6 +51,26 @@ export default async function AdminInventoryPage() {
         <LogoutButton />
       </section>
 
+      <nav
+        aria-label="Secções de inventário"
+        className="mb-6 flex flex-wrap gap-2"
+      >
+        <Link
+          href="/admin/inventory"
+          aria-current="page"
+          className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white"
+        >
+          Inventário
+        </Link>
+
+        <Link
+          href="/admin/inventory/movements"
+          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-100"
+        >
+          Movimentos
+        </Link>
+      </nav>
+
       <InventoryClient />
     </main>
   )

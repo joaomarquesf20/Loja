@@ -13,6 +13,10 @@ import {
 } from './commercial-settings'
 import { prisma } from './db'
 import {
+  recordStockMovement,
+  type StockMovementRecordInput,
+} from './inventory'
+import {
   calculateShippingPricing,
   ShippingPricingError,
 } from './shipping-pricing'
@@ -435,6 +439,12 @@ type CheckoutTransactionClient =
         count: number
       }>
     }
+
+    stockMovement: {
+      create(args: {
+        data: StockMovementRecordInput
+      }): Promise<{ id: string }>
+    }
   }
 
 export interface CheckoutClient {
@@ -456,6 +466,12 @@ type PreparedCheckoutItem = {
   name: string
   sku: string
   quantity: number
+  /**
+   * Stock lido no `prepareCheckout` (mesma transação serializável do
+   * decremento) — corresponde ao stock ANTES da venda e alimenta o
+   * movimento `SALE` do histórico.
+   */
+  stockQuantity: number
   price: CheckoutPrice
   priceCents: number
   subtotalCents: number
@@ -1415,6 +1431,7 @@ async function prepareCheckout(
       name: item.product.name,
       sku: sellable.sku,
       quantity: item.quantity,
+      stockQuantity,
       price,
       priceCents,
       subtotalCents:
@@ -1817,6 +1834,27 @@ export async function createCheckoutOrder(
         ) {
           throw new CheckoutCartChangedError()
         }
+
+        // Épico 6: o stock lido no prepare (mesma transação
+        // serializável) é o stock anterior; o movimento de venda é
+        // gravado na transação — um rollback reverte também o
+        // histórico.
+        await recordStockMovement(
+          tx,
+          {
+            variantId:
+              item.productVariantId,
+            type: 'SALE',
+            quantityChange:
+              -item.quantity,
+            previousStock:
+              item.stockQuantity,
+            newStock:
+              item.stockQuantity -
+              item.quantity,
+            actorUserId: user.id,
+          },
+        )
       }
 
       const orderNumber =

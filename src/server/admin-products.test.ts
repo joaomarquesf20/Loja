@@ -123,6 +123,12 @@ function wheelInput(
 }
 
 function createClient() {
+  // Épico 6 — histórico de movimentos de stock.
+  const stockMovementCreate =
+    vi.fn(async () => ({
+      id: 'movement-1',
+    }))
+
   const transaction = {
     product: {
       findFirst: vi.fn(async () => null),
@@ -144,7 +150,16 @@ function createClient() {
     },
     productVariant: {
       findFirst: vi.fn(async () => null),
-      findMany: vi.fn(async () => []),
+      // Array tipado; caso contrário vi.fn(async () => [])
+      // infere never[] e rejeita as variantes de fixture
+      // usadas em mockResolvedValueOnce.
+      findMany:
+        vi.fn(async () =>
+          [] as Array<Record<string, unknown>>,
+        ),
+      update: vi.fn(async () => ({
+        id: 'variant-wheel',
+      })),
       create: vi.fn(async () => ({
         id: 'variant-created',
       })),
@@ -225,6 +240,11 @@ function createClient() {
         count: 0,
       })),
     },
+    // Épico 6 — histórico de movimentos de stock na transação de
+    // gravação de produtos.
+    stockMovement: {
+      create: stockMovementCreate,
+    },
   }
   const client = {
     ...transaction,
@@ -237,7 +257,7 @@ function createClient() {
     ),
   } as unknown as AdminProductClient
 
-  return { client, transaction }
+  return { client, transaction, stockMovementCreate }
 }
 
 describe('admin products service', () => {
@@ -558,6 +578,187 @@ describe('admin products service', () => {
       AdminProductConflictError,
     )
   })
+
+  test(
+    'registra movimento RESTOCK quando a criação de variante arranca com stock',
+    async () => {
+      const {
+        client,
+        stockMovementCreate,
+      } = createClient()
+
+      await createAdminProduct(
+        wheelInput(),
+        client,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).toHaveBeenCalledTimes(
+        1,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).toHaveBeenCalledWith({
+        data: {
+          variantId:
+            'variant-created',
+          type: 'RESTOCK',
+          quantityChange: 8,
+          previousStock: 0,
+          newStock: 8,
+          actorUserId: null,
+        },
+      })
+    },
+  )
+
+  test(
+    'não registra movimento para variante nova sem stock inicial',
+    async () => {
+      const {
+        client,
+        stockMovementCreate,
+      } = createClient()
+
+      await createAdminProduct(
+        wheelInput({
+          variants: [
+            {
+              ...wheelInput()
+                .variants[0],
+              stockQuantity: 0,
+            },
+          ],
+        }),
+        client,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).not.toHaveBeenCalled()
+    },
+  )
+
+  test(
+    'registra movimento RESTOCK na atualização de variante com aumento de stock',
+    async () => {
+      const {
+        client,
+        transaction,
+        stockMovementCreate,
+      } = createClient()
+
+      const existingVariant = {
+        id: 'variant-wheel',
+        sku: 'JR11-18',
+        stockQuantity: 8,
+        optionKey: 'jr11-18',
+        selections: [],
+        specifications: [],
+      }
+
+      // 1.ª chamada: variantes existentes; 2.ª: variantes a eliminar.
+      transaction.productVariant.findMany
+        .mockResolvedValueOnce([
+          existingVariant,
+        ])
+        .mockResolvedValueOnce([])
+
+      await updateAdminProduct(
+        'product-wheel',
+        wheelInput({
+          productSku: 'JR11-MODEL',
+          variants: [
+            {
+              id: 'variant-wheel',
+              ...wheelInput()
+                .variants[0],
+              stockQuantity: 12,
+            },
+          ],
+        }),
+        client,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).toHaveBeenCalledTimes(
+        1,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).toHaveBeenCalledWith({
+        data: {
+          variantId:
+            'variant-wheel',
+          type: 'RESTOCK',
+          quantityChange: 4,
+          previousStock: 8,
+          newStock: 12,
+          actorUserId: null,
+        },
+      })
+    },
+  )
+
+  test(
+    'registra movimento MANUAL_ADJUSTMENT na atualização de variante com redução de stock',
+    async () => {
+      const {
+        client,
+        transaction,
+        stockMovementCreate,
+      } = createClient()
+
+      const existingVariant = {
+        id: 'variant-wheel',
+        sku: 'JR11-18',
+        stockQuantity: 8,
+        optionKey: 'jr11-18',
+        selections: [],
+        specifications: [],
+      }
+
+      transaction.productVariant.findMany
+        .mockResolvedValueOnce([
+          existingVariant,
+        ])
+        .mockResolvedValueOnce([])
+
+      await updateAdminProduct(
+        'product-wheel',
+        wheelInput({
+          productSku: 'JR11-MODEL',
+          variants: [
+            {
+              id: 'variant-wheel',
+              ...wheelInput()
+                .variants[0],
+              stockQuantity: 5,
+            },
+          ],
+        }),
+        client,
+      )
+
+      expect(
+        stockMovementCreate,
+      ).toHaveBeenCalledWith({
+        data: {
+          variantId:
+            'variant-wheel',
+          type: 'MANUAL_ADJUSTMENT',
+          quantityChange: -3,
+          previousStock: 8,
+          newStock: 5,
+          actorUserId: null,
+        },
+      })
+    },
+  )
 
   test('elimina um produto sem referências e deixa os cascadesao para o esquema', async () => {
     const { client, transaction } =

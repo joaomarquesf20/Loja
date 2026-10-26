@@ -12,6 +12,10 @@ import { z } from 'zod'
  * geral das variantes com estado derivado do limiar (Disponível / Stock
  * baixo / Sem stock), KPIs de topo e correção rápida dentro de uma
  * transação. Entradas novas validadas com Zod.
+ *
+ * Épico 6 (etapa 2): registo atómico de movimentos de stock
+ * (RESTOCK / SALE / MANUAL_ADJUSTMENT / RETURN) em todos os caminhos de
+ * escrita e histórico filtrável por tipo, SKU e intervalo de datas.
  */
 
 export const DEFAULT_LOW_STOCK_THRESHOLD = 5
@@ -23,6 +27,158 @@ export const DEFAULT_LOW_STOCK_LIMIT = 20
 export const MAX_LOW_STOCK_LIMIT = 100
 
 export const MAX_STOCK_QUANTITY = 999999
+
+/**
+ * Épico 6 — registo histórico de movimentos de stock: cada alteração
+ * de stock (reposição, venda, correção manual ou reposição por
+ * cancelamento) é gravada DENTRO da transação que altera o stock,
+ * garantindo que o histórico e o stock nunca divergem.
+ */
+
+/** Tipos de movimento de stock registados no histórico. */
+export const STOCK_MOVEMENT_TYPES = [
+  'RESTOCK',
+  'SALE',
+  'MANUAL_ADJUSTMENT',
+  'RETURN',
+] as const
+
+export type StockMovementType =
+  (typeof STOCK_MOVEMENT_TYPES)[number]
+
+/**
+ * Dados do movimento a registar: variante, tipo, faixa de stock
+ * (anterior → novo) e referência do utilizador/admin que causou a
+ * alteração (opcional — vendas do checkout atribuem o cliente,
+ * alterações de serviços sem utilizador em contexto ficam a `null`).
+ */
+export type StockMovementRecordInput = {
+  variantId: string
+  type: StockMovementType
+  quantityChange: number
+  previousStock: number
+  newStock: number
+  actorUserId?: string | null
+}
+
+/** Forma do `where` combinado da listagem de movimentos. */
+export type StockMovementFilterWhere = {
+  type?: StockMovementType
+  productVariant?: {
+    sku: {
+      contains: string
+      mode: 'insensitive'
+    }
+  }
+  createdAt?: {
+    gte?: Date
+    lte?: Date
+  }
+}
+
+/** Espaço selecionado do histórico (movimento + variante + produto + ator). */
+export type StockMovementSelect = {
+  id: true
+  type: true
+  quantityChange: true
+  previousStock: true
+  newStock: true
+  actorUserId: true
+  createdAt: true
+  productVariant: {
+    select: {
+      id: true
+      sku: true
+      product: {
+        select: {
+          id: true
+          name: true
+          slug: true
+        }
+      }
+    }
+  }
+  actorUser: {
+    select: {
+      id: true
+      email: true
+    }
+  }
+}
+
+/** Registo cru devolvido pela base de dados na listagem do histórico. */
+export type RawStockMovementRecord = {
+  id: string
+  type: StockMovementType
+  quantityChange: number
+  previousStock: number
+  newStock: number
+  actorUserId: string | null
+  createdAt: Date
+  productVariant: {
+    id: string
+    sku: string
+    product: {
+      id: string
+      name: string
+      slug: string
+    }
+  }
+  actorUser: {
+    id: string
+    email: string
+  } | null
+}
+
+/** Delegates Prisma do histórico de movimentos. */
+export type StockMovementDelegate = {
+  create(args: {
+    data: StockMovementRecordInput
+  }): Promise<{ id: string }>
+
+  count(args: {
+    where: StockMovementFilterWhere
+  }): Promise<number>
+
+  findMany(args: {
+    where: StockMovementFilterWhere
+    orderBy: Array<
+      | { createdAt: 'desc' }
+      | { id: 'desc' }
+    >
+    skip: number
+    take: number
+    select: StockMovementSelect
+  }): Promise<RawStockMovementRecord[]>
+}
+
+/** Linha apresentada no histórico de movimentos. */
+export type StockMovementRow = {
+  id: string
+  variantId: string
+  sku: string
+  productId: string
+  productName: string
+  productSlug: string
+  type: StockMovementType
+  quantityChange: number
+  previousStock: number
+  newStock: number
+  actorEmail: string | null
+  createdAt: string
+}
+
+/**
+ * Página do histórico: linhas + total filtrado + paginação já
+ * normalizada (mínimo de 1 página, última página real como teto).
+ */
+export type StockMovementsPage = {
+  movements: StockMovementRow[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
 
 export type InventoryField =
   | 'threshold'
@@ -108,8 +264,9 @@ export type InventoryCountWhere = {
 
 /**
  * Cliente visível DENTRO de uma transação de inventário: as escritas e
- * leituras da correção rápida e os contadores/listagem da vista completa
- * correm todos sobre o mesmo cliente transacional.
+ * leituras da correção rápida, os contadores/listagem da vista completa
+ * e o registo/consulta de movimentos de stock correm todos sobre o
+ * mesmo cliente transacional.
  */
 export interface InventoryTransactionClient {
   productVariant: {
@@ -150,6 +307,7 @@ export interface InventoryTransactionClient {
       select: LowStockVariantSelect
     }): Promise<VariantRecord>
   }
+  stockMovement: StockMovementDelegate
 }
 
 export interface InventoryClient {
@@ -408,6 +566,38 @@ export type VariantStockUpdate = {
 }
 
 /**
+ * Épico 6 — gravação de um movimento de stock. Tem de ser chamada
+ * DENTRO da transação que altera o stock: se o registo falhar, a
+ * alteração de stock é revertida em conjunto nunca divergindo do
+ * histórico. Não altera stock — cada caminho de escrita calcula o
+ * antes/depois e chama esta função uma vez por variante alterada.
+ */
+export async function recordStockMovement(
+  client: {
+    stockMovement: {
+      create(args: {
+        data: StockMovementRecordInput
+      }): Promise<{ id: string }>
+    }
+  },
+  input: StockMovementRecordInput,
+): Promise<void> {
+  await client.stockMovement.create({
+    data: {
+      variantId: input.variantId,
+      type: input.type,
+      quantityChange:
+        input.quantityChange,
+      previousStock:
+        input.previousStock,
+      newStock: input.newStock,
+      actorUserId:
+        input.actorUserId ?? null,
+    },
+  })
+}
+
+/**
  * Correção rápida de stock: define o stock da variante para um valor
  * exato (não é um delta — o admin vê o valor novo na tabela). Devolve
  * o stock anterior e a variante atualizada; erro 404-like quando a
@@ -415,7 +605,10 @@ export type VariantStockUpdate = {
  *
  * Épico 6: a leitura do stock anterior e a escrita do novo valor correm
  * DENTRO da mesma transação atómica — duas correções concorrentes nunca
- * intercalam leitura/escrita de forma inconsistente.
+ * intercalam leitura/escrita de forma inconsistente. O movimento
+ * `MANUAL_ADJUSTMENT` é registado na mesma transação (com a referência
+ * do admin autenticado), exceto quando o stock não muda — evita
+ * poluir o histórico com entradas sem efeito.
  */
 export async function updateVariantStock(
   input:
@@ -425,6 +618,7 @@ export async function updateVariantStock(
       }
     | undefined,
   client?: InventoryClient,
+  actorUserId?: string | null,
 ): Promise<VariantStockUpdate> {
   const variantId =
     normalizeVariantId(
@@ -490,6 +684,27 @@ export async function updateVariantStock(
             },
           },
         )
+
+      if (
+        current.stockQuantity !==
+        stock
+      ) {
+        await recordStockMovement(
+          transaction,
+          {
+            variantId,
+            type: 'MANUAL_ADJUSTMENT',
+            quantityChange:
+              stock -
+              current.stockQuantity,
+            previousStock:
+              current.stockQuantity,
+            newStock: stock,
+            actorUserId:
+              actorUserId ?? null,
+          },
+        )
+      }
 
       return {
         previousStock:
@@ -564,6 +779,376 @@ function normalizeStockQuantity(
   }
 
   return raw
+}
+
+/**
+ * Épico 6 — histórico de movimentos de stock.
+ */
+
+/** Página padrão do histórico de movimentos. */
+export const DEFAULT_MOVEMENTS_PAGE_SIZE = 50
+
+/** Teto de linhas por página (proteção do payload). */
+export const MAX_MOVEMENTS_PAGE_SIZE = 100
+
+const stockMovementDatePattern =
+  /^\d{4}-\d{2}-\d{2}$/
+
+const stockMovementDateMessage =
+  'A data deve ter o formato AAAA-MM-DD'
+
+const stockMovementDateSchema = z
+  .string({
+    message: stockMovementDateMessage,
+  })
+  .regex(stockMovementDatePattern, {
+    message: stockMovementDateMessage,
+  })
+  .refine(
+    (value) =>
+      Number.isFinite(
+        Date.parse(value),
+      ),
+    {
+      message: stockMovementDateMessage,
+    },
+  )
+
+function isEmptyQueryValue(value: unknown) {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === 'string' &&
+      value.trim() === '')
+  )
+}
+
+/**
+ * Query do histórico de movimentos — validação Zod: tipo de movimento,
+ * fragmento de SKU (busca parcial, sem sensibilidade a maiúsculas) e
+ * intervalo de datas em AAAA-MM-DD (limites inclusivos em UTC), com
+ * paginação de 1 página em diante e `pageSize` limitado.
+ */
+export const stockMovementsQuerySchema =
+  z
+    .object({
+      type: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        z.enum(STOCK_MOVEMENT_TYPES, {
+          message:
+            'Tipo de movimento inválido',
+        }).optional(),
+      ),
+      sku: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        z
+          .string({
+            message:
+              'O SKU deve ser texto',
+          })
+          .trim()
+          .min(1, {
+            message:
+              'O SKU deve ser texto',
+          })
+          .max(120, {
+            message:
+              'O SKU não pode exceder 120 caracteres',
+          })
+          .optional(),
+      ),
+      from: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        stockMovementDateSchema.optional(),
+      ),
+      to: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        stockMovementDateSchema.optional(),
+      ),
+      page: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        z.coerce
+          .number({
+            message:
+              'A página deve ser um número inteiro',
+          })
+          .int({
+            message:
+              'A página deve ser um número inteiro',
+          })
+          .min(1, {
+            message:
+              'A página deve ser pelo menos 1',
+          })
+          .default(1),
+      ),
+      pageSize: z.preprocess(
+        (value) =>
+          isEmptyQueryValue(value)
+            ? undefined
+            : value,
+        z.coerce
+          .number({
+            message:
+              'O tamanho da página deve ser um número inteiro',
+          })
+          .int({
+            message:
+              'O tamanho da página deve ser um número inteiro',
+          })
+          .min(1, {
+            message:
+              'O tamanho da página deve estar entre 1 e ' +
+              MAX_MOVEMENTS_PAGE_SIZE,
+          })
+          .max(MAX_MOVEMENTS_PAGE_SIZE, {
+            message:
+              'O tamanho da página deve estar entre 1 e ' +
+              MAX_MOVEMENTS_PAGE_SIZE,
+          })
+          .default(DEFAULT_MOVEMENTS_PAGE_SIZE),
+      ),
+    })
+    .refine(
+      ({ from, to }) =>
+        from === undefined ||
+        to === undefined ||
+        from <= to,
+      {
+        message:
+          'A data inicial não pode ser posterior à data final',
+        path: ['from'],
+      },
+    )
+
+export type StockMovementsQueryOutput = z.infer<
+  typeof stockMovementsQuerySchema
+>
+
+function startOfUtcDay(
+  date: string,
+): Date {
+  return new Date(
+    `${date}T00:00:00.000Z`,
+  )
+}
+
+function endOfUtcDay(
+  date: string,
+): Date {
+  return new Date(
+    `${date}T23:59:59.999Z`,
+  )
+}
+
+function toStockMovementRow(
+  record: RawStockMovementRecord,
+): StockMovementRow {
+  return {
+    id: record.id,
+    variantId:
+      record.productVariant.id,
+    sku: record.productVariant.sku,
+    productId:
+      record.productVariant.product
+        .id,
+    productName:
+      record.productVariant.product
+        .name,
+    productSlug:
+      record.productVariant.product
+        .slug,
+    type: record.type,
+    quantityChange:
+      record.quantityChange,
+    previousStock:
+      record.previousStock,
+    newStock: record.newStock,
+    actorEmail:
+      record.actorUser?.email ??
+      null,
+    createdAt:
+      record.createdAt.toISOString(),
+  }
+}
+
+/**
+ * Histórico de movimentos de stock (Épico 6): paginação calculada a
+ * partir do total filtrado (a última página real é o teto) e contagem
+ * + listagem correndo na MESMA transação de leitura para refletirem um
+ * snapshot coerente. O filtro de SKU é parcial e sem sensibilidade a
+ * maiúsculas; as datas são limites inclusivos de dia em UTC.
+ */
+export async function listStockMovements(
+  input:
+    | {
+        type?: unknown
+        sku?: unknown
+        from?: unknown
+        to?: unknown
+        page?: unknown
+        pageSize?: unknown
+      }
+    | undefined,
+  client?: InventoryClient,
+): Promise<StockMovementsPage> {
+  const query =
+    stockMovementsQuerySchema.parse({
+      type: input?.type,
+      sku: input?.sku,
+      from: input?.from,
+      to: input?.to,
+      page: input?.page,
+      pageSize: input?.pageSize,
+    })
+
+  const where: StockMovementFilterWhere =
+    {}
+
+  if (query.type) {
+    where.type = query.type
+  }
+
+  if (query.sku) {
+    where.productVariant = {
+      sku: {
+        contains: query.sku,
+        mode: 'insensitive',
+      },
+    }
+  }
+
+  if (query.from || query.to) {
+    where.createdAt = {
+      ...(query.from
+        ? {
+            gte:
+              startOfUtcDay(
+                query.from,
+              ),
+          }
+        : {}),
+      ...(query.to
+        ? {
+            lte: endOfUtcDay(
+              query.to,
+            ),
+          }
+        : {}),
+    }
+  }
+
+  const movementClient =
+    getClient(client)
+
+  const { total, page, rows } =
+    await movementClient.$transaction(
+      async (transaction) => {
+        const total =
+          await transaction.stockMovement.count(
+            {
+              where,
+            },
+          )
+
+        // A última página real é o teto: pedidos além do fim devolvem
+        // a última página em vez de uma página vazia.
+        const clampedTotalPages =
+          Math.max(
+            1,
+            Math.ceil(
+              total / query.pageSize,
+            ),
+          )
+        const page = Math.min(
+          query.page,
+          clampedTotalPages,
+        )
+
+        const rows =
+          await transaction.stockMovement.findMany(
+            {
+              where,
+              orderBy: [
+                {
+                  createdAt:
+                    'desc',
+                },
+                { id: 'desc' },
+              ],
+              skip:
+                (page - 1) *
+                query.pageSize,
+              take: query.pageSize,
+              select: {
+                id: true,
+                type: true,
+                quantityChange: true,
+                previousStock: true,
+                newStock: true,
+                actorUserId: true,
+                createdAt: true,
+                productVariant: {
+                  select: {
+                    id: true,
+                    sku: true,
+                    product: {
+                      select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                      },
+                    },
+                  },
+                },
+                actorUser: {
+                  select: {
+                    id: true,
+                    email: true,
+                  },
+                },
+              },
+            },
+          )
+
+        return {
+          total,
+          page,
+          rows,
+        }
+      },
+    )
+
+  return {
+    movements: rows.map(
+      (record) =>
+        toStockMovementRow(
+          record,
+        ),
+    ),
+    total,
+    page,
+    pageSize: query.pageSize,
+    totalPages: Math.max(
+      1,
+      Math.ceil(total / query.pageSize),
+    ),
+  }
 }
 
 const inventoryThresholdMessage =

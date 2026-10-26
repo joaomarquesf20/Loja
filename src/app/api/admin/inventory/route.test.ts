@@ -436,11 +436,16 @@ describe(
 
             expect(
               mockUpdateVariantStock,
-            ).toHaveBeenCalledWith({
-              variantId:
-                'variant-1',
-              stock: 12,
-            })
+            ).toHaveBeenCalledWith(
+              {
+                variantId:
+                  'variant-1',
+                stock: 12,
+              },
+              undefined,
+              // Ator do movimento MANUAL_ADJUSTMENT.
+              'admin-test',
+            )
           },
         )
 

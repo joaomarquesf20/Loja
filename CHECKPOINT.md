@@ -1789,5 +1789,221 @@ Próximos passos (pós-etapa):
   de stock).
 
 
+## Épico 6 — Etapa 2 (concluída): Auditoria de movimentos de stock e histórico
+
+Data: 2026-10-26 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: registo de auditoria de
+cada alteração de stock (variante, quantidade
+da mudança, stock anterior, stock novo, tipo,
+referência do admin/utilizadores, timestamp)
+com migração Prisma aplicada; gravação atómica
+dentro das transações existentes em TODOS os
+caminhos de escrita (compra/manual/reposição/
+anulação); vista admin `/admin/inventory/
+movements` com filtros (tipo, SKU, data);
+testes e gate completa.
+
+Esquema + migração:
+- `prisma/schema.prisma`: modelo
+  `StockMovement` — `variantId` FK
+  ProductVariant cascade; `quantityChange`
+  Int; `previousStock`/`newStock` Int;
+  `type` enum `StockMovementType`
+  (RESTOCK, SALE, MANUAL_ADJUSTMENT,
+  RETURN); `actorUserId` FK User
+  `SetNull` (nullable — movimento com
+  ator eliminado mantém-se); `createdAt`
+  default now(); índices
+  `@@index([variantId, createdAt])` e
+  `@@index([createdAt])`.
+- Migração
+  `20261026004130_add_stock_movement`
+  criada e aplicada (`npx prisma migrate
+  dev`). NOTA: nesta versão o `migrate dev`
+  NÃO correu `generate` automaticamente —
+  foi preciso `npx prisma generate`
+  manual (causou erros TS até regenerar).
+
+Serviço (`src/server/inventory.ts`):
+- `recordStockMovement(transação, input)`:
+  grava o movimento dentro da transação
+  corrente (nunca transação própria).
+- `updateVariantStock` ganha 3.º parâmetro
+  `actorUserId?: string | null` e grava
+  MANUAL_ADJUSTMENT dentro da MESMA
+  transação findUnique+update (salta
+  quando o stock não muda).
+- `listStockMovements`: join variante→
+  produto em altura de query (linhas com
+  sku/nome/slug do produto); orderBy
+  `[createdAt desc, id desc]` (desempate
+  estável); limites de dia UTC inclusivos
+  (T00:00:00.000Z / T23:59:59.999Z); SKU
+  por contains Insensitive; páginação
+  DEFAULT 50 / MAX 100 com clamp à
+  última página real; `pageSize` ecoado
+  na resposta. Tipos: `StockMovementType`,
+  `StockMovementRecordInput`,
+  `StockMovementRow`, `StockMovementsPage`
+  (+ delegates estruturais com
+  `stockMovement`).
+- `stockMovementsQuerySchema` (Zod):
+  campos opcionais pré-processados têm
+  de TERMINAR em `.optional()`; datas
+  validadas por regex
+  `^\d{4}-\d{2}-\d{2}$` +
+  `.refine(Date.parse finito)`.
+
+Gravação por caminho (tudo atómico na
+transação existente):
+- `checkout.ts`: decremento → SALE
+  (previous = `item.stockQuantity` lido no
+  prepare Serializable; actor = utilizador
+  que compra).
+- `order-cancellation.ts`: incremento →
+  RETURN (variantBefore lido por
+  `productVariant.findUnique` na
+  transação; actor = `ownerUserId ?? null`
+  — cancelamentos por admin ficam
+  'Sistema').
+- `admin-products.ts` (`replaceVariants`):
+  RESTOCK (aumento, ou variante nova com
+  stock > 0 a partir de 0) e
+  MANUAL_ADJUSTMENT (diminuição); salta
+  quando igual; actor null. `stock.ts`
+  intocado (código morto — só barrel).
+- `GET /api/admin/inventory/movements`
+  (nova): `requireAdmin()`, query
+  `?type&sku&from&to&page&pageSize` via
+  schema Zod (ZodError → 400 'Dados
+  inválidos' + fieldErrors), 500 seguro.
+- `PATCH /api/admin/inventory`:
+  captura a sessão de `requireAdmin()` e
+  passa `session.user.id` como actor do
+  MANUAL_ADJUSTMENT.
+
+Vista `/admin/inventory/movements`:
+- `page.tsx` server (padrão
+  orders/inventory) + `movements-client.tsx`
+  client; tab strip server-side
+  ('Inventário' / 'Movimentos') nas duas
+  páginas com
+  `aria-label="Secções de inventário"`.
+- Cliente refetch server-side em cada
+  mudança de filtro (ordem do
+  querystring: type→sku→from→to→page→
+  pageSize); SKU commitado em blur/Enter
+  com trim; mudança de filtros volta à
+  página 1.
+- Labels pt-PT: Reposição/Venda/
+  Correção manual/Cancelamento; badges
+  verde/azul/âmbar/cinza; ator fallback
+  'Sistema'; contadores 'N movimentos no
+  histórico', 'Página X de Y',
+  botões 'Página anterior'/'Página
+  seguinte', 'Limpar filtros', estado
+  vazio 'Sem movimentos para os filtros
+  aplicados.', erros em role="alert".
+- Mudança de stock apresentada como
+  `previous → new` por linha
+  (data-testid `stock-movement-row`).
+- O MEMBRO do cliente importa apenas
+  `import type` de `@/server/inventory`
+  (puxa prisma — padrão da etapa 1).
+
+Testes (+34 no total: 2299 → 2333):
+- `inventory.test.ts` (40/40):
+  recordStockMovement na transação correte;
+  updateVariantStock grava MANUAL_ADJUSTMENT
+  sem transação extra, salta quando igual e
+  propaga actor; listStockMovements
+  (filter/paginação/clamp/datas UTC); schema
+  Zod (ausentes, datas inválidas, page/pageSize
+  limites).
+- `checkout.test.ts` (83/83): SALE gravado
+  com amounts e actor certos (fixtures
+  no stockMovement).
+- `order-cancellation.test.ts` (18/18):
+  RETURN com variantBefore lido na
+  transação; actor owner/admin (null).
+- `admin-products.test.ts` (24/24):
+  RESTOCK/MANUAL_ADJUSTMENT por
+  variante (fixtures ganham
+  `productVariant.update` + `stockMovement`
+  findMany tipado com `Record<string,
+  unknown>`).
+- `checkout-payment.test.ts`: fixture
+  ganha delegate `stockMovement` (caminho
+  de pagamento pendente grava SALE).
+- `api/admin/inventory/route.test.ts`:
+  PATCH agora asserte
+  `(input, undefined, 'admin-test')`.
+- `api/admin/inventory/movements/
+  route.test.ts` (6): 200 default +
+  passthrough de filtros, 400 com
+  ZodError fieldErrors, 401/403/500.
+- `movements-client.test.tsx` (7, jsdom +
+  fetch stub): carga com paginação padrão,
+  refetch por tipo, commit SKU no blur,
+  paginação Anterior/Seguinte, estado vazio,
+  erro em alert, Limpar filtros.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2333 passed** + 3 skipped (166
+ficheiros: 165 passed + 1 skipped); `npm
+run lint` limpo; `npm run build` limpo —
+route map com `/admin/inventory/movements` ƒ
+e `/api/admin/inventory/movements` ƒ.
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- `vi.clearAllMocks()` NÃO limpa filas de
+  `mockImplementationOnce` — stubs
+  órfãos vazam para o teste seguinte
+  (consumidos pelo mount do próximo);
+  usar `fetchMock.mockReset()` em
+  beforeEach quando se enfileiram
+  respostas por chamada.
+- Stub das respostas tem de ser
+  enfileirado ANTES do evento que
+  dispara o fetch; caso contrário o
+  refetch rebenta sem stub (fetch
+  → undefined → erro 'reading ok') e o
+  stub tardio fica órfão.
+- `getByText` colide quando a MESMA
+  string existe como `<option>` do
+  filtro e badge na tabela — assertir
+  com `within(row)` (ou data-testid).
+- `vi.fn(async () => [])` infere
+  `never[]` — anotar o retorno
+  (ex.: `[] as Array<Record<string,
+  unknown>>`) quando `mockResolvedValue
+  Once` recebe objetos de fixture.
+- `npx prisma migrate dev` nem sempre
+  corre `generate` — após criar
+  modelo novo, confirmar
+  `.prisma/client` regenerado.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 2 quando o utilizador
+  pedir (ficheiros: prisma/schema.prisma +
+  migração, inventory.ts(+test),
+  checkout.ts(+test),
+  checkout-payment.test.ts,
+  order-cancellation.ts(+test),
+  admin-products.ts(+test),
+  api/admin/inventory/route.(ts|test.ts),
+  api/admin/inventory/movements/**,
+  admin/inventory/movements/** +
+  admin/inventory/page.tsx (tabs),
+  CHECKPOINT.md).
+- Continuar o Épico 6 com o utilizador
+  (follow-ups possíveis: exportação CSV
+  do histórico, auditoria por utilizador
+  no painel).
+
+
 
 

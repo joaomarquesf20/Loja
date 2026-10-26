@@ -315,7 +315,14 @@ function createCartItem(
 }
 
 function createTransactionMock() {
-  return {
+  // Épico 6 — histórico de movimentos de stock na transação do checkout
+  // (o spy fica acessível em `tx.stockMovement.create`).
+  const stockMovementCreate =
+    vi.fn(async () => ({
+      id: 'movement-1',
+    }))
+
+  const tx = {
     storeSettings: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
@@ -343,6 +350,9 @@ function createTransactionMock() {
     product: {
       updateMany: vi.fn(),
     },
+    stockMovement: {
+      create: stockMovementCreate,
+    },
     order: {
       create: vi.fn(),
     },
@@ -350,6 +360,8 @@ function createTransactionMock() {
       createMany: vi.fn(),
     },
   }
+
+  return tx
 }
 
 function createClient(
@@ -1188,6 +1200,30 @@ describe(
             stockQuantity: {
               decrement: 2,
             },
+          },
+        })
+
+        // Épico 6: o movimento de venda é gravado na MESMA
+        // transação, com o stock anterior (lido no prepare
+        // serializável) e o comprador como ator.
+        expect(
+          tx.stockMovement.create,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+
+        expect(
+          tx.stockMovement.create,
+        ).toHaveBeenCalledWith({
+          data: {
+            variantId:
+              'variant-1',
+            type: 'SALE',
+            quantityChange: -2,
+            previousStock: 3,
+            newStock: 1,
+            actorUserId:
+              'user-1',
           },
         })
 

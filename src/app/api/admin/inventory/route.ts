@@ -121,7 +121,10 @@ export async function PATCH(
   request: Request,
 ) {
   try {
-    await requireAdmin()
+    // Épico 6: o admin autenticado é registado como ator do movimento
+    // MANUAL_ADJUSTMENT no histórico de stock.
+    const session =
+      await requireAdmin()
 
     const body: unknown =
       await request.json()
@@ -143,6 +146,8 @@ export async function PATCH(
           variantId: unknown
           stock: unknown
         },
+        undefined,
+        session.user.id,
       )
 
     return Response.json(

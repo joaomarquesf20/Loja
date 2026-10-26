@@ -10,6 +10,9 @@ import {
 import { getCategoryFilterProfile } from '@/lib/storefront-category-profile'
 import { toSlug } from '@/lib/slug'
 import { prisma } from './db'
+import {
+  recordStockMovement,
+} from './inventory'
 
 const productShippingClasses = [
   'SMALL',
@@ -1621,6 +1624,9 @@ async function getExistingVariants(
     where: { productId },
     select: {
       id: true,
+      // Épico 6: stock anterior necessário para classificar o
+      // movimento de stock (RESTOCK vs MANUAL_ADJUSTMENT).
+      stockQuantity: true,
       optionKey: true,
       selections: {
         select: {
@@ -1943,6 +1949,53 @@ async function replaceVariants(
           },
           select: { id: true },
         })
+
+    // Épico 6 — histórico de movimentos de stock: o stock é definido
+    // pela administração na mesma transação do movimento. Aumento de
+    // stock é reposição (RESTOCK); redução é correção manual
+    // (MANUAL_ADJUSTMENT); variantes novas só registam movimento quando
+    // arrancam com stock. Sem alteração de valor não há movimento.
+    if (existingVariant) {
+      const previousStock =
+        existingVariant.stockQuantity
+      const newStock =
+        requestedVariant.stockQuantity
+
+      if (previousStock !== newStock) {
+        await recordStockMovement(
+          transaction,
+          {
+            variantId: variant.id,
+            type:
+              newStock > previousStock
+                ? 'RESTOCK'
+                : 'MANUAL_ADJUSTMENT',
+            quantityChange:
+              newStock -
+              previousStock,
+            previousStock,
+            newStock,
+            actorUserId: null,
+          },
+        )
+      }
+    } else if (
+      requestedVariant.stockQuantity > 0
+    ) {
+      await recordStockMovement(
+        transaction,
+        {
+          variantId: variant.id,
+          type: 'RESTOCK',
+          quantityChange:
+            requestedVariant.stockQuantity,
+          previousStock: 0,
+          newStock:
+            requestedVariant.stockQuantity,
+          actorUserId: null,
+        },
+      )
+    }
 
     if (axes.length > 0) {
       await transaction.productVariantOptionSelection.deleteMany(

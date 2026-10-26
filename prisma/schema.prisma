@@ -71,6 +71,13 @@ enum ShippingMethod {
   EXPRESS
 }
 
+enum StockMovementType {
+  RESTOCK
+  SALE
+  MANUAL_ADJUSTMENT
+  RETURN
+}
+
 model User {
   id                         String           @id @default(cuid())
   email                      String           @unique
@@ -87,6 +94,7 @@ model User {
   cartItems                  CartItem[]
   guestCartMerges            GuestCartMerge[]
   orders                     Order[]
+  stockMovements             StockMovement[]
   createdAt                  DateTime         @default(now())
   updatedAt                  DateTime         @updatedAt
 }
@@ -211,10 +219,33 @@ model ProductVariant {
   cartItems              CartItem[]
   orderItems             OrderItem[]
   vehicleCompatibilities ProductVariantVehicleCompatibility[]
+  movements              StockMovement[]
 
   @@unique([productId, optionKey])
   @@index([productId, position])
   @@index([productId, isActive, position])
+}
+
+/**
+ * Épico 6 — registo histórico de movimentos de stock: cada alteração
+ * de stock de uma variante (reposição, venda, correção manual ou
+ * reposição por cancelamento) é gravada numa linha desta tabela dentro
+ * da MESMA transação que altera o stock, garantindo atomicidade.
+ */
+model StockMovement {
+  id             String            @id @default(cuid())
+  variantId      String
+  productVariant ProductVariant    @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantityChange Int
+  previousStock  Int
+  newStock       Int
+  type           StockMovementType
+  actorUserId    String?
+  actorUser      User?             @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt      DateTime          @default(now())
+
+  @@index([variantId, createdAt])
+  @@index([createdAt])
 }
 
 model ProductOption {
