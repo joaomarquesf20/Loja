@@ -483,6 +483,11 @@ model Order {
   /// Épico 7 — desconto do cupão aplicado ao subtotal (em euros).
   /// O `total` é o valor FINAL (subtotal − desconto + portes).
   discountAmount          Decimal?          @db.Decimal(10, 2)
+  /// Épico 7 — etapa 2: marca temporal da reversão do uso do cupão
+  /// (anulação/reembolso). `null` = uso ainda contabilizado; o marcador
+  /// garante que reembolso seguido de cancelamento só devolve o uso
+  /// uma vez (idempotência dentro da transação de transição).
+  couponReversedAt        DateTime?
   status                  OrderStatus       @default(PENDING)
   paymentStatus           PaymentStatus     @default(PENDING)
   paymentMethod           PaymentMethod?

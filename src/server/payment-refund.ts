@@ -1,5 +1,10 @@
 import { prisma } from './db'
 import {
+  decrementCouponUsage,
+  type CouponReversalDecrementArgs,
+  type CouponReversalMarkerArgs,
+} from './coupons'
+import {
   OrderLifecycleConflictError,
   OrderLifecycleNotFoundError,
   OrderLifecycleValidationError,
@@ -21,6 +26,8 @@ type RefundOrderRecord = {
     LifecycleFulfillmentMethod
   paymentProvider: string | null
   paymentReference: string | null
+  /// Épico 7 — código do cupão aplicado na compra (null = sem cupão).
+  couponCode: string | null
 }
 
 type RefundOrderSelect = {
@@ -31,6 +38,7 @@ type RefundOrderSelect = {
   fulfillmentMethod: true
   paymentProvider: true
   paymentReference: true
+  couponCode: true
 }
 
 type RefundUpdateManyArgs = {
@@ -60,7 +68,18 @@ type RefundOrderEventCreateArgs = {
 type PaymentRefundTransactionClient = {
   order: {
     updateMany(
-      args: RefundUpdateManyArgs,
+      args:
+        | RefundUpdateManyArgs
+        // Épico 7 — etapa 2: a marca da reversão do cupão corre na
+        // mesma transação do reembolso.
+        | CouponReversalMarkerArgs,
+    ): Promise<{
+      count: number
+    }>
+  }
+  coupon: {
+    updateMany(
+      args: CouponReversalDecrementArgs,
     ): Promise<{
       count: number
     }>
@@ -101,6 +120,7 @@ const refundOrderSelect:
   fulfillmentMethod: true,
   paymentProvider: true,
   paymentReference: true,
+  couponCode: true,
 }
 
 const refundableOrderStatuses =
@@ -338,6 +358,20 @@ async function refundSimulatedPaymentForOwner(
             'REFUNDED',
         },
       })
+
+      // Épico 7 — etapa 2: devolve a utilização do cupão dentro da
+      // MESMA transação. Sem cupão é um no-op; com cupão, o marcador
+      // `couponReversedAt` garante que a reversão acontece no máximo
+      // uma vez (o cancelamento seguinte já não desconta de novo).
+      // Cupão eliminado não bloqueia a transição.
+      await decrementCouponUsage(
+        tx,
+        {
+          orderId: order.id,
+          couponCode:
+            order.couponCode,
+        },
+      )
     },
   )
 

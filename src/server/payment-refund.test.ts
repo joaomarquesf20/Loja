@@ -57,6 +57,12 @@ function createClient() {
       id: 'event-1',
     })
 
+  // Épico 7 — etapa 2: reversão do uso do cupão na transação.
+  const couponUpdateMany =
+    vi.fn().mockResolvedValue({
+      count: 1,
+    })
+
   const transaction =
     vi.fn(
       async (
@@ -68,6 +74,10 @@ function createClient() {
         callback({
           order: {
             updateMany,
+          },
+          coupon: {
+            updateMany:
+              couponUpdateMany,
           },
           orderEvent: {
             create:
@@ -87,6 +97,7 @@ function createClient() {
       PaymentRefundClient,
     findUnique,
     updateMany,
+    couponUpdateMany,
     createEvent,
     transaction,
   }
@@ -628,6 +639,225 @@ describe(
           ),
         ).rejects.toBeInstanceOf(
           OrderLifecycleNotFoundError,
+        )
+      },
+    )
+  },
+)
+
+// ===========================================================================
+// Épico 7 — etapa 2: reversão do uso do cupão no reembolso
+// ===========================================================================
+
+describe(
+  'reversão do cupão no reembolso',
+  () => {
+    test(
+      'reembolsa e devolve o uso do cupão na mesma transação',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'PAID' as never,
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        // Duas escritas na encomenda: o reembolso
+        // e a marca da reversão.
+        updateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        await expect(
+          refundSimulatedPayment(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'REFUNDED',
+        })
+
+        expect(
+          updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            couponReversedAt:
+              null,
+          },
+          data: {
+            couponReversedAt:
+              expect.any(
+                Date,
+              ),
+          },
+        })
+
+        expect(
+          couponUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            code: 'PROMO10',
+            usedCount: {
+              gt: 0,
+            },
+          },
+          data: {
+            usedCount: {
+              decrement: 1,
+            },
+          },
+        })
+
+        // A marca precede o decremento.
+        expect(
+          updateMany.mock
+            .invocationCallOrder[1],
+        ).toBeLessThan(
+          couponUpdateMany.mock
+            .invocationCallOrder[0],
+        )
+      },
+    )
+
+    test(
+      'reembolso sem cupão → não toca no cupão nem na marca',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'PAID' as never,
+          }),
+        )
+
+        updateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        await expect(
+          refundSimulatedPayment(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'REFUNDED',
+        })
+
+        expect(
+          couponUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        // Só o updateMany do reembolso — sem marca.
+        expect(
+          updateMany,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+      },
+    )
+
+    test(
+      'pagamento já reembolsado → sem reversão (idempotente)',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'REFUNDED' as never,
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        await expect(
+          refundSimulatedPayment(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'REFUNDED',
+        })
+
+        expect(
+          updateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          couponUpdateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'cupão eliminado → reembolso continua (best-effort)',
+      async () => {
+        const {
+          client,
+          findUnique,
+          updateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            paymentStatus:
+              'PAID' as never,
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        updateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        couponUpdateMany
+          .mockResolvedValueOnce({
+            count: 0,
+          })
+
+        await expect(
+          refundSimulatedPayment(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          paymentStatus:
+            'REFUNDED',
+        })
+
+        expect(
+          couponUpdateMany,
+        ).toHaveBeenCalledTimes(
+          1,
         )
       },
     )

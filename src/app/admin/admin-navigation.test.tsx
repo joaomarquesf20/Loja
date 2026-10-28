@@ -34,6 +34,10 @@ const areas = [
     label: 'Encomendas',
   },
   {
+    href: '/admin/coupons',
+    label: 'Cupões',
+  },
+  {
     href: '/admin/users',
     label: 'Clientes',
   },

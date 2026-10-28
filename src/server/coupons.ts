@@ -745,3 +745,1209 @@ export async function readCartSubtotalCents(
     itemCount,
   }
 }
+
+// ===========================================================================
+// Épico 7 — etapa 2: reversão do uso (anulação/reembolso) + gestão admin
+// ===========================================================================
+
+/**
+ * Argumentos do `updateMany` que marca a reversão na encomenda. O guard
+ * `couponReversedAt: null` faz com que a marca só seja escrita UMA vez:
+ * numa corrida concorrente apenas uma transação obtém `count === 1`.
+ */
+export type CouponReversalMarkerArgs = {
+  where: {
+    id: string
+    couponReversedAt: null
+  }
+  data: {
+    couponReversedAt: Date
+  }
+}
+
+/**
+ * Argumentos do `updateMany` que devolve uma utilização ao cupão. O
+ * guard `usedCount: { gt: 0 }` impede contadores negativos e o código
+ * evita depender do `id` (o cupão pode ter sido recriado).
+ */
+export type CouponReversalDecrementArgs = {
+  where: {
+    code: string
+    usedCount: {
+      gt: number
+    }
+  }
+  data: {
+    usedCount: {
+      decrement: number
+    }
+  }
+}
+
+/**
+ * Cliente de transação necessário para a reversão: a marca na encomenda
+ * e o decremento no cupão partilham a MESMA transação da transição
+ * (cancelamento ou reembolso), de modo que qualquer falha reverte tudo.
+ */
+export interface CouponReversalTransactionClient {
+  order: {
+    updateMany(
+      args: CouponReversalMarkerArgs,
+    ): Promise<{
+      count: number
+    }>
+  }
+  coupon: {
+    updateMany(
+      args: CouponReversalDecrementArgs,
+    ): Promise<{
+      count: number
+    }>
+  }
+}
+
+/**
+ * Devolve uma utilização do cupão ao inventory de usos: decrementa
+ * `usedCount` do cupão aplicado a uma encomenda anulada ou reembolsada.
+ *
+ * Tem de ser chamada DENTRO da transação da transição — se algo falhar,
+ * nem o estado da encomenda nem o contador mudam.
+ *
+ * Comportamento:
+ * - `couponCode` ausente/vazio → no-op (`false`): encomendas sem cupão
+ *   nunca tocam nos delegates;
+ * - marca primeiro (`couponReversedAt`, guard de `null`): se a marca já
+ *   existir (reembolso seguido de cancelamento, ou corrida concorrente),
+ *   devolve `false` sem tocar no cupão — a reversão acontece no máximo
+ *   uma vez por encomenda;
+ * - o decremento é guardado com `usedCount > 0` e é "best-effort": se o
+ *   cupão já não existir (ou o contador já estiver a zero), a transição
+ *   do pedido NÃO falha por causa do cupão.
+ */
+export async function decrementCouponUsage(
+  transaction: CouponReversalTransactionClient,
+  input: {
+    orderId: string
+    couponCode: string | null | undefined
+    now?: Date
+  },
+): Promise<boolean> {
+  const couponCode =
+    typeof input.couponCode ===
+    'string'
+      ? input.couponCode.trim()
+      : ''
+
+  if (!couponCode) {
+    return false
+  }
+
+  const marked =
+    await transaction.order.updateMany(
+      {
+        where: {
+          id: input.orderId,
+          couponReversedAt: null,
+        },
+        data: {
+          couponReversedAt:
+            input.now ?? new Date(),
+        },
+      },
+    )
+
+  if (marked.count !== 1) {
+    // Já revertido (ou corrida concorrente): não decrementar outra vez.
+    return false
+  }
+
+  const reversed =
+    await transaction.coupon.updateMany(
+      {
+        where: {
+          code: couponCode.toUpperCase(),
+          usedCount: {
+            gt: 0,
+          },
+        },
+        data: {
+          usedCount: {
+            decrement: 1,
+          },
+        },
+      },
+    )
+
+  // Cupão eliminado ou contador já a zero: a transição do pedido não
+  // falha por causa do cupão — a marca fica registada na encomenda.
+  return reversed.count === 1
+}
+
+/** Estado administrativo derivado de um cupão (badge da tabela). */
+export type AdminCouponStatus =
+  | 'ACTIVE'
+  | 'INACTIVE'
+  | 'EXPIRED'
+  | 'LIMIT_REACHED'
+
+export const ADMIN_COUPON_STATUSES = [
+  'ACTIVE',
+  'INACTIVE',
+  'EXPIRED',
+  'LIMIT_REACHED',
+] as const
+
+/**
+ * Estado efetivo do cupão para o backoffice. A precedência é
+ * determinística: INACTIVE (desativado manualmente) → EXPIRED →
+ * LIMIT_REACHED → ACTIVE. A janela temporal usa a mesma semântica do
+ * motor: `expiresAt` é exclusivo (`== now` já expirou).
+ */
+export function adminCouponStatusFrom(
+  coupon: CouponRecord,
+  now: Date = new Date(),
+): AdminCouponStatus {
+  if (!coupon.isActive) {
+    return 'INACTIVE'
+  }
+
+  if (
+    coupon.expiresAt !== null &&
+    coupon.expiresAt.getTime() <=
+      now.getTime()
+  ) {
+    return 'EXPIRED'
+  }
+
+  if (
+    coupon.maxUses !== null &&
+    coupon.usedCount >= coupon.maxUses
+  ) {
+    return 'LIMIT_REACHED'
+  }
+
+  return 'ACTIVE'
+}
+
+/** Linha da tabela admin: cupão serializável + estado calculado. */
+export type AdminCouponRow = {
+  id: string
+  code: string
+  discountType: CouponDiscountType
+  discountValue: number
+  minOrderValue: number | null
+  maxUses: number | null
+  usedCount: number
+  startsAt: string | null
+  expiresAt: string | null
+  isActive: boolean
+  status: AdminCouponStatus
+}
+
+/** KPIs de topo da vista de cupões (sempre globais, sem filtros). */
+export type AdminCouponKpis = {
+  totalCoupons: number
+  activeCoupons: number
+  totalUses: number
+}
+
+/** Página da listagem admin: linhas filtradas + KPIs globais. */
+export type AdminCouponsPage = {
+  coupons: AdminCouponRow[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+  kpis: AdminCouponKpis
+}
+
+export type CouponAdminField =
+  | 'id'
+  | 'code'
+  | 'discountType'
+  | 'discountValue'
+  | 'minOrderValue'
+  | 'maxUses'
+  | 'startsAt'
+  | 'expiresAt'
+  | 'isActive'
+  | 'status'
+
+/** Erro de validação de negócio do backoffice (→ 400 na rota). */
+export class CouponAdminValidationError extends Error {
+  readonly field: CouponAdminField
+
+  constructor(
+    field: CouponAdminField,
+    message: string,
+  ) {
+    super(message)
+    this.name =
+      'CouponAdminValidationError'
+    this.field = field
+  }
+}
+
+/** Cupão inexistente para a operação pedida (→ 404 na rota). */
+export class CouponAdminNotFoundError extends Error {
+  constructor(
+    message = 'Cupão não encontrado',
+  ) {
+    super(message)
+    this.name =
+      'CouponAdminNotFoundError'
+  }
+}
+
+/** Código único já ocupado na criação (→ 409 na rota). */
+export class CouponCodeConflictError extends Error {
+  constructor(
+    message = 'Já existe um cupão com este código',
+  ) {
+    super(message)
+    this.name =
+      'CouponCodeConflictError'
+  }
+}
+
+function toAdminCouponRow(
+  record: CouponRecord,
+  now: Date,
+): AdminCouponRow {
+  return {
+    id: record.id,
+    code: record.code,
+    discountType:
+      record.discountType,
+    discountValue:
+      record.discountValue,
+    minOrderValue:
+      record.minOrderValue,
+    maxUses: record.maxUses,
+    usedCount: record.usedCount,
+    startsAt:
+      record.startsAt?.toISOString() ??
+      null,
+    expiresAt:
+      record.expiresAt?.toISOString() ??
+      null,
+    isActive: record.isActive,
+    status:
+      adminCouponStatusFrom(
+        record,
+        now,
+      ),
+  }
+}
+
+/**
+ * Cliente admin do cupão: leituras e escritas do backoffice correm
+ * todas sobre este delegate estrutural (o Prisma real chega por
+ * conversão no helper `getAdminCouponDbClient`).
+ */
+export interface AdminCouponDbClient {
+  coupon: {
+    findMany(args: {
+      orderBy: Array<
+        | { createdAt: 'desc' }
+        | { id: 'desc' }
+      >
+      take: number
+      select: CouponSelect
+    }): Promise<CouponRecord[]>
+
+    findUnique(args: {
+      where: {
+        id: string
+      }
+      select: CouponSelect
+    }): Promise<CouponRecord | null>
+
+    create(args: {
+      data: {
+        code: string
+        discountType: CouponDiscountType
+        discountValue: number
+        minOrderValue: number | null
+        maxUses: number | null
+        startsAt: Date | null
+        expiresAt: Date | null
+        isActive: boolean
+      }
+      select: CouponSelect
+    }): Promise<CouponRecord>
+
+    update(args: {
+      where: {
+        id: string
+      }
+      data: {
+        isActive?: boolean
+        discountValue?: number
+        minOrderValue?: number | null
+        maxUses?: number | null
+        startsAt?: Date | null
+        expiresAt?: Date | null
+      }
+      select: CouponSelect
+    }): Promise<CouponRecord>
+  }
+
+  $transaction<T>(
+    callback: (transaction: {
+      coupon: {
+        findUnique(
+          args: {
+            where: {
+              id: string
+            }
+            select: CouponSelect
+          },
+        ): Promise<CouponRecord | null>
+        update(
+          args: {
+            where: {
+              id: string
+            }
+            data: {
+              isActive?: boolean
+              discountValue?: number
+              minOrderValue?:
+                | number
+                | null
+              maxUses?:
+                | number
+                | null
+              startsAt?:
+                | Date
+                | null
+              expiresAt?:
+                | Date
+                | null
+            }
+            select: CouponSelect
+          },
+        ): Promise<CouponRecord>
+      }
+    }) => Promise<T>,
+  ): Promise<T>
+}
+
+function getAdminCouponDbClient(
+  client?: AdminCouponDbClient,
+): AdminCouponDbClient {
+  return (
+    client ??
+    (prisma as unknown as AdminCouponDbClient)
+  )
+}
+
+function normalizeAdminCouponId(
+  value: unknown,
+): string {
+  if (
+    typeof value !== 'string'
+  ) {
+    throw new CouponAdminNotFoundError()
+  }
+
+  const normalized =
+    value.trim()
+
+  if (!normalized) {
+    throw new CouponAdminNotFoundError()
+  }
+
+  return normalized
+}
+
+// ---------------------------------------------------------------------------
+// Listagem admin
+// ---------------------------------------------------------------------------
+
+export const ADMIN_COUPON_SEARCH_MAX_LENGTH =
+  40
+
+export const DEFAULT_ADMIN_COUPON_PAGE_SIZE =
+  50
+
+export const MAX_ADMIN_COUPON_PAGE_SIZE = 1000
+
+/**
+ * Teto de linhas lidas para KPIs + listagem: o `where` do Prisma não
+ * compara dois campos da mesma tabela (`usedCount` ↔ `maxUses`), por
+ * isso o estado é derivado em JS sobre as linhas carregadas — tal como
+ * na vista de inventário do Épico 6.
+ */
+export const MAX_ADMIN_COUPON_ROWS = 1000
+
+const adminCouponListMessages = {
+  search:
+    'A pesquisa deve ser texto',
+  status:
+    'Estado de cupão inválido',
+  page:
+    'A página deve ser um número inteiro',
+  pageMin:
+    'A página deve ser pelo menos 1',
+  pageSize:
+    'O tamanho da página deve ser um número inteiro',
+  pageSizeRange: `O tamanho da página deve estar entre 1 e ${MAX_ADMIN_COUPON_PAGE_SIZE}`,
+} as const
+
+function isEmptyQueryValue(
+  value: unknown,
+) {
+  return (
+    value === undefined ||
+    value === null ||
+    (typeof value === 'string' &&
+      value.trim() === '')
+  )
+}
+
+/**
+ * Query da listagem admin de cupões: pesquisa parcial pelo código
+ * (sem sensibilidade a maiúsculas), filtro de estado derivado,
+ * paginação de 1 página em diante e `pageSize` limitado.
+ */
+export const adminCouponListQuerySchema =
+  z.object({
+    search: z.preprocess(
+      (value) =>
+        isEmptyQueryValue(value)
+          ? undefined
+          : value,
+      z
+        .string({
+          message:
+            adminCouponListMessages.search,
+        })
+        .trim()
+        .min(1, {
+          message:
+            adminCouponListMessages.search,
+        })
+        .max(
+          ADMIN_COUPON_SEARCH_MAX_LENGTH,
+          {
+            message: `A pesquisa não pode exceder ${ADMIN_COUPON_SEARCH_MAX_LENGTH} caracteres`,
+          },
+        )
+        .optional(),
+    ),
+    status: z.preprocess(
+      (value) =>
+        isEmptyQueryValue(value)
+          ? undefined
+          : value,
+      z.enum(ADMIN_COUPON_STATUSES, {
+        message:
+          adminCouponListMessages.status,
+      }).optional(),
+    ),
+    page: z.preprocess(
+      (value) =>
+        isEmptyQueryValue(value)
+          ? undefined
+          : value,
+      z.coerce
+        .number({
+          message:
+            adminCouponListMessages.page,
+        })
+        .int({
+          message:
+            adminCouponListMessages.page,
+        })
+        .min(1, {
+          message:
+            adminCouponListMessages.pageMin,
+        })
+        .default(1),
+    ),
+    pageSize: z.preprocess(
+      (value) =>
+        isEmptyQueryValue(value)
+          ? undefined
+          : value,
+      z.coerce
+        .number({
+          message:
+            adminCouponListMessages.pageSize,
+        })
+        .int({
+          message:
+            adminCouponListMessages.pageSize,
+        })
+        .min(1, {
+          message:
+            adminCouponListMessages.pageSizeRange,
+        })
+        .max(
+          MAX_ADMIN_COUPON_PAGE_SIZE,
+          {
+            message:
+              adminCouponListMessages.pageSizeRange,
+          },
+        )
+        .default(
+          DEFAULT_ADMIN_COUPON_PAGE_SIZE,
+        ),
+    ),
+  })
+
+/**
+ * Listagem admin de cupões: KPIs globais (total, ativos, utilizações
+ * totais) derivados do MESMO conjunto de linhas que alimenta a tabela,
+ * pesquisa parcial por código e filtro por estado derivado em JS, com
+ * paginação — a última página real é o teto (pedidos além do fim
+ * devolvem a última página em vez de uma página vazia).
+ */
+export async function listAdminCoupons(
+  input:
+    | {
+        search?: unknown
+        status?: unknown
+        page?: unknown
+        pageSize?: unknown
+      }
+    | undefined,
+  client?: AdminCouponDbClient,
+): Promise<AdminCouponsPage> {
+  const query =
+    adminCouponListQuerySchema.parse(
+      {
+        search: input?.search,
+        status: input?.status,
+        page: input?.page,
+        pageSize:
+          input?.pageSize,
+      },
+    )
+
+  const adminClient =
+    getAdminCouponDbClient(client)
+
+  const records =
+    await adminClient.coupon.findMany(
+      {
+        orderBy: [
+          {
+            createdAt:
+              'desc',
+          },
+          { id: 'desc' },
+        ],
+        take: MAX_ADMIN_COUPON_ROWS,
+        select: couponSelect,
+      },
+    )
+
+  const now = new Date()
+
+  const rows = records.map(
+    (record) =>
+      toAdminCouponRow(
+        record,
+        now,
+      ),
+  )
+
+  // KPIs GLOBAIS: calculados sobre todos os cupões, independentemente
+  // dos filtros — os cartões de topo nunca mudam com a pesquisa.
+  const kpis: AdminCouponKpis = {
+    totalCoupons: rows.length,
+    activeCoupons: rows.filter(
+      (row) =>
+        row.status === 'ACTIVE',
+    ).length,
+    totalUses: rows.reduce(
+      (sum, row) =>
+        sum + row.usedCount,
+      0,
+    ),
+  }
+
+  const search = query.search
+    ?.toLocaleLowerCase('pt-PT')
+
+  const filtered = rows.filter(
+    (row) => {
+      const matchesSearch =
+        !search ||
+        row.code
+          .toLocaleLowerCase('pt-PT')
+          .includes(search)
+
+      const matchesStatus =
+        query.status ===
+          undefined ||
+        row.status ===
+          query.status
+
+      return (
+        matchesSearch &&
+        matchesStatus
+      )
+    },
+  )
+
+  // A última página real é o teto: sem páginas vazias além do fim.
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      filtered.length /
+        query.pageSize,
+    ),
+  )
+
+  const page = Math.min(
+    query.page,
+    totalPages,
+  )
+
+  const coupons =
+    filtered.slice(
+      (page - 1) * query.pageSize,
+      page * query.pageSize,
+    )
+
+  return {
+    coupons,
+    total: filtered.length,
+    page,
+    pageSize: query.pageSize,
+    totalPages,
+    kpis,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Criação admin
+// ---------------------------------------------------------------------------
+
+const COUPON_DISCOUNT_VALUE_MESSAGE =
+  'O valor do desconto deve ser um número'
+
+const COUPON_DISCOUNT_VALUE_POSITIVE_MESSAGE =
+  'O valor do desconto tem de ser superior a zero'
+
+const COUPON_MAX_USES_MESSAGE =
+  'O limite de utilizações deve ser um número inteiro'
+
+const COUPON_DATE_MESSAGE =
+  'Data inválida'
+
+/**
+ * Valor monetário admin (euros): aceita números e texto numérico
+ * (inputs de formulário), recusa negativos e valores acima do teto do
+ * Decimal(10,2) dos montantes persistidos.
+ */
+const couponAdminMoneySchema = z.coerce
+  .number({
+    message:
+      COUPON_DISCOUNT_VALUE_MESSAGE,
+  })
+  .min(0, {
+    message:
+      'O valor não pode ser negativo',
+  })
+  .max(COUPON_MAX_CART_TOTAL, {
+    message: `O valor excede o máximo suportado (${COUPON_MAX_CART_TOTAL} €)`,
+  })
+
+const couponAdminMaxUsesSchema = z.coerce
+  .number({
+    message:
+      COUPON_MAX_USES_MESSAGE,
+  })
+  .int({
+    message:
+      COUPON_MAX_USES_MESSAGE,
+  })
+  .min(1, {
+    message:
+      'O limite de utilizações tem de ser pelo menos 1',
+  })
+  .max(COUPON_MAX_CART_TOTAL, {
+    message: `O limite de utilizações não pode exceder ${COUPON_MAX_CART_TOTAL}`,
+  })
+
+const couponAdminDateSchema = z.coerce
+  .date({
+    message:
+      COUPON_DATE_MESSAGE,
+  })
+
+/**
+ * Na criação, campos ausentes/vazios/nulos significam "sem limite" ou
+ * "sem janela temporal". O `preprocess` evita que `null`/'' cheguem ao
+ * `z.coerce` (null → 0 e '' → 0 nos coerces numéricos).
+ */
+const optionalCreateMoneySchema = z.preprocess(
+  (value) =>
+    isEmptyQueryValue(value)
+      ? undefined
+      : value,
+  couponAdminMoneySchema.optional(),
+)
+
+const optionalCreateMaxUsesSchema =
+  z.preprocess(
+    (value) =>
+      isEmptyQueryValue(value)
+        ? undefined
+        : value,
+    couponAdminMaxUsesSchema.optional(),
+  )
+
+const optionalCreateDateSchema = z.preprocess(
+  (value) =>
+    isEmptyQueryValue(value)
+      ? undefined
+      : value,
+  couponAdminDateSchema.optional(),
+)
+
+/**
+ * Payload de criação de cupão (Zod): código normalizado (trim +
+ * maiúsculas), tipo + valor do desconto, limites opcionais e janela
+ * temporal. As validações cruzadas (percentagem ≤ 100 e
+ * `expiresAt` depois de `startsAt`) falham em `ZodError` → 400.
+ */
+export const couponCreateSchema = z
+  .object({
+    code: couponCodeSchema,
+    discountType: z.enum(
+      ['PERCENTAGE', 'FIXED_AMOUNT'],
+      {
+        message:
+          'Tipo de desconto inválido',
+      },
+    ),
+    discountValue: z.coerce
+      .number({
+        message:
+          COUPON_DISCOUNT_VALUE_MESSAGE,
+      })
+      .positive({
+        message:
+          COUPON_DISCOUNT_VALUE_POSITIVE_MESSAGE,
+      })
+      .max(COUPON_MAX_CART_TOTAL, {
+        message: `O valor do desconto excede o máximo suportado (${COUPON_MAX_CART_TOTAL} €)`,
+      }),
+    minOrderValue:
+      optionalCreateMoneySchema,
+    maxUses:
+      optionalCreateMaxUsesSchema,
+    startsAt:
+      optionalCreateDateSchema,
+    expiresAt:
+      optionalCreateDateSchema,
+    isActive: z
+      .boolean({
+        message:
+          'O estado ativo deve ser verdadeiro ou falso',
+      })
+      .default(true),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.discountType ===
+        'PERCENTAGE' &&
+      value.discountValue > 100
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['discountValue'],
+        message:
+          'A percentagem de desconto não pode exceder 100%',
+      })
+    }
+
+    if (
+      value.startsAt &&
+      value.expiresAt &&
+      value.startsAt.getTime() >=
+        value.expiresAt.getTime()
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['expiresAt'],
+        message:
+          'A data de fim tem de ser posterior à data de início',
+      })
+    }
+  })
+
+export type CouponCreateInput = z.infer<
+  typeof couponCreateSchema
+>
+
+/**
+ * Cria um cupão no backoffice. O código chega normalizado (trim +
+ * maiúsculas) pelo schema; colisão de código único (P2002 do Prisma)
+ * é convertida em `CouponCodeConflictError` → 409 na rota.
+ */
+export async function createAdminCoupon(
+  input: unknown,
+  client?: AdminCouponDbClient,
+): Promise<AdminCouponRow> {
+  const parsed =
+    couponCreateSchema.parse(
+      input ?? {},
+    )
+
+  const adminClient =
+    getAdminCouponDbClient(client)
+
+  try {
+    const record =
+      await adminClient.coupon.create({
+        data: {
+          code: parsed.code,
+          discountType:
+            parsed.discountType,
+          discountValue:
+            parsed.discountValue,
+          minOrderValue:
+            parsed.minOrderValue ??
+            null,
+          maxUses:
+            parsed.maxUses ?? null,
+          startsAt:
+            parsed.startsAt ?? null,
+          expiresAt:
+            parsed.expiresAt ??
+            null,
+          isActive:
+            parsed.isActive,
+        },
+        select: couponSelect,
+      })
+
+    return toAdminCouponRow(
+      record,
+      new Date(),
+    )
+  } catch (error) {
+    if (
+      (
+        error as {
+          code?: string
+        } | null
+      )?.code === 'P2002'
+    ) {
+      throw new CouponCodeConflictError()
+    }
+
+    throw error
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Atualização admin (toggle + edição de limites/datas)
+// ---------------------------------------------------------------------------
+
+/**
+ * Na atualização, ausente = "não mexer". Para os campos anuláveis,
+ * `null` (ou string vazia) = "limpar o limite" — padrão do limiar
+ * próprio do Épico 6, etapa 3. O `z.null()` é o PRIMEIRO membro da
+ * união: nos coerces do Zod v4, `null` vira `0` (número) ou epoch
+ * (data), por isso tem de casar ANTES do membro coercivo.
+ */
+const optionalUpdateMoneySchema = z.preprocess(
+  (value) =>
+    typeof value === 'string' &&
+    value.trim() === ''
+      ? null
+      : value,
+  z
+    .union([
+      z.null(),
+      couponAdminMoneySchema,
+    ])
+    .optional(),
+)
+
+const optionalUpdateMaxUsesSchema =
+  z.preprocess(
+    (value) =>
+      typeof value === 'string' &&
+      value.trim() === ''
+        ? null
+        : value,
+    z
+      .union([
+        z.null(),
+        couponAdminMaxUsesSchema,
+      ])
+      .optional(),
+  )
+
+const optionalUpdateDateSchema =
+  z.preprocess(
+    (value) =>
+      typeof value === 'string' &&
+      value.trim() === ''
+        ? null
+        : value,
+    z
+      .union([
+        z.null(),
+        couponAdminDateSchema,
+      ])
+      .optional(),
+  )
+
+/**
+ * Payload de atualização (Zod): `code` e `discountType` são
+ * IMUTÁVEIS — as encomendas guardam o código como snapshot e o tipo
+ * determina a semântica do valor guardado. Editável: `isActive`
+ * (toggle), `discountValue`, `minOrderValue`, `maxUses`, `startsAt`
+ * e `expiresAt`. Corpo sem campos → 400.
+ */
+export const couponUpdateSchema = z
+  .object({
+    isActive: z
+      .boolean({
+        message:
+          'O estado ativo deve ser verdadeiro ou falso',
+      })
+      .optional(),
+    discountValue: z.coerce
+      .number({
+        message:
+          COUPON_DISCOUNT_VALUE_MESSAGE,
+      })
+      .positive({
+        message:
+          COUPON_DISCOUNT_VALUE_POSITIVE_MESSAGE,
+      })
+      .max(COUPON_MAX_CART_TOTAL, {
+        message: `O valor do desconto excede o máximo suportado (${COUPON_MAX_CART_TOTAL} €)`,
+      })
+      .optional(),
+    minOrderValue:
+      optionalUpdateMoneySchema,
+    maxUses:
+      optionalUpdateMaxUsesSchema,
+    startsAt:
+      optionalUpdateDateSchema,
+    expiresAt:
+      optionalUpdateDateSchema,
+  })
+  .refine(
+    (value) =>
+      value.isActive !==
+        undefined ||
+      value.discountValue !==
+        undefined ||
+      value.minOrderValue !==
+        undefined ||
+      value.maxUses !==
+        undefined ||
+      value.startsAt !==
+        undefined ||
+      value.expiresAt !==
+        undefined,
+    {
+      message:
+        'Indica pelo menos um campo a atualizar',
+      path: ['_form'],
+    },
+  )
+
+export type CouponUpdateInput = z.infer<
+  typeof couponUpdateSchema
+>
+
+/**
+ * Atualiza um cupão (toggle de `isActive` e/ou edição de limites e
+ * janela temporal). A leitura do estado atual e a escrita correm na
+ * MESMA transação: os campos cruzados (percentagem ≤ 100 para cupões
+ * PERCENTAGE, `expiresAt` depois de `startsAt`) são validados sobre os
+ * valores EFETIVOS (patch mesclado com o atual) — um patch que isolado
+ * seria válido não pode deixar o cupão num estado inválido.
+ */
+export async function updateAdminCoupon(
+  idInput: unknown,
+  input: unknown,
+  client?: AdminCouponDbClient,
+): Promise<AdminCouponRow> {
+  const id =
+    normalizeAdminCouponId(idInput)
+
+  const parsed =
+    couponUpdateSchema.parse(
+      input ?? {},
+    )
+
+  const adminClient =
+    getAdminCouponDbClient(client)
+
+  return adminClient.$transaction(
+    async (transaction) => {
+      const current =
+        await transaction.coupon.findUnique(
+          {
+            where: {
+              id,
+            },
+            select: couponSelect,
+          },
+        )
+
+      if (!current) {
+        throw new CouponAdminNotFoundError()
+      }
+
+      const discountValue =
+        parsed.discountValue ===
+        undefined
+          ? current.discountValue
+          : parsed.discountValue
+
+      if (
+        current.discountType ===
+          'PERCENTAGE' &&
+        discountValue > 100
+      ) {
+        throw new CouponAdminValidationError(
+          'discountValue',
+          'A percentagem de desconto não pode exceder 100%',
+        )
+      }
+
+      const startsAt =
+        parsed.startsAt === undefined
+          ? current.startsAt
+          : parsed.startsAt
+
+      const expiresAt =
+        parsed.expiresAt ===
+        undefined
+          ? current.expiresAt
+          : parsed.expiresAt
+
+      if (
+        startsAt !== null &&
+        expiresAt !== null &&
+        startsAt.getTime() >=
+          expiresAt.getTime()
+      ) {
+        throw new CouponAdminValidationError(
+          'expiresAt',
+          'A data de fim tem de ser posterior à data de início',
+        )
+      }
+
+      const data: {
+        isActive?: boolean
+        discountValue?: number
+        minOrderValue?:
+          | number
+          | null
+        maxUses?: number | null
+        startsAt?: Date | null
+        expiresAt?: Date | null
+      } = {}
+
+      if (
+        parsed.isActive !==
+        undefined
+      ) {
+        data.isActive =
+          parsed.isActive
+      }
+
+      if (
+        parsed.discountValue !==
+        undefined
+      ) {
+        data.discountValue =
+          parsed.discountValue
+      }
+
+      if (
+        parsed.minOrderValue !==
+        undefined
+      ) {
+        data.minOrderValue =
+          parsed.minOrderValue
+      }
+
+      if (
+        parsed.maxUses !== undefined
+      ) {
+        data.maxUses =
+          parsed.maxUses
+      }
+
+      if (
+        parsed.startsAt !== undefined
+      ) {
+        data.startsAt =
+          parsed.startsAt
+      }
+
+      if (
+        parsed.expiresAt !==
+        undefined
+      ) {
+        data.expiresAt =
+          parsed.expiresAt
+      }
+
+      const updated =
+        await transaction.coupon.update(
+          {
+            where: {
+              id,
+            },
+            data,
+            select: couponSelect,
+          },
+        )
+
+      return toAdminCouponRow(
+        updated,
+        new Date(),
+      )
+    },
+  )
+}
+
+/**
+ * Toggle rápido de estado ativo (ações da tabela do backoffice).
+ * Delega na atualização com o campo `isActive` obrigatório.
+ */
+export async function toggleAdminCouponStatus(
+  input:
+    | {
+        id?: unknown
+        isActive?: unknown
+      }
+    | undefined,
+  client?: AdminCouponDbClient,
+): Promise<AdminCouponRow> {
+  if (
+    typeof input?.isActive !==
+    'boolean'
+  ) {
+    throw new CouponAdminValidationError(
+      'isActive',
+      'Indica se o cupão deve ficar ativo ou inativo',
+    )
+  }
+
+  return updateAdminCoupon(
+    input?.id,
+    {
+      isActive: input.isActive,
+    },
+    client,
+  )
+}

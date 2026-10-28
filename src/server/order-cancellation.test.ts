@@ -80,6 +80,12 @@ function createClient() {
       id: 'movement-1',
     })
 
+  // Épico 7 — etapa 2: reversão do uso do cupão na transação.
+  const couponUpdateMany =
+    vi.fn().mockResolvedValue({
+      count: 1,
+    })
+
   const transaction =
     vi.fn(
       async (
@@ -93,6 +99,10 @@ function createClient() {
             findUnique,
             updateMany:
               orderUpdateMany,
+          },
+          coupon: {
+            updateMany:
+              couponUpdateMany,
           },
           productVariant: {
             findUnique:
@@ -122,6 +132,7 @@ function createClient() {
     variantFindUnique,
     orderUpdateMany,
     variantUpdateMany,
+    couponUpdateMany,
     createMovement,
     createEvent,
   }
@@ -911,6 +922,260 @@ describe(
           ),
         ).rejects.toBeInstanceOf(
           OrderLifecycleNotFoundError,
+        )
+      },
+    )
+  },
+)
+
+// ===========================================================================
+// Épico 7 — etapa 2: reversão do uso do cupão no cancelamento
+// ===========================================================================
+
+describe(
+  'reversão do cupão no cancelamento',
+  () => {
+    test(
+      'cancela e devolve o uso do cupão na mesma transação',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          variantFindUnique,
+          variantUpdateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        // Duas escritas na encomenda: o cancelamento
+        // e a marca da reversão.
+        orderUpdateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 5,
+          },
+        )
+
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          orderUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            couponReversedAt:
+              null,
+          },
+          data: {
+            couponReversedAt:
+              expect.any(
+                Date,
+              ),
+          },
+        })
+
+        expect(
+          couponUpdateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            code: 'PROMO10',
+            usedCount: {
+              gt: 0,
+            },
+          },
+          data: {
+            usedCount: {
+              decrement: 1,
+            },
+          },
+        })
+
+        // A marca precede o decremento.
+        expect(
+          orderUpdateMany.mock
+            .invocationCallOrder[1],
+        ).toBeLessThan(
+          couponUpdateMany.mock
+            .invocationCallOrder[0],
+        )
+      },
+    )
+
+    test(
+      'cancelamento sem cupão → não toca no cupão nem na marca',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          variantFindUnique,
+          variantUpdateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder(),
+        )
+
+        orderUpdateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 5,
+          },
+        )
+
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          couponUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        // Só o updateMany do cancelamento — sem marca.
+        expect(
+          orderUpdateMany,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+      },
+    )
+
+    test(
+      'encomenda já cancelada → sem reversão (idempotente)',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            status:
+              'CANCELLED' as never,
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          orderUpdateMany,
+        ).not.toHaveBeenCalled()
+
+        expect(
+          couponUpdateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'cupão eliminado → cancelamento continua (best-effort)',
+      async () => {
+        const {
+          client,
+          findUnique,
+          orderUpdateMany,
+          variantFindUnique,
+          variantUpdateMany,
+          couponUpdateMany,
+        } = createClient()
+
+        findUnique.mockResolvedValue(
+          createOrder({
+            couponCode:
+              'PROMO10',
+          }),
+        )
+
+        orderUpdateMany
+          .mockResolvedValue({
+            count: 1,
+          })
+
+        variantFindUnique.mockResolvedValue(
+          {
+            stockQuantity: 5,
+          },
+        )
+
+        variantUpdateMany.mockResolvedValue(
+          {
+            count: 1,
+          },
+        )
+
+        couponUpdateMany
+          .mockResolvedValueOnce({
+            count: 0,
+          })
+
+        await expect(
+          cancelOrderAndRestoreStock(
+            'order-1',
+            client,
+          ),
+        ).resolves.toMatchObject({
+          status:
+            'CANCELLED',
+        })
+
+        expect(
+          couponUpdateMany,
+        ).toHaveBeenCalledTimes(
+          1,
         )
       },
     )

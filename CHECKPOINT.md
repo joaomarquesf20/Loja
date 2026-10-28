@@ -2399,6 +2399,227 @@ Próximos passos (pós-etapa):
 - Continuar o Épico 7 (etapa 2) com o
   utilizador.
 
+## Épico 7 — Etapa 2 (concluída): Backoffice
+de gestão de cupões e reversão por
+anulação/reembolso
+
+Data: 2026-10-28 · Branch: `master` · Sem
+commit (aguarda pedido do utilizador).
+
+Pedido do utilizador: funções admin em
+`src/server/coupons.ts` (listar/criar/
+atualizar/toggle + `decrementCouponUsage`
+em transações para reverter o uso na
+anulação/reembolso), guardas
+`requireAdmin()` e schemas Zod
+(`couponCreateSchema`/`couponUpdateSchema`);
+`GET/POST /api/admin/coupons` (paginado,
+pesquisa por código, filtros de estado
+Ativo/Expirado/Limite atingido, KPIs);
+`PATCH /api/admin/coupons/[id]` (toggle ou
+edição de limites/datas); rota de transição
+a reverter o uso atomicamente quando a
+encomenda tem `couponCode`; item «Cupões»
+na navegação admin; UI com cartões KPI
+(Total Cupões, Ativos, Utilizações Totais),
+formulário de criação, pesquisa/filtros e
+tabela com badges + toggles; testes
+(incl. reversão na anulação + guardas de
+auth); gate completa; CHECKPOINT.
+
+Esquema + migração:
+- `Order.couponReversedAt DateTime?` —
+  marcador de idempotência da reversão:
+  reembolso (PAID→REFUNDED) seguido de
+  cancelamento (REFUNDED é anulável)
+  descontaria o uso DUAS vezes sem a marca;
+  migração `20261028181721_add_order_coupon_reversed_at`
+  aplicada + `npx prisma generate` manual.
+
+Reversão (`src/server/coupons.ts`):
+- `decrementCouponUsage(transaction,
+  {orderId, couponCode, now?})` — chamada
+  DENTRO da transação da transição:
+  - `couponCode` ausente/vazio → no-op
+    (`false`), sem tocar em nenhum delegate;
+  - marca PRIMEIRO via `order.updateMany`
+    guardado (`{id, couponReversedAt: null}`
+    → `couponReversedAt`); `count !== 1`
+    (já revertido/corrida concorrente) →
+    sai sem decrementar;
+  - decremento guardado no cupão
+    (`{code (maiúsculas), usedCount: {gt:0}}`
+    → decrement 1); cupão eliminado ou
+    contador já a zero → best-effort: a
+    transição do pedido NÃO falha.
+- Ligada nos DOIS caminhos de transição:
+  `cancelOrderAndRestoreStockForOwner`
+  (após o evento CANCELLED) e
+  `refundSimulatedPaymentForOwner` (após o
+  evento PAYMENT_REFUNDED) — ambos os
+  selects/registos ganham `couponCode` e
+  as interfaces de transação alargam
+  `order.updateMany` (união com os args do
+  marcador) + delegate `coupon.updateMany`.
+- Fixtures antigas (sem `couponCode`)
+  continuam válidas: a reversão só toca nos
+  delegates com cupão.
+
+Gestão admin (`src/server/coupons.ts`):
+- Erros: `CouponAdminValidationError`
+  (field + mensagem → 400),
+  `CouponAdminNotFoundError` (→ 404),
+  `CouponCodeConflictError` (P2002 → 409).
+- `adminCouponStatusFrom`: INACTIVE
+  (desativado, precedência máxima) →
+  EXPIRED (`expiresAt` exclusivo) →
+  LIMIT_REACHED (`usedCount ≥ maxUses`) →
+  ACTIVE.
+- `listAdminCoupons(input?, client?)` —
+  leitura única (`findMany` até
+  `MAX_ADMIN_COUPON_ROWS` 1000, createdAt
+  desc) com estado derivado em JS (o
+  `where` Prisma não compara
+  `usedCount ↔ maxUses`); pesquisa parcial
+  por código sem sensibilidade a
+  maiúsculas + filtro de estado; KPIs
+  GLOBAIS (`totalCoupons`, `activeCoupons`,
+  `totalUses`) calculados sobre o conjunto
+  completo, nunca alterados pelos filtros;
+  paginação com a última página real como
+  teto; query validada por
+  `adminCouponListQuerySchema` (Zod → 400).
+- `couponCreateSchema` — código (trim +
+  maiúsculas, ≤ 40), `discountType`,
+  `discountValue` > 0 ≤ 999999 (PERCENTAGE
+  ≤ 100 via superRefine), `minOrderValue`
+  ≥ 0, `maxUses` inteiro ≥ 1, datas Zod
+  coerced (null/vazio → sem limite),
+  `isActive` default true; validação cruzada
+  `expiresAt > startsAt`.
+- `createAdminCoupon` — P2002 →
+  `CouponCodeConflictError`.
+- `couponUpdateSchema` — `code` e
+  `discountType` IMUTÁVEIS (snapshot nas
+  encomendas); editáveis `isActive`,
+  `discountValue`, `minOrderValue`,
+  `maxUses`, `startsAt`, `expiresAt`;
+  `null`/vazio limpa os anuláveis; corpo
+  vazio → issue em `_form`.
+- `updateAdminCoupon(id, input?, client?)`
+  — leitura + escrita na MESMA transação;
+  validações cruzadas sobre valores
+  EFETIVOS (patch mesclado com o atual:
+  percentagem ≤ 100 conforme o tipo
+  persistido, janela temporal coerente).
+- `toggleAdminCouponStatus` — delega na
+  atualização com `isActive` obrigatório.
+
+Rotas admin (padrão da rota de
+inventário/users: `requireAdmin()` +
+`handleError` com mapeamento 401/403/400
+ZodError (com `fieldErrors` por campo) /
+404 / 409 / 413 / 500, `readJsonBody` com
+limite de 8 KiB):
+- `src/app/api/admin/coupons/route.ts` —
+  `GET` (KPIs + listagem com
+  `?search=&status=&page=&pageSize=`) e
+  `POST` (cria, 201; colisão → 409).
+- `src/app/api/admin/coupons/[id]/route.ts`
+  — `PATCH` (toggle/edição; 404 quando o
+  cupão não existe).
+
+UI admin:
+- `admin-navigation.tsx`: item «Cupões»
+  (`/admin/coupons`) logo após
+  «Encomendas»; `admin-navigation.test.tsx`
+  atualizado com a nova área.
+- `src/app/admin/coupons/page.tsx` —
+  página de servidor com o padrão do
+  inventário (getServerSession →
+  redirect/notFound + LogoutButton).
+- `src/app/admin/coupons/coupons-client.tsx`
+  — 3 cartões KPI (Total de cupões, Ativos,
+  Utilizações totais), formulário de criação
+  (código, tipo %/€, valor, subtotal mínimo,
+  limite, datas — início no início do dia,
+  fim no fim do dia), pesquisa por código +
+  filtro de estado no cliente (padrão do
+  inventário), tabela com badges
+  (Ativo/Inativo/Expirado/Limite atingido),
+  paginação local e toggles via
+  `PATCH /api/admin/coupons/[id]` com
+  recarga da vista; imports APENAS `type`
+  de `@/server/coupons` (o módulo real
+  importa `./db`).
+
+Testes (75 novos/estendidos na etapa —
+total 2498 passados + 3 skipped):
+- `coupons.test.ts` (75): reversão (no-op
+  sem cupão, marca→decremento com ordem
+  verificada por `invocationCallOrder`,
+  normalização do código, uso já revertido,
+  cupão eliminado); estados derivados;
+  listagem (KPIs globais, filtros,
+  pesquisa, paginação/teto, query inválida);
+  criação (normalização, defaults,
+  percentagem ≤ 100, janela invertida,
+  P2002 → conflito, FIXED > 100 ok);
+  atualização (toggle, edição, nulls a
+  limpar, 404, id inválido, validações
+  cruzadas mescladas, corpo vazio, toggle
+  exige booleano).
+- `order-cancellation.test.ts` (+4) e
+  `payment-refund.test.ts` (+4): reversão
+  dentro da transação (marca + decremento
+  com ordem), sem cupão → sem chamadas,
+  transição já concluída → sem reversão,
+  cupão eliminado → transição continua.
+- `src/app/api/admin/coupons/route.test.ts`
+  (11) e `[id]/route.test.ts` (7): 200/201,
+  401, 403, 400 (Zod + validação de
+  negócio), 404, 409, 500, propagação da
+  query.
+- `coupons-client.test.tsx` (9): KPIs,
+  filtros/pesquisa/limpar, paginação,
+  criação com corpo validado + recarga,
+  erros de servidor e validação de cliente,
+  toggle com recarga e erro.
+- Lições desta etapa: no Zod v4, num
+  `z.union` com `z.coerce`, o membro
+  coercivo converte `null` em `0` (número)
+  ou epoch (data) — colocar `z.null()`
+  PRIMEIRO na união para curto-circuitar;
+  `expect.objectContaining` aninhado tem
+  de ser assimétrico em todos os níveis;
+  novos delegates na transação exigem
+  stubs (variantFindUnique/variantUpdateMany)
+  nos testes novos; e NUNCA manipular
+  ficheiros com acentos via PowerShell
+  `-replace` (o console corrompe o
+  literal → ficheiro truncado; restaurei
+  do git com `git checkout --` e reeditei
+  com a ferramenta de edição).
+
+Gate: `npx tsc --noEmit` limpo;
+`npx vitest run` 2498 passados + 3 skipped
+(171 ficheiros); `npm run lint` limpo;
+`npm run build` limpo (mapa inclui
+`/admin/coupons`, `/api/admin/coupons`,
+`/api/admin/coupons/[id]`).
+
+Próximos passos (pós-etapa):
+- Commit da etapa 2 quando o utilizador
+  pedir (ficheiros: prisma/schema.prisma +
+  migração add_order_coupon_reversed_at,
+  coupons.ts (+test), order-cancellation.ts
+  (+test), payment-refund.ts (+test), rotas
+  admin/coupons (+tests), admin-navigation
+  (+test), admin/coupons page+client
+  (+test), CHECKPOINT.md).
+- Continuar o Épico 7 (etapa 3) com o
+  utilizador.
+
 
 
 

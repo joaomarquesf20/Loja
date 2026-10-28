@@ -9,13 +9,24 @@ import {
 
 import {
   COUPON_CODE_MAX_LENGTH,
+  DEFAULT_ADMIN_COUPON_PAGE_SIZE,
+  MAX_ADMIN_COUPON_PAGE_SIZE,
+  adminCouponStatusFrom,
   applyCouponToOrder,
   couponAmountToCents,
+  couponCreateSchema,
+  createAdminCoupon,
+  decrementCouponUsage,
   evaluateCoupon,
   incrementCouponUsage,
+  listAdminCoupons,
   readCartSubtotalCents,
+  toggleAdminCouponStatus,
+  updateAdminCoupon,
   validateCouponCode,
   couponValidationSchema,
+  CouponAdminNotFoundError,
+  CouponCodeConflictError,
   CouponRejectedError,
   type CouponRecord,
 } from './coupons'
@@ -1004,3 +1015,1473 @@ describe('readCartSubtotalCents', () => {
     ).not.toHaveBeenCalled()
   })
 })
+
+// ===========================================================================
+// Épico 7 — etapa 2: reversão do uso + gestão admin
+// ===========================================================================
+
+describe(
+  'decrementCouponUsage',
+  () => {
+    function createReversalTx(
+      orderCount = 1,
+      couponCount = 1,
+    ) {
+      return {
+        order: {
+          updateMany: vi.fn(
+            async () => ({
+              count: orderCount,
+            }),
+          ),
+        },
+        coupon: {
+          updateMany: vi.fn(
+            async () => ({
+              count: couponCount,
+            }),
+          ),
+        },
+      }
+    }
+
+    test(
+      'encomenda sem cupão → no-op sem tocar nos delegates',
+      async () => {
+        for (const couponCode of [
+          null,
+          undefined,
+          '   ',
+        ]) {
+          const tx =
+            createReversalTx()
+
+          await expect(
+            decrementCouponUsage(
+              tx as never,
+              {
+                orderId:
+                  'order-1',
+                couponCode:
+                  couponCode as
+                    | null
+                    | undefined,
+              },
+            ),
+          ).resolves.toBe(
+            false,
+          )
+
+          expect(
+            tx.order.updateMany,
+          ).not.toHaveBeenCalled()
+
+          expect(
+            tx.coupon
+              .updateMany,
+          ).not.toHaveBeenCalled()
+        }
+      },
+    )
+
+    test(
+      'reverte o uso: marca a encomenda e decrementa o cupão',
+      async () => {
+        const tx =
+          createReversalTx()
+
+        const now =
+          new Date(
+            '2026-10-28T12:00:00.000Z',
+          )
+
+        await expect(
+          decrementCouponUsage(
+            tx as never,
+            {
+              orderId:
+                'order-1',
+              couponCode:
+                'PROMO10',
+              now,
+            },
+          ),
+        ).resolves.toBe(true)
+
+        expect(
+          tx.order.updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            id: 'order-1',
+            couponReversedAt:
+              null,
+          },
+          data: {
+            couponReversedAt:
+              now,
+          },
+        })
+
+        expect(
+          tx.coupon.updateMany,
+        ).toHaveBeenCalledWith({
+          where: {
+            code: 'PROMO10',
+            usedCount: {
+              gt: 0,
+            },
+          },
+          data: {
+            usedCount: {
+              decrement: 1,
+            },
+          },
+        })
+
+        // A marca precede o decremento: sem marca
+        // escrita não há devolução de uso.
+        expect(
+          tx.order.updateMany.mock
+            .invocationCallOrder[0],
+        ).toBeLessThan(
+          tx.coupon.updateMany.mock
+            .invocationCallOrder[0],
+        )
+      },
+    )
+
+    test(
+      'normaliza o código (trim + maiúsculas)',
+      async () => {
+        const tx =
+          createReversalTx()
+
+        await decrementCouponUsage(
+          tx as never,
+          {
+            orderId:
+              'order-1',
+            couponCode:
+              '  promo10  ',
+          },
+        )
+
+        expect(
+          tx.coupon.updateMany,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where:
+              expect.objectContaining(
+                {
+                  code: 'PROMO10',
+                },
+              ),
+          }),
+        )
+      },
+    )
+
+    test(
+      'uso já revertido → não decrementa outra vez',
+      async () => {
+        const tx =
+          createReversalTx(0)
+
+        await expect(
+          decrementCouponUsage(
+            tx as never,
+            {
+              orderId:
+                'order-1',
+              couponCode:
+                'PROMO10',
+            },
+          ),
+        ).resolves.toBe(false)
+
+        expect(
+          tx.coupon
+            .updateMany,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'cupão eliminado → não lança e mantém a marca',
+      async () => {
+        const tx =
+          createReversalTx(
+            1,
+            0,
+          )
+
+        await expect(
+          decrementCouponUsage(
+            tx as never,
+            {
+              orderId:
+                'order-1',
+              couponCode:
+                'PROMO10',
+            },
+          ),
+        ).resolves.toBe(false)
+
+        expect(
+          tx.order.updateMany,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'adminCouponStatusFrom',
+  () => {
+    test(
+      'cupão ativo sem limites → ACTIVE',
+      () => {
+        expect(
+          adminCouponStatusFrom(
+            createCouponRecord(),
+          ),
+        ).toBe('ACTIVE')
+      },
+    )
+
+    test(
+      'desativado tem precedência sobre expirado e limite',
+      () => {
+        expect(
+          adminCouponStatusFrom(
+            createCouponRecord({
+              isActive: false,
+              expiresAt:
+                new Date(
+                  '2026-10-01T00:00:00.000Z',
+                ),
+              maxUses: 2,
+              usedCount: 2,
+            }),
+          ),
+        ).toBe(
+          'INACTIVE',
+        )
+      },
+    )
+
+    test(
+      'expira na hora (expiresAt exclusivo)',
+      () => {
+        expect(
+          adminCouponStatusFrom(
+            createCouponRecord({
+              expiresAt:
+                new Date(
+                  '2026-10-28T12:00:00.000Z',
+                ),
+            }),
+          ),
+        ).toBe('EXPIRED')
+      },
+    )
+
+    test(
+      'limite atingido → LIMIT_REACHED',
+      () => {
+        expect(
+          adminCouponStatusFrom(
+            createCouponRecord({
+              maxUses: 5,
+              usedCount: 5,
+            }),
+          ),
+        ).toBe(
+          'LIMIT_REACHED',
+        )
+
+        expect(
+          adminCouponStatusFrom(
+            createCouponRecord({
+              maxUses: 5,
+              usedCount: 4,
+            }),
+          ),
+        ).toBe('ACTIVE')
+      },
+    )
+  },
+)
+
+describe(
+  'listAdminCoupons',
+  () => {
+    function createAdminDbClient(
+      records: CouponRecord[],
+    ) {
+      const coupon = {
+        findMany: vi.fn(
+          async () =>
+            records,
+        ),
+        findUnique:
+          vi.fn(
+            async () =>
+              records[0] ??
+              null,
+          ),
+        create: vi.fn(
+          async ({
+            data,
+          }: {
+            data: Record<
+              string,
+              unknown
+            >
+          }) =>
+            createCouponRecord(
+              data,
+            ),
+        ),
+        update: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: {
+              id: string
+            }
+            data: Record<
+              string,
+              unknown
+            >
+          }) => {
+            const base =
+              records.find(
+                (record) =>
+                  record.id ===
+                  where.id,
+              )
+
+            if (!base) {
+              throw new Error(
+                'fake update sem registo base',
+              )
+            }
+
+            return createCouponRecord(
+              {
+                ...base,
+                ...data,
+              },
+            )
+          },
+        ),
+      }
+
+      const client = {
+        coupon,
+        $transaction: vi.fn(
+          async (
+            callback: (
+              transaction: unknown,
+            ) => unknown,
+          ) =>
+            callback(
+              client as never,
+            ),
+        ),
+      }
+
+      return client
+    }
+
+    function adminListRecords(): CouponRecord[] {
+      return [
+        createCouponRecord({
+          id: 'coupon-1',
+          code: 'PROMO10',
+          usedCount: 3,
+        }),
+        createCouponRecord({
+          id: 'coupon-2',
+          code: 'OLD5',
+          discountType:
+            'FIXED_AMOUNT',
+          discountValue: 5,
+          isActive: false,
+          usedCount: 2,
+        }),
+        createCouponRecord({
+          id: 'coupon-3',
+          code: 'EXPIRED10',
+          expiresAt:
+            new Date(
+              '2026-10-01T00:00:00.000Z',
+            ),
+          usedCount: 1,
+        }),
+        createCouponRecord({
+          id: 'coupon-4',
+          code: 'LIMITED5',
+          maxUses: 2,
+          usedCount: 2,
+        }),
+      ]
+    }
+
+    test(
+      'devolve todas as linhas com estado derivado + KPIs globais',
+      async () => {
+        const client =
+          createAdminDbClient(
+            adminListRecords(),
+          )
+
+        await expect(
+          listAdminCoupons(
+            undefined,
+            client as never,
+          ),
+        ).resolves.toEqual({
+          coupons: [
+            expect.objectContaining(
+              {
+                code: 'PROMO10',
+                status:
+                  'ACTIVE',
+              },
+            ),
+            expect.objectContaining(
+              {
+                code: 'OLD5',
+                status:
+                  'INACTIVE',
+              },
+            ),
+            expect.objectContaining(
+              {
+                code: 'EXPIRED10',
+                status:
+                  'EXPIRED',
+              },
+            ),
+            expect.objectContaining(
+              {
+                code: 'LIMITED5',
+                status:
+                  'LIMIT_REACHED',
+              },
+            ),
+          ],
+          total: 4,
+          page: 1,
+          pageSize:
+            DEFAULT_ADMIN_COUPON_PAGE_SIZE,
+          totalPages: 1,
+          kpis: {
+            totalCoupons: 4,
+            activeCoupons: 1,
+            totalUses: 8,
+          },
+        })
+      },
+    )
+
+    test(
+      'filtra por estado sem alterar os KPIs globais',
+      async () => {
+        const client =
+          createAdminDbClient(
+            adminListRecords(),
+          )
+
+        const page =
+          await listAdminCoupons(
+            {
+              status: 'ACTIVE',
+            },
+            client as never,
+          )
+
+        expect(
+          page.coupons.map(
+            (row) =>
+              row.code,
+          ),
+        ).toEqual(['PROMO10'])
+
+        expect(
+          page.total,
+        ).toBe(1)
+
+        expect(
+          page.kpis,
+        ).toEqual({
+          totalCoupons: 4,
+          activeCoupons: 1,
+          totalUses: 8,
+        })
+      },
+    )
+
+    test(
+      'pesquisa por código sem sensibilidade a maiúsculas',
+      async () => {
+        const client =
+          createAdminDbClient(
+            adminListRecords(),
+          )
+
+        const page =
+          await listAdminCoupons(
+            {
+              search: 'promo',
+            },
+            client as never,
+          )
+
+        expect(
+          page.coupons.map(
+            (row) =>
+              row.code,
+          ),
+        ).toEqual(['PROMO10'])
+      },
+    )
+
+    test(
+      'pagina com a última página real como teto',
+      async () => {
+        const client =
+          createAdminDbClient(
+            adminListRecords(),
+          )
+
+        const page =
+          await listAdminCoupons(
+            {
+              page: 5,
+              pageSize: 2,
+            },
+            client as never,
+          )
+
+        expect(
+          page.page,
+        ).toBe(2)
+
+        expect(
+          page.totalPages,
+        ).toBe(2)
+
+        expect(
+          page.coupons.map(
+            (row) =>
+              row.code,
+          ),
+        ).toEqual([
+          'EXPIRED10',
+          'LIMITED5',
+        ])
+      },
+    )
+
+    test(
+      'rejeita query inválida com ZodError',
+      async () => {
+        const client =
+          createAdminDbClient([])
+
+        await expect(
+          listAdminCoupons(
+            {
+              page: 0,
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          Error,
+        )
+
+        await expect(
+          listAdminCoupons(
+            {
+              pageSize:
+                MAX_ADMIN_COUPON_PAGE_SIZE +
+                1,
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          Error,
+        )
+
+        await expect(
+          listAdminCoupons(
+            {
+              status: 'WEIRD',
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          Error,
+        )
+      },
+    )
+
+    test(
+      'aceita o teto de pageSize',
+      async () => {
+        const client =
+          createAdminDbClient(
+            adminListRecords(),
+          )
+
+        const page =
+          await listAdminCoupons(
+            {
+              pageSize:
+                MAX_ADMIN_COUPON_PAGE_SIZE,
+            },
+            client as never,
+          )
+
+        expect(
+          page.totalPages,
+        ).toBe(1)
+      },
+    )
+  },
+)
+
+describe(
+  'couponCreateSchema',
+  () => {
+    test(
+      'normaliza o código e aplica defaults',
+      () => {
+        const parsed =
+          couponCreateSchema.parse(
+            {
+              code: ' promo10 ',
+              discountType:
+                'PERCENTAGE',
+              discountValue:
+                '10',
+            },
+          )
+
+        expect(
+          parsed.code,
+        ).toBe('PROMO10')
+
+        expect(
+          parsed.discountValue,
+        ).toBe(10)
+
+        expect(
+          parsed.isActive,
+        ).toBe(true)
+
+        expect(
+          parsed.minOrderValue,
+        ).toBeUndefined()
+
+        expect(
+          parsed.maxUses,
+        ).toBeUndefined()
+      },
+    )
+
+    test(
+      'recusa percentagem acima de 100',
+      () => {
+        const result =
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 101,
+            },
+          )
+
+        expect(
+          result.success,
+        ).toBe(false)
+
+        if (!result.success) {
+          expect(
+            result.error.issues[0]
+              .path,
+          ).toEqual([
+            'discountValue',
+          ])
+        }
+      },
+    )
+
+    test(
+      'recusa valor zero e texto não numérico',
+      () => {
+        expect(
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'FIXED_AMOUNT',
+              discountValue: 0,
+            },
+          ).success,
+        ).toBe(false)
+
+        expect(
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'FIXED_AMOUNT',
+              discountValue:
+                'muito',
+            },
+          ).success,
+        ).toBe(false)
+      },
+    )
+
+    test(
+      'recusa janela temporal invertida',
+      () => {
+        const result =
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+              startsAt:
+                '2026-11-01T00:00:00.000Z',
+              expiresAt:
+                '2026-10-01T00:00:00.000Z',
+            },
+          )
+
+        expect(
+          result.success,
+        ).toBe(false)
+
+        if (!result.success) {
+          expect(
+            result.error.issues[0]
+              .path,
+          ).toEqual(['expiresAt'])
+        }
+      },
+    )
+
+    test(
+      'recusa maxUses inválido e datas malformadas',
+      () => {
+        expect(
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+              maxUses: 0,
+            },
+          ).success,
+        ).toBe(false)
+
+        expect(
+          couponCreateSchema.safeParse(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+              startsAt: 'banana',
+            },
+          ).success,
+        ).toBe(false)
+      },
+    )
+
+    test(
+      'valor fixo acima de 100 é permitido',
+      () => {
+        const parsed =
+          couponCreateSchema.parse(
+            {
+              code: 'GRANDE',
+              discountType:
+                'FIXED_AMOUNT',
+              discountValue: 150,
+            },
+          )
+
+        expect(
+          parsed.discountValue,
+        ).toBe(150)
+      },
+    )
+  },
+)
+
+describe(
+  'createAdminCoupon',
+  () => {
+    function createAdminDbClient(
+      records: CouponRecord[],
+      createImplementation?: (
+        args: {
+          data: Record<
+            string,
+            unknown
+          >
+        },
+      ) => Promise<CouponRecord>,
+    ) {
+      const coupon = {
+        findMany: vi.fn(
+          async () =>
+            records,
+        ),
+        findUnique:
+          vi.fn(
+            async () =>
+              records[0] ??
+              null,
+          ),
+        create: vi.fn(
+          createImplementation ??
+            (async ({
+              data,
+            }) =>
+              createCouponRecord(
+                data,
+              )),
+        ),
+        update: vi.fn(),
+      }
+
+      return {
+        coupon,
+        $transaction: vi.fn(),
+      }
+    }
+
+    test(
+      'cria cupão com dados normalizados',
+      async () => {
+        const client =
+          createAdminDbClient([])
+
+        const row =
+          await createAdminCoupon(
+            {
+              code: ' promo10 ',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+            },
+            client as never,
+          )
+
+        expect(
+          client.coupon.create,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+              minOrderValue:
+                null,
+              maxUses: null,
+              startsAt: null,
+              expiresAt: null,
+              isActive: true,
+            },
+          }),
+        )
+
+        expect(row).toEqual(
+          expect.objectContaining(
+            {
+              code: 'PROMO10',
+              status: 'ACTIVE',
+              startsAt: null,
+              expiresAt: null,
+            },
+          ),
+        )
+      },
+    )
+
+    test(
+      'campos vazios tornam-se null',
+      async () => {
+        const client =
+          createAdminDbClient([])
+
+        await createAdminCoupon(
+          {
+            code: 'PROMO10',
+            discountType:
+              'PERCENTAGE',
+            discountValue: 10,
+            minOrderValue: '',
+            maxUses: null,
+          },
+          client as never,
+        )
+
+        expect(
+          client.coupon.create,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data:
+              expect.objectContaining(
+                {
+                  minOrderValue:
+                    null,
+                  maxUses: null,
+                },
+              ),
+          }),
+        )
+      },
+    )
+
+    test(
+      'cupão criado inativo → INACTIVE',
+      async () => {
+        const client =
+          createAdminDbClient([])
+
+        const row =
+          await createAdminCoupon(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+              isActive: false,
+            },
+            client as never,
+          )
+
+        expect(
+          row.status,
+        ).toBe('INACTIVE')
+      },
+    )
+
+    test(
+      'colisão de código → CouponCodeConflictError',
+      async () => {
+        const p2002 =
+          Object.assign(
+            new Error(
+              'Unique constraint failed',
+            ),
+            { code: 'P2002' },
+          )
+
+        const client =
+          createAdminDbClient(
+            [],
+            async () => {
+              throw p2002
+            },
+          )
+
+        await expect(
+          createAdminCoupon(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          CouponCodeConflictError,
+        )
+      },
+    )
+
+    test(
+      'erro inesperado propaga sem conversão',
+      async () => {
+        const client =
+          createAdminDbClient(
+            [],
+            async () => {
+              throw new Error(
+                'boom',
+              )
+            },
+          )
+
+        await expect(
+          createAdminCoupon(
+            {
+              code: 'PROMO10',
+              discountType:
+                'PERCENTAGE',
+              discountValue: 10,
+            },
+            client as never,
+          ),
+        ).rejects.toThrow('boom')
+      },
+    )
+  },
+)
+
+describe(
+  'updateAdminCoupon + toggleAdminCouponStatus',
+  () => {
+    function createAdminDbClient(
+      records: CouponRecord[],
+    ) {
+      const coupon = {
+        findMany: vi.fn(
+          async () =>
+            records,
+        ),
+        findUnique:
+          vi.fn(
+            async ({
+              where,
+            }: {
+              where: {
+                id: string
+              }
+            }) =>
+              records.find(
+                (record) =>
+                  record.id ===
+                  where.id,
+              ) ?? null,
+          ),
+        create: vi.fn(),
+        update: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: {
+              id: string
+            }
+            data: Record<
+              string,
+              unknown
+            >
+          }) => {
+            const base =
+              records.find(
+                (record) =>
+                  record.id ===
+                  where.id,
+              )
+
+            if (!base) {
+              throw new Error(
+                'fake update sem registo base',
+              )
+            }
+
+            return createCouponRecord(
+              {
+                ...base,
+                ...data,
+              },
+            )
+          },
+        ),
+      }
+
+      const client = {
+        coupon,
+        $transaction: vi.fn(
+          async (
+            callback: (
+              transaction: unknown,
+            ) => unknown,
+          ) =>
+            callback(
+              client as never,
+            ),
+        ),
+      }
+
+      return client
+    }
+
+    test(
+      'toggle isActive para inativo',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord(),
+          ])
+
+        const row =
+          await updateAdminCoupon(
+            'coupon-1',
+            {
+              isActive: false,
+            },
+            client as never,
+          )
+
+        expect(
+          client.coupon.update,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: {
+              id: 'coupon-1',
+            },
+            data: {
+              isActive: false,
+            },
+          }),
+        )
+
+        expect(
+          row.status,
+        ).toBe('INACTIVE')
+      },
+    )
+
+    test(
+      'edita limites mantendo code/discountType imutáveis',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord(),
+          ])
+
+        const row =
+          await updateAdminCoupon(
+            'coupon-1',
+            {
+              discountValue: 20,
+              maxUses: 10,
+            },
+            client as never,
+          )
+
+        expect(
+          client.coupon.update,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data:
+              expect.not.objectContaining(
+                {
+                  code:
+                    expect.anything(),
+                  discountType:
+                    expect.anything(),
+                },
+              ),
+          }),
+        )
+
+        expect(
+          row.discountValue,
+        ).toBe(20)
+
+        expect(
+          row.maxUses,
+        ).toBe(10)
+      },
+    )
+
+    test(
+      'null limpa os limites anuláveis',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord({
+              minOrderValue: 50,
+              maxUses: 5,
+              startsAt:
+                new Date(
+                  '2026-10-01T00:00:00.000Z',
+                ),
+              expiresAt:
+                new Date(
+                  '2026-11-01T00:00:00.000Z',
+                ),
+            }),
+          ])
+
+        const row =
+          await updateAdminCoupon(
+            'coupon-1',
+            {
+              minOrderValue:
+                null,
+              maxUses: null,
+              startsAt: null,
+              expiresAt: null,
+            },
+            client as never,
+          )
+
+        expect(
+          client.coupon.update,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: {
+              minOrderValue:
+                null,
+              maxUses: null,
+              startsAt: null,
+              expiresAt: null,
+            },
+          }),
+        )
+
+        expect(
+          row.minOrderValue,
+        ).toBeNull()
+
+        expect(
+          row.maxUses,
+        ).toBeNull()
+      },
+    )
+
+    test(
+      'cupão inexistente → CouponAdminNotFoundError',
+      async () => {
+        const client =
+          createAdminDbClient([])
+
+        await expect(
+          updateAdminCoupon(
+            'coupon-404',
+            {
+              isActive: false,
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          CouponAdminNotFoundError,
+        )
+      },
+    )
+
+    test(
+      'id inválido → CouponAdminNotFoundError sem tocar na BD',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord(),
+          ])
+
+        await expect(
+          updateAdminCoupon(
+            '   ',
+            {
+              isActive: false,
+            },
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          CouponAdminNotFoundError,
+        )
+
+        expect(
+          client.coupon
+            .findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'percentagem acima de 100 no tipo atual → CouponAdminValidationError',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord({
+              discountType:
+                'PERCENTAGE',
+            }),
+          ])
+
+        await expect(
+          updateAdminCoupon(
+            'coupon-1',
+            {
+              discountValue: 150,
+            },
+            client as never,
+          ),
+        ).rejects.toMatchObject({
+          name: 'CouponAdminValidationError',
+          field: 'discountValue',
+        })
+      },
+    )
+
+    test(
+      'valor fixo acima de 100 é permitido',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord({
+              discountType:
+                'FIXED_AMOUNT',
+            }),
+          ])
+
+        const row =
+          await updateAdminCoupon(
+            'coupon-1',
+            {
+              discountValue: 150,
+            },
+            client as never,
+          )
+
+        expect(
+          row.discountValue,
+        ).toBe(150)
+      },
+    )
+
+    test(
+      'janela temporal mesclada inválida → CouponAdminValidationError',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord(),
+          ])
+
+        await expect(
+          updateAdminCoupon(
+            'coupon-1',
+            {
+              startsAt:
+                '2026-12-01T00:00:00.000Z',
+              expiresAt:
+                '2026-11-01T00:00:00.000Z',
+            },
+            client as never,
+          ),
+        ).rejects.toMatchObject({
+          name: 'CouponAdminValidationError',
+          field: 'expiresAt',
+        })
+
+        // Patch isolado (só expiresAt) contra o startsAt
+        // atual também é apanhado.
+        const client2 =
+          createAdminDbClient([
+            createCouponRecord({
+              startsAt:
+                new Date(
+                  '2026-11-01T00:00:00.000Z',
+                ),
+            }),
+          ])
+
+        await expect(
+          updateAdminCoupon(
+            'coupon-1',
+            {
+              expiresAt:
+                '2026-10-01T00:00:00.000Z',
+            },
+            client2 as never,
+          ),
+        ).rejects.toMatchObject({
+          field: 'expiresAt',
+        })
+      },
+    )
+
+    test(
+      'corpo vazio → ZodError',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord(),
+          ])
+
+        await expect(
+          updateAdminCoupon(
+            'coupon-1',
+            {},
+            client as never,
+          ),
+        ).rejects.toBeInstanceOf(
+          Error,
+        )
+
+        expect(
+          client.coupon
+            .findUnique,
+        ).not.toHaveBeenCalled()
+      },
+    )
+
+    test(
+      'toggleAdminCouponStatus exige booleano e delega na atualização',
+      async () => {
+        const client =
+          createAdminDbClient([
+            createCouponRecord({
+              isActive: false,
+            }),
+          ])
+
+        await expect(
+          toggleAdminCouponStatus(
+            {
+              id: 'coupon-1',
+            },
+            client as never,
+          ),
+        ).rejects.toMatchObject({
+          field: 'isActive',
+        })
+
+        const row =
+          await toggleAdminCouponStatus(
+            {
+              id: 'coupon-1',
+              isActive: true,
+            },
+            client as never,
+          )
+
+        expect(
+          client.coupon.update,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: {
+              isActive: true,
+            },
+          }),
+        )
+
+        expect(
+          row.status,
+        ).toBe('ACTIVE')
+      },
+    )
+  },
+)
