@@ -2005,5 +2005,180 @@ Próximos passos (pós-etapa):
   no painel).
 
 
+## Épico 6 — Etapa 3 (concluída): Limiares de stock baixo a nível de variante
+
+Data: 2026-10-28 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: campo `lowStockThreshold`
+(Int opcional/nullable) por variante + migração
+Prisma; estado LOW_STOCK calculado com o limiar
+PRÓPRIO quando definido, com fallback ao limiar
+global da consulta; dashboard de inventário a
+mostrar o limiar efetivo por linha (indicador
+próprio vs global) com edição inline idêntica à
+correção rápida de stock; updates protegidos
+com `requireAdmin()` e validação Zod; testes e
+gate completa.
+
+Esquema + migração:
+- `ProductVariant.lowStockThreshold Int?`
+  (comentado no schema; null = usa o global).
+  Migração
+  `20261026104917_add_variant_low_stock_threshold`
+  (ALTER TABLE ADD COLUMN) criada e aplicada;
+  `npx prisma generate` corrido manualmente
+  (o `migrate dev` nem sempre gerou — padrão
+  da etapa 2).
+
+Serviço (`src/server/inventory.ts`):
+- `VariantRecord` / `LowStockVariantSelect` /
+  `InventoryRow` ganham `lowStockThreshold`
+  (required nullable — contrato completo por
+  linha).
+- `getInventoryOverview`: estado por variante =
+  `inventoryStatusFromStock(stock,
+  lowStockThreshold ?? threshold global)`.
+  O KPI de stock baixo é DERIVADO das linhas
+  (o `where` Prisma não compara campo↔campo da
+  mesma tabela); contadores SQL passam de 3
+  para 2 (total + sem stock — o count
+  `gte:1..lte:threshold` foi removido);
+  `inStock = max(0, total − low − out)`.
+  Caveat documentado: listagem tem teto
+  MAX_INVENTORY_ROWS (1000) — acima disso o
+  KPI de stock baixo fica subavaliado.
+- `updateVariantThreshold(input, client?)` +
+  `VariantThresholdUpdate
+  {previousThreshold, threshold, variant}`:
+  leitura do anterior e escrita na MESMA
+  transação (padrão updateVariantStock);
+  variante inexistente → InventoryNotFoundError
+  (404); NÃO grava movimento de stock (um
+  limiar não é um movimento) e NÃO toca em
+  `stockQuantity`.
+- `variantThresholdUpdateSchema`:
+  `variantId` string trim min 1 +
+  `lowStockThreshold` como
+  `z.nullable(z.coerce.number().int()
+  .min(1).max(99))` — o `nullable`
+  curto-circuita null ANTES da coerção
+  (coerce(null) seria 0). Campo obrigatório:
+  payload sem `lowStockThreshold` → 400.
+- Tipos estruturais: `productVariant.update`
+  `data` alargado para união
+  `{stockQuantity} | {lowStockThreshold}` nos
+  clientes transacional e top-level.
+- `listLowStockVariants` (legado, usado pelo
+  inventory-alerts) só ganha
+  `lowStockThreshold: true` no select — shape
+  de resposta e contratos intactos.
+
+Rota + edição inline:
+- `PATCH /api/admin/inventory/threshold`
+  (nova): `requireAdmin()` sempre; ZodError →
+  400 'Dados inválidos' + fieldErrors
+  (normalização igual à rota movements);
+  InventoryNotFoundError → 404; SyntaxError →
+  400 'JSON inválido'; 500 seguro.
+- `inventory-client.tsx`: nova coluna 'Limiar'
+  com badge de origem — 'Próprio: N'
+  (violeta) vs 'Global: N' (cinza) — e input
+  + botão Guardar por linha (commit no
+  clique, como a correção de stock); entrada
+  vazia REMOVE o limiar próprio (PATCH null)
+  e em linha sem limiar próprio é erro
+  'Introduz o novo limiar...' sem chamada;
+  valor igual ao atual não chama a API (papel
+  do limiar global); validação cliente
+  1..99 com a mesma mensagem; guardado
+  desativa os fluxos de stock E limiar e
+  recarrega a overview (2 GETs /overview);
+  notices pt-PT 'Limiar próprio de X guardado
+  (N unidades).' / '... removido — usa o
+  global (N unidades).'; legenda do KPI
+  'Stock baixo' → 'Limiar global de N
+  unidades ou limiar próprio da variante.';
+  tabela min-w 720 → 880.
+- `src/app/admin/inventory/page.tsx`
+  intocado: a página server já renderiza o
+  cliente (a etapa 3 é toda no serviço +
+  cliente).
+
+Testes (+20: 2333 → 2353):
+- `inventory.test.ts` (40 → 47): overview
+  passa a 2 contadores (stubCounts total/out)
+  e KPIs recalculados (low derivado); novo
+  teste de limiares próprios (estados invertidos
+  vs o global + KPIs + `lowStockThreshold`
+  ecoado por linha); `updateVariantThreshold`
+  (4): define numa transação (previous
+  null → 3, sem movimento no histórico), null
+  remove (previous 8 → null, stock intacto),
+  404 sem update, payloads inválidos → ZodError
+  antes da BD; schema (2): aceita 3 / null /
+  '5', rejeita '' / 0 / 100 / 2.5 / 'muito' /
+  campo em falta.
+- `threshold/route.test.ts` (8, NOVO ficheiro):
+  200 define (passthrough), 200 remove null,
+  400 fieldErrors (ZodError real), 400 JSON
+  inválido, 404, 401, 403, 500. Mock factory
+  também fornece classes fake
+  (InventoryNotFoundError) — a rota faz
+  `instanceof` sobre o módulo mockado.
+- `inventory-client.test.tsx` (7 → 12): badge
+  Próprio/Global; guarda limiar (PATCH body +
+  refetch 2 GETs); entrada vazia remove
+  (PATCH null); guardar vazio em linha global
+  → alert sem chamada; '0' → alert sem
+  chamada; legendas do KPI atualizadas para
+  o texto novo.
+- `overview/route.test.ts`: fixture de rows
+  ganha `lowStockThreshold: null`.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2353 passed** + 3 skipped (167
+ficheiros: 166 passed + 1 skipped); `npm run
+lint` limpo; `npm run build` limpo — route
+map ganha `/api/admin/inventory/threshold` ƒ
+(junto a inventory, movements e overview).
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- `z.coerce.number()` sobre null produz 0
+  (Number(null) === 0) — para null com
+  significado próprio ('remover limiar') usar
+  `z.nullable(z.coerce.number()...)`: o
+  nullable curto-circuita ANTES da coerção.
+- `z.string().parse('')` NÃO lança em zod v4
+  (string vazia é string válida) — nos testes
+  de erro real usar `.min(1)` etc.
+- where Prisma não compara dois campos da
+  MESMA tabela — lógica 'campo vs campo'
+  (limiar efetivo vs stock) tem de derivar em
+  JS a partir de linhas já carregadas; conters
+  SQL independentes de limiar (total, sem
+  stock) podem ficar na transação.
+- Ao alargar selects recursivos compartidos
+  (LowStockVariantSelect), FIXTURES de
+  VariantRecord nos testes precisam do campo
+  novo — tsc aponta exatamente os ficheiros.
+- vi.mock factory: as classes fake têm de
+  estar DEFINIDAS DENTRO da factory (hoisting
+  — factory não pode referir identificadores
+  externos); a rota faz `instanceof` contra a
+  classe mockada.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 3 quando o utilizador
+  pedir (ficheiros: prisma/schema.prisma +
+  migração add_variant_low_stock_threshold,
+  inventory.ts (+test),
+  api/admin/inventory/threshold/**,
+  inventory-client.tsx (+test),
+  overview/route.test.ts, CHECKPOINT.md).
+- Continuar o Épico 6 com o utilizador.
+
+
 
 

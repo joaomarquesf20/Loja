@@ -22,6 +22,9 @@ export const DEFAULT_LOW_STOCK_THRESHOLD = 5
 
 export const MAX_LOW_STOCK_THRESHOLD = 99
 
+const inventoryThresholdMessage =
+  `O limiar de stock deve estar entre 1 e ${MAX_LOW_STOCK_THRESHOLD}`
+
 export const DEFAULT_LOW_STOCK_LIMIT = 20
 
 export const MAX_LOW_STOCK_LIMIT = 100
@@ -224,6 +227,11 @@ export type VariantRecord = {
   id: string
   sku: string
   stockQuantity: number
+  /**
+   * Épico 6 — etapa 3: limiar de stock baixo próprio da variante
+   * (null = usa o limiar global da consulta).
+   */
+  lowStockThreshold: number | null
   product: {
     id: string
     name: string
@@ -235,6 +243,7 @@ export type LowStockVariantSelect = {
   id: true
   sku: true
   stockQuantity: true
+  lowStockThreshold: true
   product: {
     select: {
       id: true
@@ -301,9 +310,13 @@ export interface InventoryTransactionClient {
       where: {
         id: string
       }
-      data: {
-        stockQuantity: number
-      }
+      data:
+        | {
+            stockQuantity: number
+          }
+        | {
+            lowStockThreshold: number | null
+          }
       select: LowStockVariantSelect
     }): Promise<VariantRecord>
   }
@@ -345,9 +358,13 @@ export interface InventoryClient {
       where: {
         id: string
       }
-      data: {
-        stockQuantity: number
-      }
+      data:
+        | {
+            stockQuantity: number
+          }
+        | {
+            lowStockThreshold: number | null
+          }
       select: LowStockVariantSelect
     }): Promise<VariantRecord>
   }
@@ -541,6 +558,7 @@ export async function listLowStockVariants(
           id: true,
           sku: true,
           stockQuantity: true,
+          lowStockThreshold: true,
           product: {
             select: {
               id: true,
@@ -645,6 +663,7 @@ export async function updateVariantStock(
               id: true,
               sku: true,
               stockQuantity: true,
+              lowStockThreshold: true,
               product: {
                 select: {
                   id: true,
@@ -674,6 +693,7 @@ export async function updateVariantStock(
               id: true,
               sku: true,
               stockQuantity: true,
+              lowStockThreshold: true,
               product: {
                 select: {
                   id: true,
@@ -709,6 +729,141 @@ export async function updateVariantStock(
       return {
         previousStock:
           current.stockQuantity,
+        variant:
+          toLowStockVariant(
+            updated,
+          ),
+      }
+    },
+  )
+}
+
+/**
+ * Épico 6 — etapa 3: atualização do limiar de stock baixo a nível de
+ * variante. `lowStockThreshold: null` remove o limiar próprio (a
+ * variante volta a usar o limiar global da consulta); um inteiro em
+ * [1, 99] define um limiar próprio. A leitura do valor anterior e a
+ * escrita correm na MESMA transação — como na correção de stock —
+ * devolvendo o estado anterior. Um limiar NÃO é um movimento de
+ * stock: não toca em `stockQuantity` nem no histórico.
+ */
+export type VariantThresholdUpdate = {
+  previousThreshold: number | null
+  threshold: number | null
+  variant: LowStockVariant
+}
+
+export const variantThresholdUpdateSchema =
+  z.object({
+    variantId: z
+      .string({
+        message:
+          'Identificador da variante inválido',
+      })
+      .trim()
+      .min(1, {
+        message:
+          'Identificador da variante inválido',
+      }),
+    lowStockThreshold: z.nullable(
+      z.coerce
+        .number({
+          message:
+            'O limiar de stock deve ser um número inteiro',
+        })
+        .int({
+          message:
+            'O limiar de stock deve ser um número inteiro',
+        })
+        .min(1, {
+          message:
+            inventoryThresholdMessage,
+        })
+        .max(MAX_LOW_STOCK_THRESHOLD, {
+          message:
+            inventoryThresholdMessage,
+        }),
+    ),
+  })
+
+export async function updateVariantThreshold(
+  input:
+    | {
+        variantId: unknown
+        lowStockThreshold: unknown
+      }
+    | undefined,
+  client?: InventoryClient,
+): Promise<VariantThresholdUpdate> {
+  const parsed =
+    variantThresholdUpdateSchema.parse({
+      variantId: input?.variantId,
+      lowStockThreshold:
+        input?.lowStockThreshold,
+    })
+
+  const inventoryClient =
+    getClient(client)
+
+  return inventoryClient.$transaction(
+    async (transaction) => {
+      const current =
+        await transaction.productVariant.findUnique(
+          {
+            where: {
+              id: parsed.variantId,
+            },
+            select: {
+              id: true,
+              sku: true,
+              stockQuantity: true,
+              lowStockThreshold: true,
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        )
+
+      if (!current) {
+        throw new InventoryNotFoundError()
+      }
+
+      const updated =
+        await transaction.productVariant.update(
+          {
+            where: {
+              id: parsed.variantId,
+            },
+            data: {
+              lowStockThreshold:
+                parsed.lowStockThreshold,
+            },
+            select: {
+              id: true,
+              sku: true,
+              stockQuantity: true,
+              lowStockThreshold: true,
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        )
+
+      return {
+        previousThreshold:
+          current.lowStockThreshold,
+        threshold:
+          parsed.lowStockThreshold,
         variant:
           toLowStockVariant(
             updated,
@@ -1151,9 +1306,6 @@ export async function listStockMovements(
   }
 }
 
-const inventoryThresholdMessage =
-  `O limiar de stock deve estar entre 1 e ${MAX_LOW_STOCK_THRESHOLD}`
-
 /**
  * Query da vista de inventário (Épico 6) — validação Zod: o limiar
  * aceita `undefined|null|''` (padrão de 5) e números inteiros em
@@ -1210,6 +1362,12 @@ export type InventoryRow = {
   sku: string
   stock: number
   status: InventoryStatus
+  /**
+   * Épico 6 — etapa 3: limiar de stock baixo próprio da variante
+   * (null = usa o limiar global da consulta). O valor EFETIVO é
+   * `lowStockThreshold ?? threshold` da paginação.
+   */
+  lowStockThreshold: number | null
   productId: string
   productName: string
   productSlug: string
@@ -1254,6 +1412,11 @@ function inventoryStatusFromStock(
  * MESMA transação de leitura para refletirem um snapshot coerente; o
  * limiar é validado com Zod e rejeita entradas inválidas antes de
  * tocar na base de dados.
+ *
+ * Épico 6 — etapa 3: variantes com limiar próprio
+ * (`lowStockThreshold`) usam esse valor no estado; o KPI de stock
+ * baixo é derivado das linhas (o `where` Prisma não compara dois
+ * campos da mesma tabela).
  */
 export async function getInventoryOverview(
   input:
@@ -1276,7 +1439,6 @@ export async function getInventoryOverview(
 
   const {
     totalRaw,
-    lowStockRaw,
     outOfStockRaw,
     rows,
   } =
@@ -1291,22 +1453,6 @@ export async function getInventoryOverview(
                 isActive: true,
                 product: {
                   isActive: true,
-                },
-              },
-            },
-          )
-
-        const lowStockRaw =
-          await transaction.productVariant.count(
-            {
-              where: {
-                isActive: true,
-                product: {
-                  isActive: true,
-                },
-                stockQuantity: {
-                  gte: 1,
-                  lte: threshold,
                 },
               },
             },
@@ -1348,6 +1494,7 @@ export async function getInventoryOverview(
                 id: true,
                 sku: true,
                 stockQuantity: true,
+                lowStockThreshold: true,
                 product: {
                   select: {
                     id: true,
@@ -1361,12 +1508,39 @@ export async function getInventoryOverview(
 
         return {
           totalRaw,
-          lowStockRaw,
           outOfStockRaw,
           rows,
         }
       },
     )
+
+  // Épico 6 — etapa 3: cada variante com limiar próprio
+  // (`lowStockThreshold`) é avaliada com esse valor; as restantes
+  // caem no limiar global da consulta.
+  const variants =
+    rows.map((record) => ({
+      ...toLowStockVariant(
+        record,
+      ),
+      lowStockThreshold:
+        record.lowStockThreshold,
+      status:
+        inventoryStatusFromStock(
+          record.stockQuantity,
+          record.lowStockThreshold ??
+            threshold,
+        ),
+    }))
+
+  // O KPI de stock baixo é derivado das linhas: com limiares por
+  // variante não existe comparação campo↔campo num `where` Prisma
+  // (e a listagem cobre as variantes ativas até ao teto de 1000).
+  const lowStockCount =
+    variants.filter(
+      (row) =>
+        row.status ===
+        'LOW_STOCK',
+    ).length
 
   return {
     threshold,
@@ -1375,25 +1549,13 @@ export async function getInventoryOverview(
       inStockCount: Math.max(
         0,
         totalRaw -
-          lowStockRaw -
+          lowStockCount -
           outOfStockRaw,
       ),
-      lowStockCount:
-        lowStockRaw,
+      lowStockCount,
       outOfStockCount:
         outOfStockRaw,
     },
-    variants: rows.map(
-      (record) => ({
-        ...toLowStockVariant(
-          record,
-        ),
-        status:
-          inventoryStatusFromStock(
-            record.stockQuantity,
-            threshold,
-          ),
-      }),
-    ),
+    variants,
   }
 }

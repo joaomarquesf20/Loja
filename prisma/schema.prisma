@@ -210,6 +210,10 @@ model ProductVariant {
   priceSet               Decimal?                             @db.Decimal(10, 2)
   stockQuantity          Int                                  @default(0)
   isActive               Boolean                              @default(true)
+  /// Épico 6 — limiar de stock baixo a nível de variante. Quando
+  /// definido, o estado LOW_STOCK é calculado com este valor em vez
+  /// do limiar global da consulta; null volta a usar o global.
+  lowStockThreshold      Int?
   images                 String[]
   position               Int                                  @default(0)
   optionKey              String

@@ -106,6 +106,7 @@ function createOverview(): InventoryOverview {
         sku: 'FLT-001',
         stock: 0,
         status: 'OUT_OF_STOCK',
+        lowStockThreshold: null,
         productId:
           'product-1',
         productName:

@@ -48,6 +48,7 @@ function createRow(
     sku: 'FLT-001',
     stock: 0,
     status: 'OUT_OF_STOCK',
+    lowStockThreshold: null,
     productId:
       'product-1',
     productName:
@@ -186,7 +187,7 @@ describe(
 
         expect(
           screen.getByText(
-            'Igual ou inferior a 5 unidades (acima de zero).',
+            'Limiar global de 5 unidades ou limiar próprio da variante.',
           ),
         ).toBeInTheDocument()
 
@@ -662,7 +663,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Igual ou inferior a 10 unidades (acima de zero).',
+            'Limiar global de 10 unidades ou limiar próprio da variante.',
           ),
         ).toBeInTheDocument()
       },
@@ -716,6 +717,406 @@ describe(
             .value,
         ).toBe('5')
 
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+      },
+    )
+
+    test(
+      'mostra o limiar efetivo marcado como próprio ou global',
+      async () => {
+        stubOverview(
+          createOverview({
+            variants: [
+              createRow({
+                stock: 2,
+                status:
+                  'LOW_STOCK',
+                lowStockThreshold: 2,
+              }),
+              createRow({
+                variantId:
+                  'variant-2',
+                sku: 'PAD-002',
+                stock: 3,
+                status:
+                  'LOW_STOCK',
+                productId:
+                  'product-2',
+                productName:
+                  'Pastilhas de travão',
+                productSlug:
+                  'pastilhas-de-travao',
+                lowStockThreshold:
+                  null,
+              }),
+            ],
+          }),
+        )
+
+        render(
+          <InventoryClient />,
+        )
+
+        expect(
+          await screen.findByText(
+            'FLT-001',
+          ),
+        ).toBeInTheDocument()
+
+        // Limiar próprio da variante (violeta).
+        expect(
+          screen.getByText(
+            'Próprio: 2',
+          ),
+        ).toBeInTheDocument()
+
+        // Limiar global da consulta.
+        expect(
+          screen.getByText(
+            'Global: 5',
+          ),
+        ).toBeInTheDocument()
+      },
+    )
+
+    test(
+      'guarda o limiar próprio e recarrega a vista',
+      async () => {
+        stubOverview(
+          createOverview(),
+        )
+
+        fetchMock.mockImplementationOnce(
+          async (
+            input: RequestInfo | URL,
+            init?: RequestInit,
+          ) => {
+            expect(
+              String(input),
+            ).toBe(
+              '/api/admin/inventory/threshold',
+            )
+
+            expect(
+              init?.method,
+            ).toBe('PATCH')
+
+            expect(
+              JSON.parse(
+                String(init?.body),
+              ) as {
+                variantId: string
+                lowStockThreshold: number
+              },
+            ).toEqual({
+              variantId:
+                'variant-1',
+              lowStockThreshold: 3,
+            })
+
+            return createJsonResponse(
+              {
+                previousThreshold:
+                  null,
+                threshold: 3,
+                variant: {
+                  variantId:
+                    'variant-1',
+                  sku: 'FLT-001',
+                  stock: 0,
+                  productId:
+                    'product-1',
+                  productName:
+                    'Filtro de óleo',
+                  productSlug:
+                    'filtro-de-oleo',
+                },
+              },
+            )
+          },
+        )
+
+        stubOverview(
+          createOverview(),
+          200,
+          'threshold=5',
+        )
+
+        render(
+          <InventoryClient />,
+        )
+
+        await screen.findByText(
+          'FLT-001',
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Limiar de stock de FLT-001',
+          ),
+          {
+            target: {
+              value: '3',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar limiar de FLT-001',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'status',
+          ),
+        ).toHaveTextContent(
+          'Limiar próprio de Filtro de óleo guardado (3 unidades).',
+        )
+
+        await waitForFetchCalls(
+          3,
+        )
+
+        const thresholdCalls =
+          fetchMock.mock.calls.filter(
+            (call) =>
+              String(
+                call[0],
+              ).includes(
+                '/threshold',
+              ),
+          )
+
+        expect(
+          thresholdCalls,
+        ).toHaveLength(1)
+
+        const overviewCalls =
+          fetchMock.mock.calls.filter(
+            (call) =>
+              String(
+                call[0],
+              ).includes(
+                '/overview',
+              ),
+          )
+
+        expect(
+          overviewCalls,
+        ).toHaveLength(2)
+      },
+    )
+
+    test(
+      'entrada vazia remove o limiar próprio e usa o global',
+      async () => {
+        stubOverview(
+          createOverview({
+            variants: [
+              createRow({
+                stock: 2,
+                status:
+                  'LOW_STOCK',
+                lowStockThreshold: 2,
+              }),
+            ],
+          }),
+        )
+
+        fetchMock.mockImplementationOnce(
+          async (
+            input: RequestInfo | URL,
+            init?: RequestInit,
+          ) => {
+            expect(
+              String(input),
+            ).toBe(
+              '/api/admin/inventory/threshold',
+            )
+
+            expect(
+              init?.method,
+            ).toBe('PATCH')
+
+            expect(
+              JSON.parse(
+                String(init?.body),
+              ) as {
+                variantId: string
+                lowStockThreshold: null
+              },
+            ).toEqual({
+              variantId:
+                'variant-1',
+              lowStockThreshold:
+                null,
+            })
+
+            return createJsonResponse(
+              {
+                previousThreshold: 2,
+                threshold: null,
+                variant: {
+                  variantId:
+                    'variant-1',
+                  sku: 'FLT-001',
+                  stock: 2,
+                  productId:
+                    'product-1',
+                  productName:
+                    'Filtro de óleo',
+                  productSlug:
+                    'filtro-de-oleo',
+                },
+              },
+            )
+          },
+        )
+
+        stubOverview(
+          createOverview(),
+          200,
+          'threshold=5',
+        )
+
+        render(
+          <InventoryClient />,
+        )
+
+        await screen.findByText(
+          'FLT-001',
+        )
+
+        // Input pré-preenchido com o limiar
+        // próprio (2) → limpar e guardar.
+        fireEvent.change(
+          screen.getByLabelText(
+            'Limiar de stock de FLT-001',
+          ),
+          {
+            target: {
+              value: '',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar limiar de FLT-001',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'status',
+          ),
+        ).toHaveTextContent(
+          'Limiar próprio de Filtro de óleo removido — usa o global (5 unidades).',
+        )
+      },
+    )
+
+    test(
+      'guardar sem valor numa linha global é erro sem chamada',
+      async () => {
+        stubOverview(
+          createOverview(),
+        )
+
+        render(
+          <InventoryClient />,
+        )
+
+        await screen.findByText(
+          'FLT-001',
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar limiar de FLT-001',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'Introduz o novo limiar antes de guardar.',
+        )
+
+        // Só o GET inicial da overview.
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(
+          1,
+        )
+      },
+    )
+
+    test(
+      'limiar próprio inválido é validado no cliente sem tocar na API',
+      async () => {
+        stubOverview(
+          createOverview(),
+        )
+
+        render(
+          <InventoryClient />,
+        )
+
+        await screen.findByText(
+          'FLT-001',
+        )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Limiar de stock de FLT-001',
+          ),
+          {
+            target: {
+              value: '0',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Guardar limiar de FLT-001',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByRole(
+            'alert',
+          ),
+        ).toHaveTextContent(
+          'O limiar de stock deve estar entre 1 e 99',
+        )
+
+        // Só o GET inicial da overview.
         expect(
           fetchMock,
         ).toHaveBeenCalledTimes(

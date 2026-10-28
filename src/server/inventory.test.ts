@@ -25,6 +25,8 @@ import {
   recordStockMovement,
   stockMovementsQuerySchema,
   updateVariantStock,
+  updateVariantThreshold,
+  variantThresholdUpdateSchema,
   type InventoryClient,
   type InventoryTransactionClient,
   type RawStockMovementRecord,
@@ -41,6 +43,7 @@ function createVariantRecord(
     id: 'variant-1',
     sku: 'FLT-001',
     stockQuantity: 3,
+    lowStockThreshold: null,
     product: {
       id: 'product-1',
       name: 'Filtro de óleo',
@@ -190,6 +193,7 @@ describe(
                 id: true,
                 sku: true,
                 stockQuantity: true,
+                lowStockThreshold: true,
                 product: {
                   select: {
                     id: true,
@@ -904,19 +908,14 @@ describe(
 
         function stubCounts({
           total,
-          low,
           out,
         }: {
           total: number
-          low: number
           out: number
         }) {
           count
             .mockResolvedValueOnce(
               total,
-            )
-            .mockResolvedValueOnce(
-              low,
             )
             .mockResolvedValueOnce(
               out,
@@ -932,7 +931,6 @@ describe(
           async () => {
             stubCounts({
               total: 50,
-              low: 8,
               out: 3,
             })
 
@@ -942,11 +940,13 @@ describe(
                 client,
               )
 
+            // Sem stock baixo nas linhas: só global
+            // em falta — KPI derivado de total − low − out.
             expect(result.kpis).toEqual(
               {
                 totalSkus: 50,
-                inStockCount: 39,
-                lowStockCount: 8,
+                inStockCount: 47,
+                lowStockCount: 0,
                 outOfStockCount: 3,
               },
             )
@@ -957,11 +957,12 @@ describe(
               DEFAULT_LOW_STOCK_THRESHOLD,
             )
 
-            // Três contadores (total, stock baixo, sem stock).
+            // Dois contadores (total, sem stock);
+            // o stock baixo é derivado das linhas.
             expect(
               count,
             ).toHaveBeenCalledTimes(
-              3,
+              2,
             )
 
             expect(
@@ -982,24 +983,6 @@ describe(
               count,
             ).toHaveBeenNthCalledWith(
               2,
-              {
-                where: {
-                  isActive: true,
-                  product: {
-                    isActive: true,
-                  },
-                  stockQuantity: {
-                    gte: 1,
-                    lte: DEFAULT_LOW_STOCK_THRESHOLD,
-                  },
-                },
-              },
-            )
-
-            expect(
-              count,
-            ).toHaveBeenNthCalledWith(
-              3,
               {
                 where: {
                   isActive: true,
@@ -1079,9 +1062,6 @@ describe(
                 4,
               )
               .mockResolvedValueOnce(
-                3,
-              )
-              .mockResolvedValueOnce(
                 1,
               )
 
@@ -1103,12 +1083,14 @@ describe(
               result.kpis,
             ).toEqual({
               totalSkus: 4,
-              inStockCount: 0,
-              lowStockCount: 3,
+              inStockCount: 1,
+              lowStockCount: 2,
               outOfStockCount: 1,
             })
 
-            // O stock baixo passa a cobrir 1..10.
+            // O 2.º contador é 'sem stock' (stockQuantity: 0);
+            // o stock baixo é derivado das linhas com
+            // os limiares efetivos.
             expect(
               count,
             ).toHaveBeenNthCalledWith(
@@ -1119,10 +1101,7 @@ describe(
                   product: {
                     isActive: true,
                   },
-                  stockQuantity: {
-                    gte: 1,
-                    lte: 10,
-                  },
+                  stockQuantity: 0,
                 },
               },
             )
@@ -1153,11 +1132,107 @@ describe(
         )
 
         test(
+          'limiares próprios substituem o global no estado e nos KPIs',
+          async () => {
+            count
+              .mockResolvedValueOnce(
+                4,
+              )
+              .mockResolvedValueOnce(
+                0,
+              )
+
+            findMany.mockResolvedValue(
+              [
+                createVariantRecord(
+                  {
+                    id: 'variant-proprio-baixo',
+                    sku: 'AAA-010',
+                    stockQuantity: 5,
+                    lowStockThreshold: 8,
+                  },
+                ),
+                createVariantRecord(
+                  {
+                    id: 'variant-proprio-alto',
+                    sku: 'BBB-020',
+                    stockQuantity: 5,
+                    lowStockThreshold: 2,
+                  },
+                ),
+                createVariantRecord(
+                  {
+                    id: 'variant-global',
+                    sku: 'CCC-030',
+                    stockQuantity: 2,
+                  },
+                ),
+                createVariantRecord(
+                  {
+                    id: 'variant-folga',
+                    sku: 'DDD-040',
+                    stockQuantity: 30,
+                  },
+                ),
+              ],
+            )
+
+            const result =
+              await getInventoryOverview(
+                undefined,
+                client,
+              )
+
+            expect(
+              result.kpis,
+            ).toEqual({
+              totalSkus: 4,
+              inStockCount: 2,
+              lowStockCount: 2,
+              outOfStockCount: 0,
+            })
+
+            const statuses =
+              Object.fromEntries(
+                result.variants.map(
+                  (row) => [
+                    row.variantId,
+                    row.status,
+                  ],
+                ),
+              )
+
+            // 5 ≤ limiar próprio 8 → LOW;
+            // 5 > limiar próprio 2 → IN;
+            // 2 ≤ global 5 → LOW; 30 > 5 → IN.
+            expect(
+              statuses,
+            ).toEqual({
+              'variant-proprio-baixo':
+                'LOW_STOCK',
+              'variant-proprio-alto':
+                'IN_STOCK',
+              'variant-global':
+                'LOW_STOCK',
+              'variant-folga':
+                'IN_STOCK',
+            })
+
+            // O limiar próprio acompanha cada linha.
+            expect(
+              result.variants.map(
+                (row) =>
+                  row.lowStockThreshold,
+              ),
+            ).toEqual([8, 2, null, null])
+          },
+        )
+
+        test(
           'limita a listagem ao teto de variantes por consulta',
           async () => {
             stubCounts({
               total: 1000,
-              low: 0,
               out: 0,
             })
 
@@ -1340,6 +1415,8 @@ describe(
                           id: true,
                           sku: true,
                           stockQuantity:
+                            true,
+                          lowStockThreshold:
                             true,
                           product: {
                             select: {
@@ -2090,6 +2167,366 @@ describe(
 
             expect(
               stockMovementFindMany,
+            ).not.toHaveBeenCalled()
+          },
+        )
+      },
+    )
+  },
+)
+
+describe(
+  'Limiar de stock por variante (Épico 6 — etapa 3)',
+  () => {
+    describe(
+      'variantThresholdUpdateSchema',
+      () => {
+        test(
+          'aceita inteiros em [1, 99], null e texto numérico',
+          () => {
+            expect(
+              variantThresholdUpdateSchema.parse(
+                {
+                  variantId:
+                    'variant-1',
+                  lowStockThreshold: 3,
+                },
+              ),
+            ).toEqual({
+              variantId:
+                'variant-1',
+              lowStockThreshold: 3,
+            })
+
+            // null = remover o limiar próprio.
+            expect(
+              variantThresholdUpdateSchema.parse(
+                {
+                  variantId:
+                    'variant-1',
+                  lowStockThreshold:
+                    null,
+                },
+              ),
+            ).toEqual({
+              variantId:
+                'variant-1',
+              lowStockThreshold:
+                null,
+            })
+
+            // Texto numérico passa pela coerção.
+            expect(
+              variantThresholdUpdateSchema.parse(
+                {
+                  variantId:
+                    'variant-1',
+                  lowStockThreshold:
+                    '5',
+                },
+              ),
+            ).toEqual({
+              variantId:
+                'variant-1',
+              lowStockThreshold: 5,
+            })
+          },
+        )
+
+        test(
+          'rejeita variantId vazio, limiares inválidos e campo em falta',
+          () => {
+            for (const input of [
+              {
+                variantId: '',
+                lowStockThreshold: 3,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 0,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 100,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 2.5,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold:
+                  'muito',
+              },
+              {
+                variantId:
+                  'variant-1',
+              },
+            ]) {
+              expect(() =>
+                variantThresholdUpdateSchema.parse(
+                  input,
+                ),
+              ).toThrow(
+                ZodError,
+              )
+            }
+          },
+        )
+      },
+    )
+
+    describe(
+      'updateVariantThreshold',
+      () => {
+        test(
+          'define o limiar próprio e devolve o anterior numa única transação',
+          async () => {
+            const created =
+              createClient()
+
+            created.findUnique.mockResolvedValue(
+              createVariantRecord(
+                {
+                  stockQuantity: 5,
+                  lowStockThreshold:
+                    null,
+                },
+              ),
+            )
+
+            created.update.mockResolvedValue(
+              createVariantRecord(
+                {
+                  stockQuantity: 5,
+                  lowStockThreshold: 3,
+                },
+              ),
+            )
+
+            const result =
+              await updateVariantThreshold(
+                {
+                  variantId:
+                    'variant-1',
+                  lowStockThreshold: 3,
+                },
+                created.client,
+              )
+
+            expect(
+              result,
+            ).toEqual({
+              previousThreshold:
+                null,
+              threshold: 3,
+              variant: {
+                variantId:
+                  'variant-1',
+                sku: 'FLT-001',
+                stock: 5,
+                productId:
+                  'product-1',
+                productName:
+                  'Filtro de óleo',
+                productSlug:
+                  'filtro-de-oleo',
+              },
+            })
+
+            expect(
+              created.$transaction,
+            ).toHaveBeenCalledTimes(
+              1,
+            )
+
+            expect(
+              created.findUnique,
+            ).toHaveBeenCalledWith({
+              where: {
+                id: 'variant-1',
+              },
+              select:
+                expect.anything(),
+            })
+
+            expect(
+              created.update,
+            ).toHaveBeenCalledWith({
+              where: {
+                id: 'variant-1',
+              },
+              data: {
+                lowStockThreshold: 3,
+              },
+              select:
+                expect.anything(),
+            })
+
+            // Um limiar NÃO é um movimento de stock.
+            expect(
+              created.stockMovementCreate,
+            ).not.toHaveBeenCalled()
+          },
+        )
+
+        test(
+          'null remove o limiar próprio e mantém o stock intacto',
+          async () => {
+            const created =
+              createClient()
+
+            created.findUnique.mockResolvedValue(
+              createVariantRecord(
+                {
+                  stockQuantity: 2,
+                  lowStockThreshold: 8,
+                },
+              ),
+            )
+
+            created.update.mockResolvedValue(
+              createVariantRecord(
+                {
+                  stockQuantity: 2,
+                  lowStockThreshold:
+                    null,
+                },
+              ),
+            )
+
+            const result =
+              await updateVariantThreshold(
+                {
+                  variantId:
+                    'variant-1',
+                  lowStockThreshold:
+                    null,
+                },
+                created.client,
+              )
+
+            expect(
+              result,
+            ).toEqual({
+              previousThreshold: 8,
+              threshold: null,
+              variant:
+                expect.objectContaining(
+                  {
+                    variantId:
+                      'variant-1',
+                    stock: 2,
+                  },
+                ),
+            })
+
+            expect(
+              created.update,
+            ).toHaveBeenCalledWith(
+              expect.objectContaining(
+                {
+                  data: {
+                    lowStockThreshold:
+                      null,
+                  },
+                },
+              ),
+            )
+          },
+        )
+
+        test(
+          'lança InventoryNotFoundError para variante inexistente sem update',
+          async () => {
+            const created =
+              createClient()
+
+            created.findUnique.mockResolvedValue(
+              null,
+            )
+
+            await expect(
+              updateVariantThreshold(
+                {
+                  variantId:
+                    'variant-missing',
+                  lowStockThreshold: 3,
+                },
+                created.client,
+              ),
+            ).rejects.toThrow(
+              InventoryNotFoundError,
+            )
+
+            expect(
+              created.update,
+            ).not.toHaveBeenCalled()
+          },
+        )
+
+        test(
+          'rejeita payloads inválidos com ZodError antes de tocar na base de dados',
+          async () => {
+            const created =
+              createClient()
+
+            for (const input of [
+              {
+                variantId: '',
+                lowStockThreshold: 3,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 0,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 100,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold: 2.5,
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold:
+                  'muito',
+              },
+              {
+                variantId:
+                  'variant-1',
+                lowStockThreshold:
+                  undefined,
+              },
+            ] as Array<{
+              variantId: unknown
+              lowStockThreshold: unknown
+            }>) {
+              await expect(
+                updateVariantThreshold(
+                  input,
+                  created.client,
+                ),
+              ).rejects.toThrow(
+                ZodError,
+              )
+            }
+
+            expect(
+              created.findUnique,
+            ).not.toHaveBeenCalled()
+
+            expect(
+              created.update,
             ).not.toHaveBeenCalled()
           },
         )

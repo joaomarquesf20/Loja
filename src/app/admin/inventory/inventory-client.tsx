@@ -11,6 +11,7 @@ import type {
   InventoryRow,
   InventoryStatus,
   VariantStockUpdate,
+  VariantThresholdUpdate,
 } from '@/server/inventory'
 
 const INVENTORY_PAGE_SIZE = 20
@@ -71,6 +72,12 @@ async function getErrorMessage(
  * os estados chegam calculados pelo serviço; a correção rápida de cada
  * linha reutiliza o `PATCH /api/admin/inventory` e recarrega a vista
  * para os KPIs refletirem o novo stock.
+ *
+ * Épico 6 — etapa 3: cada linha apresenta o limiar de stock baixo
+ * EFETIVO marcado como 'Global' (limiar da consulta) ou 'Próprio'
+ * (limiar da variante), editável inline via
+ * `PATCH /api/admin/inventory/threshold` (entrada vazia remove o
+ * limiar próprio e volta ao global).
  */
 export default function InventoryClient() {
   const [
@@ -134,6 +141,22 @@ export default function InventoryClient() {
     null,
   )
 
+  // Épico 6 — etapa 3: rascunhos do limiar próprio por variante.
+  const [
+    thresholdDrafts,
+    setThresholdDrafts,
+  ] = useState<Record<
+    string,
+    string
+  >>({})
+
+  const [
+    savingThresholdVariantId,
+    setSavingThresholdVariantId,
+  ] = useState<string | null>(
+    null,
+  )
+
   useEffect(() => {
     let cancelled = false
 
@@ -174,6 +197,8 @@ export default function InventoryClient() {
         setOverview(data)
 
         setDrafts({})
+
+        setThresholdDrafts({})
       } catch (loadError) {
         if (!cancelled) {
           setLoadError(
@@ -455,6 +480,144 @@ export default function InventoryClient() {
     }
   }
 
+  // Épico 6 — etapa 3: guarda (valor em [1, 99]) ou remove (entrada
+  // vazia) o limiar próprio da variante; a vista recarrega para os
+  // estados e KPIs refletirem o limiar efetivo novo.
+  async function handleThresholdSave(
+    row: InventoryRow,
+  ) {
+    if (savingThresholdVariantId) {
+      return
+    }
+
+    const raw =
+      (
+        thresholdDrafts[
+          row.variantId
+        ] ?? ''
+      ).trim()
+
+    let nextThreshold:
+      | number
+      | null = null
+
+    if (raw !== '') {
+      const parsed =
+        Number(raw)
+
+      if (
+        !Number.isInteger(
+          parsed,
+        ) ||
+        parsed < MIN_THRESHOLD ||
+        parsed > MAX_THRESHOLD
+      ) {
+        setNotice({
+          type: 'error',
+          message: `O limiar de stock deve estar entre ${MIN_THRESHOLD} e ${MAX_THRESHOLD}`,
+        })
+
+        return
+      }
+
+      nextThreshold = parsed
+    } else if (
+      row.lowStockThreshold ===
+      null
+    ) {
+      setNotice({
+        type: 'error',
+        message:
+          'Introduz o novo limiar antes de guardar.',
+      })
+
+      return
+    }
+
+    if (
+      nextThreshold ===
+      row.lowStockThreshold
+    ) {
+      // Sem alteração: repõe o rascunho em silêncio
+      // (padrão do limiar global).
+      setThresholdDrafts(
+        (current) => ({
+          ...current,
+          [row.variantId]: '',
+        }),
+      )
+
+      return
+    }
+
+    setSavingThresholdVariantId(
+      row.variantId,
+    )
+
+    setNotice(null)
+
+    try {
+      const response =
+        await fetch(
+          '/api/admin/inventory/threshold',
+          {
+            method: 'PATCH',
+            headers: {
+              'content-type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              variantId:
+                row.variantId,
+              lowStockThreshold:
+                nextThreshold,
+            }),
+          },
+        )
+
+      if (!response.ok) {
+        throw new Error(
+          await getErrorMessage(
+            response,
+          ),
+        )
+      }
+
+      const result =
+        (await response.json()) as VariantThresholdUpdate
+
+      setNotice({
+        type: 'success',
+        message:
+          result.threshold ===
+          null
+            ? `Limiar próprio de ${result.variant.productName} removido — usa o global (${threshold} unidades).`
+            : `Limiar próprio de ${result.variant.productName} guardado (${result.threshold} unidades).`,
+      })
+
+      setThresholdDrafts(
+        (current) => ({
+          ...current,
+          [row.variantId]: '',
+        }),
+      )
+
+      await refreshOverview()
+    } catch (saveError) {
+      setNotice({
+        type: 'error',
+        message:
+          saveError instanceof Error
+            ? saveError.message
+            : 'Não foi possível guardar o limiar.',
+      })
+    } finally {
+      setSavingThresholdVariantId(
+        null,
+      )
+    }
+  }
+
   function handleClearFilters() {
     setSearch('')
 
@@ -534,9 +697,10 @@ export default function InventoryClient() {
           </dd>
 
           <p className="mt-1 text-xs text-gray-600">
-            Igual ou inferior a{' '}
+            Limiar global de{' '}
             {overview.threshold}{' '}
-            unidades (acima de zero).
+            unidades ou limiar próprio
+            da variante.
           </p>
         </div>
 
@@ -690,7 +854,7 @@ export default function InventoryClient() {
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[720px] text-left text-sm">
+            <table className="w-full min-w-[880px] text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-[0.08em] text-gray-600">
                 <tr>
                   <th className="px-4 py-3 font-bold">
@@ -707,6 +871,10 @@ export default function InventoryClient() {
 
                   <th className="px-4 py-3 font-bold">
                     Estado
+                  </th>
+
+                  <th className="px-4 py-3 font-bold">
+                    Limiar
                   </th>
 
                   <th className="px-4 py-3 font-bold">
@@ -750,6 +918,97 @@ export default function InventoryClient() {
                       </td>
 
                       <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1.5">
+                          <span
+                            className={`inline-block w-fit rounded px-2 py-1 text-xs font-bold ${
+                              row.lowStockThreshold ===
+                              null
+                                ? 'bg-gray-100 text-gray-700'
+                                : 'bg-violet-100 text-violet-800'
+                            }`}
+                          >
+                            {row.lowStockThreshold ===
+                            null
+                              ? `Global: ${overview.threshold}`
+                              : `Próprio: ${row.lowStockThreshold}`}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <input
+                              aria-label={`Limiar de stock de ${row.sku}`}
+                              type="number"
+                              min={
+                                MIN_THRESHOLD
+                              }
+                              max={
+                                MAX_THRESHOLD
+                              }
+                              step={1}
+                              placeholder={String(
+                                row.lowStockThreshold ??
+                                  overview.threshold,
+                              )}
+                              value={
+                                thresholdDrafts[
+                                  row
+                                    .variantId
+                                ] ??
+                                (row.lowStockThreshold ===
+                                null
+                                  ? ''
+                                  : String(
+                                      row
+                                        .lowStockThreshold,
+                                    ))
+                              }
+                              onChange={(
+                                event,
+                              ) =>
+                                setThresholdDrafts(
+                                  (
+                                    current,
+                                  ) => ({
+                                    ...current,
+                                    [
+                                      row
+                                        .variantId
+                                    ]:
+                                      event
+                                        .target
+                                        .value,
+                                  }),
+                                )
+                              }
+                              className="w-20 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                            />
+
+                            <button
+                              type="button"
+                              aria-label={`Guardar limiar de ${row.sku}`}
+                              disabled={
+                                savingVariantId !==
+                                  null ||
+                                savingThresholdVariantId !==
+                                  null ||
+                                loading
+                              }
+                              onClick={() =>
+                                void handleThresholdSave(
+                                  row,
+                                )
+                              }
+                              className="rounded bg-black px-3 py-1.5 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {savingThresholdVariantId ===
+                              row.variantId
+                                ? 'A guardar...'
+                                : 'Guardar'}
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <input
                             aria-label={`Novo stock de ${row.sku}`}
@@ -785,6 +1044,8 @@ export default function InventoryClient() {
                             aria-label={`Guardar stock de ${row.sku}`}
                             disabled={
                               savingVariantId !==
+                                null ||
+                              savingThresholdVariantId !==
                                 null ||
                               loading
                             }
