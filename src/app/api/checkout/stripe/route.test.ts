@@ -129,6 +129,10 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+vi.mock('@/server/db', () => ({
+  prisma: {},
+}))
+
 vi.mock('@/server/user-auth', () => ({
   requireActiveUserId: mocks.requireActiveUserId,
   UnauthorizedUserError: mocks.UnauthorizedUserError,
@@ -443,6 +447,7 @@ describe('/api/checkout/stripe', () => {
         shippingMethod: undefined,
         paymentMethod: 'CARD',
         installmentCount: null,
+        couponCode: null,
       },
       validFingerprint,
     )

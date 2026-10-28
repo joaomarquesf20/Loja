@@ -84,6 +84,9 @@ function createPreview(
     tax: number
     total: number
     expressAvailable: boolean
+    /** Épico 7 — cupão aplicado ao preview. */
+    discount: number
+    couponCode: string
   }>,
 ) {
   return {
@@ -1449,6 +1452,7 @@ describe(
             ),
           ),
         ).toEqual({
+          couponCode: null,
           fulfillmentMethod:
             'DELIVERY',
           paymentMethod: 'CARD',
@@ -1570,6 +1574,7 @@ describe(
             ),
           ),
         ).toEqual({
+          couponCode: null,
           fulfillmentMethod:
             'PICKUP',
           paymentMethod: 'CARD',
@@ -2133,6 +2138,7 @@ describe(
             ),
           ),
         ).toEqual({
+          couponCode: null,
           fulfillmentMethod:
             'DELIVERY',
           paymentMethod: 'CARD',
@@ -2274,6 +2280,384 @@ describe(
           redirectMocks
             .redirectToExternalUrl,
         ).not.toHaveBeenCalled()
+      },
+    )
+
+    // Épico 7 — fluxos do cupão de desconto: validar no endpoint
+    // (subtotal calculado no servidor), aplicar → recalcular preview,
+    // remover e enviar o cupão no pedido de criação da encomenda.
+    test(
+      'aplica cupão válido e recalcula o preview com desconto',
+      async () => {
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              valid: true,
+              code: 'PROMO10',
+              discount: 10,
+              newTotal: 90,
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview: createPreview({
+                total: 90,
+                discount: 10,
+                couponCode:
+                  'PROMO10',
+              }),
+            }),
+          )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Cupão de desconto',
+          ),
+          {
+            target: {
+              value: 'promo10',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Aplicar',
+            },
+          ),
+        )
+
+        await screen.findByText(
+          'Cupão PROMO10 aplicado.',
+        )
+
+        const validateOptions =
+          fetchMock.mock
+            .calls[2]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          validateOptions?.method,
+        ).toBe('POST')
+        expect(
+          JSON.parse(
+            String(
+              validateOptions?.body,
+            ),
+          ),
+        ).toEqual({
+          code: 'PROMO10',
+        })
+
+        // o preview é recalculado com o cupão aplicado
+        const previewOptions =
+          fetchMock.mock
+            .calls[3]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              previewOptions?.body,
+            ),
+          ).couponCode,
+        ).toBe('PROMO10')
+
+        expect(
+          screen.getByText(
+            /Desconto/,
+          ),
+        ).toBeTruthy()
+      },
+    )
+
+    test(
+      'cupão inválido mostra a mensagem do servidor e não recalcula',
+      async () => {
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              valid: false,
+              reason: 'EXPIRED',
+              message:
+                'Este cupão expirou.',
+            }),
+          )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Cupão de desconto',
+          ),
+          {
+            target: {
+              value: 'PROMO10',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Aplicar',
+            },
+          ),
+        )
+
+        expect(
+          await screen.findByText(
+            'Este cupão expirou.',
+          ),
+        ).toBeTruthy()
+
+        // validar + carregamento inicial apenas: sem recálculo
+        expect(
+          fetchMock,
+        ).toHaveBeenCalledTimes(3)
+      },
+    )
+
+    test(
+      'remove cupão e recalcula o preview sem desconto',
+      async () => {
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              valid: true,
+              code: 'PROMO10',
+              discount: 10,
+              newTotal: 90,
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview: createPreview({
+                total: 90,
+                discount: 10,
+                couponCode:
+                  'PROMO10',
+              }),
+            }),
+          )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Cupão de desconto',
+          ),
+          {
+            target: {
+              value: 'PROMO10',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Aplicar',
+            },
+          ),
+        )
+
+        await screen.findByText(
+          'Cupão PROMO10 aplicado.',
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview:
+                createPreview(),
+            }),
+          )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Remover',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            fetchMock,
+          ).toHaveBeenCalledTimes(5)
+        })
+
+        const previewOptions =
+          fetchMock.mock
+            .calls[4]?.[1] as
+            | RequestInit
+            | undefined
+
+        expect(
+          JSON.parse(
+            String(
+              previewOptions?.body,
+            ),
+          ).couponCode,
+        ).toBeNull()
+
+        expect(
+          screen.getByLabelText(
+            'Cupão de desconto',
+          ),
+        ).toHaveValue('')
+
+        expect(
+          screen.queryByText(
+            'Cupão PROMO10 aplicado.',
+          ),
+        ).toBeNull()
+      },
+    )
+
+    test(
+      'envia o cupão aplicado no pedido de criação da encomenda',
+      async () => {
+        await requestDeliveryPreview()
+
+        await screen.findByRole(
+          'button',
+          {
+            name:
+              'Criar encomenda',
+          },
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse({
+              valid: true,
+              code: 'PROMO10',
+              discount: 10,
+              newTotal: 90,
+            }),
+          )
+          .mockResolvedValueOnce(
+            jsonResponse({
+              preview: createPreview({
+                total: 90,
+                discount: 10,
+                couponCode:
+                  'PROMO10',
+              }),
+            }),
+          )
+
+        fireEvent.change(
+          screen.getByLabelText(
+            'Cupão de desconto',
+          ),
+          {
+            target: {
+              value: 'PROMO10',
+            },
+          },
+        )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name: 'Aplicar',
+            },
+          ),
+        )
+
+        await screen.findByText(
+          'Cupão PROMO10 aplicado.',
+        )
+
+        fetchMock
+          .mockResolvedValueOnce(
+            jsonResponse(
+              {
+                order:
+                  createOrder(
+                    'DELIVERY',
+                  ),
+                checkoutSession:
+                  createCheckoutSession(),
+              },
+              201,
+            ),
+          )
+
+        fireEvent.click(
+          screen.getByRole(
+            'button',
+            {
+              name:
+                'Criar encomenda',
+            },
+          ),
+        )
+
+        await waitFor(() => {
+          expect(
+            redirectMocks
+              .redirectToExternalUrl,
+          ).toHaveBeenCalledWith(
+            'https://stripe.test/pagar',
+          )
+        })
+
+        const checkoutOptions =
+          fetchMock.mock
+            .calls[4]?.[1] as
+            | RequestInit
+            | undefined
+
+        const checkoutBody = JSON.parse(
+          String(
+            checkoutOptions?.body,
+          ),
+        )
+
+        expect(
+          checkoutBody.couponCode,
+        ).toBe('PROMO10')
+        expect(
+          checkoutBody.expectedFingerprint,
+        ).toBe('ab'.repeat(32))
       },
     )
   },

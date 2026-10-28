@@ -2179,6 +2179,226 @@ Próximos passos (pós-etapa):
   overview/route.test.ts, CHECKPOINT.md).
 - Continuar o Épico 6 com o utilizador.
 
+## Épico 7 — Etapa 1: Cupões de desconto e
+motor de descontos no checkout
+
+Data: 2026-10-28 · Branch: `master` · Sem commit
+(aguarda pedido do utilizador).
+
+Pedido do utilizador: modelo `Coupon` +
+migração; serviço de cupões
+(`src/server/coupons.ts`); endpoint
+autenticado de validação
+(`POST /api/checkout/coupons/validate`) a
+devolver desconto + total atualizado;
+desconto integrado na sessão Stripe e no
+resumo do checkout; testes com edge cases
+(expirado/limite/total mínimo) e incremento
+atómico do uso; gate completa.
+
+Esquema + migração:
+- enum `CouponDiscountType`
+  (PERCENTAGE | FIXED_AMOUNT).
+- `Coupon`: `id`, `code` unique (guardado em
+  maiúsculas), `discountType`,
+  `discountValue Float`, `minOrderValue
+  Float?`, `maxUses Int?`, `usedCount Int
+  default 0`, `startsAt/expiresAt DateTime?`,
+  `isActive Boolean default true`,
+  createdAt/updatedAt.
+- Encomenda ganha snapshot:
+  `couponCode String?` + `discountAmount
+  Decimal(10,2)?` — sem snapshot a verificação
+  de integridade do Stripe quebra.
+- Migração `20261028162716_add_coupon_model`
+  aplicada (enum + tabela + 2 colunas);
+  `npx prisma generate` corrido manualmente.
+
+Serviço (`src/server/coupons.ts`):
+- `validateCouponCode(input?, client?)` —
+  leitura pura; devolve união
+  `{valid:true, coupon{id,code,discountType,
+  discountValue}, discount, newTotal}` |
+  `{valid:false, reason, message}` (nunca
+  lança falha de negócio; ZodError → 400 nas
+  rotas).
+- `evaluateCoupon(tx, input)` — avalia dentro
+  da transação e lança
+  `CouponRejectedError{reason}`; usado pelo
+  prepareCheckout.
+- `incrementCouponUsage(tx,
+  {couponId, maxUses})` — `updateMany`
+  guardado (`usedCount: {lt: maxUses}` só
+  quando maxUses ≠ null); count ≠ 1 →
+  LIMIT_REACHED.
+- `applyCouponToOrder(tx, input)` = avaliar +
+  incrementar, na transação.
+- Motivos: NOT_FOUND, INACTIVE, NOT_STARTED,
+  EXPIRED, LIMIT_REACHED, MIN_ORDER_NOT_MET;
+  precedência INACTIVE → NOT_STARTED →
+  EXPIRED → LIMIT_REACHED → MIN_ORDER_NOT_MET;
+  `startsAt == agora` passa (inclusivo),
+  `expiresAt == agora` já expirou.
+- `readCartSubtotalCents(userId, client?)` —
+  subtotal de produtos calculado NO SERVIDOR
+  (itens ativos + quantidade válida); o
+  cliente não fornece o total antes do
+  preview.
+- Precisão monetária: discountValue/
+  minOrderValue em Float (decisão do schema);
+  todo o cálculo arredondado a cêntimos
+  (`roundToCents`) e `couponAmountToCents()`
+  exporta a conversão para cêntimos inteiros
+  usada pelo checkout/stripe.
+
+Checkout (`src/server/checkout.ts`):
+- Input ganha `couponCode?: string | null`
+  (normalizado: trim + maiúsculas; vazio →
+  null; > 40 caracteres →
+  CheckoutValidationError).
+- prepareCheckout: cupão avaliado DENTRO da
+  transação serializável (mesmo snapshot dos
+  artigos); desconto aplicado a
+  productsSubtotalCents (NÃO aos portes);
+  `discountCents >= totalCents` →
+  CheckoutPricingError ('O cupão anularia o
+  total da encomenda').
+- Fingerprint: `coupon` entra no snapshot e
+  schemaVersion 5 → 6 (cupão diferente do
+  preview aprovado → 409).
+- order.create persiste `couponCode` +
+  `discountAmount`; `incrementCouponUsage`
+  corre DEPOIS da criação da encomenda na
+  MESMA transação — qualquer falha reverte
+  encomenda + carrinho.
+- CheckoutPreviewResult: `discount`/
+  `couponCode` opcionais (presentes apenas
+  com cupão).
+
+Stripe (`src/server/stripe.ts`):
+- `StripeValidationErrorField` ganha
+  'discount'.
+- Projeção lê `couponCode`/`discountAmount`;
+  `buildStripeCheckoutLineItems` devolve
+  `{items, discount}` com integridade
+  `somaItens − desconto === total` (a mensagem
+  de conflito menciona o cupão).
+- `buildStripeCheckoutSessionParams`: desconto
+  validado (inteiro seguro ≥ 0, nome
+  obrigatório), total final > 0 ('O total a
+  pagar não pode ser zero') e `discounts:
+  [{coupon: {name, amount_off, currency,
+  duration: 'once'}}]` (cupão inline).
+- Ambas as iniciações (nova sessão e retoma)
+  passam `discount: projection.discount`.
+
+Rotas:
+- Novo `POST /api/checkout/coupons/validate`
+  (autenticado): subtotal calculado no
+  servidor; carrinho vazio → `{valid:false,
+  reason:'EMPTY_CART'}` (200); ZodError → 400
+  com a mensagem do campo `code` quando
+  existir.
+- `checkout-request.ts` (parser partilhado):
+  `couponCode` normalizado (malformado → 400
+  INVALID_COUPON_CODE) e
+  `mapCheckoutDomainError` mapeia
+  `CouponRejectedError` → 400 com mensagem de
+  negócio; checkout/route e stripe/route
+  compõem `couponCode` no input.
+- preview/route: mesmo parser + mapeamento
+  para o preview.
+
+Cliente (`src/app/checkout/checkout-client.tsx`):
+- Estados couponDraft/appliedCoupon/
+  couponNotice + pendingAction 'coupon'.
+- Aplicar: valida no endpoint; se o preview
+  existe, recalcula com o cupão; Remover
+  recalcula sem cupão; o body do checkout
+  leva `couponCode` quando há cupão aplicado.
+- UI: controlo de cupão no resumo + linha
+  'Desconto' antes do Total.
+
+Testes (74 novos):
+- `src/server/coupons.test.ts`: 39 (schema
+  Zod, janela temporal inclusiva/exclusiva,
+  limite, mínimo, precedências, clamp do
+  desconto, guarda atómica, subtotal do
+  carrinho).
+- `coupons/validate/route.test.ts`: 9
+  (passthrough 200, EMPTY_CART, 401, JSON
+  inválido, 413, Zod → 400, 500).
+- `checkout.test.ts` +13: preview com cupão
+  (10% de 39.98 → desconto 4.00, total
+  41.88), preview sem cupão não lê cupões,
+  fingerprint muda com o cupão, recusas
+  (inativo/ não iniciado/expirado/limite/
+  mínimo), cupão que anularia o total
+  (PICKUP), snapshot persistido, guard
+  maxUses, corrida perdida, cupão inativado
+  entre preview e criação.
+- `stripe.test.ts` +9: discount na projeção
+  (com cupão/null/desalinhado + mensagem),
+  discounts inline, sem cupão não define
+  discounts, desconto que anula o total,
+  negativo/não inteiro.
+- `checkout-client.test.tsx` +4: aplicar
+  válido (valida → recalcula), inválido (msg
+  do servidor, sem recálculo), remover, body
+  do checkout com couponCode.
+
+Gate: `npx tsc --noEmit` limpo; `npx vitest
+run` **2427 passed** + 3 skipped (169
+ficheiros: 168 passed + 1 skipped);
+`npm run lint` limpo; `npm run build` limpo —
+route map ganha
+`/api/checkout/coupons/validate` ƒ.
+
+Limitações conhecidas (para etapas futuras):
+- O uso do cupão NÃO é libertado quando a
+  encomenda é cancelada (usedCount incrementa
+  na criação e não reverte) — agendar
+  reversão/ajuste.
+- Percentagem/valor em Float: cálculo sempre
+  com round-to-cents; se surgir precisão
+  problemática, migrar para Decimal.
+- Sem gestão de cupões no admin (criar/
+  editar/desativar) — etapa futura.
+- Incremento por criação de encomenda: um
+  pagamento falhado não devolve o uso.
+
+Lições desta etapa (para `knowledge.md` em §
+futura):
+- Em Vitest 4, `mock.invocationCallOrder` é
+  um ARRAY de números — comparar índice
+  (`[0]`), não o valor direto.
+- Suites de rotas cujo parser partilhado
+  importa módulos que por fim leem `./db`
+  precisam de `vi.mock('@/server/db', () =>
+  ({ prisma: {} }))` mesmo com o serviço
+  mockado (o import de constantes/classes
+  avalia o módulo real).
+- Fixtures que alimentam `StripeOrderRecord`
+  precisam dos campos novos quando a função
+  lê incondicionalmente
+  (`discountAmount.toString()`).
+- `toEqual`/`toHaveBeenCalledWith` ignoram
+  chaves com valor undefined mas NÃO null —
+  `couponCode: null` tem de entrar nos
+  objetos esperados.
+
+Próximos passos (pós-etapa):
+- Commit da etapa 1 quando o utilizador
+  pedir (ficheiros: prisma/schema.prisma +
+  migração add_coupon_model, coupons.ts
+  (+test), checkout.ts (+test), stripe.ts
+  (+test), checkout-request.ts, rotas
+  checkout/preview/stripe (+tests), rota
+  coupons/validate (+test),
+  checkout-client.tsx (+test), CHECKPOINT.md).
+- Continuar o Épico 7 (etapa 2) com o
+  utilizador.
+
 
 
 

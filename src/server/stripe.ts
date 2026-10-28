@@ -38,6 +38,7 @@ export type StripeValidationErrorField =
   | 'urls'
   | 'amount'
   | 'currency'
+  | 'discount'
   | 'sessionId'
   | 'metadata'
   | 'event'
@@ -130,6 +131,19 @@ type StripeCheckoutSessionCreateArgs =
         }
       }
     }>
+    /**
+     * Épico 7 — desconto de cupão aplicado à sessão via cupão inline
+     * do Stripe (`amount_off` em cêntimos). Presente apenas quando a
+     * encomenda tem cupão.
+     */
+    discounts?: Array<{
+      coupon: {
+        name: string
+        amount_off: number
+        currency: string
+        duration: 'once'
+      }
+    }>
   }
 
 export type StripeCheckoutSessionsDelegate =
@@ -193,6 +207,14 @@ export type StripeCheckoutSessionInput = {
   items: Array<StripeCheckoutLineItemInput>
   successUrl: string
   cancelUrl: string
+  /**
+   * Épico 7 — desconto do cupão (cêntimos + nome do cupão) ou null
+   * quando a encomenda não tem cupão.
+   */
+  discount?: {
+    amountCents: number
+    name: string
+  } | null
 }
 
 export type StripeCheckoutSessionResult = {
@@ -373,7 +395,8 @@ function normalizeRequiredStripeString(
 /**
  * Constrói os parâmetros da sessão de Checkout a partir da projeção da
  * encomenda. O total da sessão tem de ser exatamente o total da encomenda
- * (artigos + portes); qualquer divergência é rejeitada.
+ * (artigos + portes − desconto do cupão); qualquer divergência é
+ * rejeitada.
  */
 export function buildStripeCheckoutSessionParams(
   input: StripeCheckoutSessionInput,
@@ -498,6 +521,63 @@ export function buildStripeCheckoutSessionParams(
     )
   }
 
+  // Épico 7 — desconto do cupão aplicado à sessão via cupão inline
+  // (`amount_off`, em cêntimos): o valor a cobrir passa a ser
+  // artigos + portes − desconto e tem de continuar positivo.
+  const discount = input.discount ?? null
+
+  let discountCents = 0
+  let discountName: string | null = null
+
+  if (discount !== null) {
+    if (
+      !Number.isSafeInteger(
+        discount.amountCents,
+      ) ||
+      discount.amountCents < 0
+    ) {
+      throw new StripeValidationError(
+        'discount',
+        'Desconto de cupão inválido',
+      )
+    }
+
+    discountCents =
+      discount.amountCents
+
+    discountName =
+      normalizeRequiredStripeString(
+        discount.name,
+        'discount',
+        'Desconto de cupão inválido',
+      )
+  }
+
+  if (
+    itemsSumCents - discountCents <=
+    0
+  ) {
+    throw new StripeValidationError(
+      'items',
+      'O total a pagar não pode ser zero',
+    )
+  }
+
+  const discounts =
+    discountCents > 0 &&
+    discountName !== null
+      ? [
+          {
+            coupon: {
+              name: discountName,
+              amount_off: discountCents,
+              currency: STRIPE_CURRENCY,
+              duration: 'once' as const,
+            },
+          },
+        ]
+      : undefined
+
   return {
     mode: 'payment',
     customer_email: customerEmail,
@@ -512,6 +592,7 @@ export function buildStripeCheckoutSessionParams(
         STRIPE_PAYMENT_PROVIDER,
     },
     line_items: lineItems,
+    discounts,
   }
 }
 
@@ -822,6 +903,14 @@ export type StripeCheckoutProjection = {
   customerEmail: string
   status: string
   items: Array<StripeCheckoutLineItemInput>
+  /**
+   * Épico 7 — desconto do cupão a aplicar à sessão (cêntimos + nome),
+   * ou null quando a encomenda não tem cupão.
+   */
+  discount: {
+    amountCents: number
+    name: string
+  } | null
 }
 
 type StripeOrderItemRecord = {
@@ -849,6 +938,11 @@ type StripeOrderRecord = {
   total: {
     toString(): string
   }
+  // Épico 7 — snapshot do cupão aplicado na criação da encomenda.
+  couponCode: string | null
+  discountAmount: {
+    toString(): string
+  } | null
   shippingEmail: string
   items: Array<StripeOrderItemRecord>
 }
@@ -869,6 +963,9 @@ type StripeOrderFindFirstArgs = {
     fulfillmentMethod: true
     shippingCost: true
     total: true
+    // Épico 7 — snapshot do cupão aplicado na criação da encomenda.
+    couponCode: true
+    discountAmount: true
     shippingEmail: true
     items: {
       select: {
@@ -985,6 +1082,9 @@ async function findStripeOrderProjection(
         fulfillmentMethod: true,
         shippingCost: true,
         total: true,
+        // Épico 7 — snapshot do cupão aplicado na criação da encomenda.
+        couponCode: true,
+        discountAmount: true,
         shippingEmail: true,
         items: {
           select: {
@@ -1027,12 +1127,19 @@ async function findStripeOrderProjection(
 /**
  * Converte os artigos da encomenda em linhas de Checkout (incluindo a
  * linha de portes, quando aplicável) e garante que a sessão cobra
- * exatamente o total da encomenda (artigos + portes). Numa encomenda
- * consistente o stock continua reservado desde a criação.
+ * exatamente o total da encomenda (artigos + portes − desconto do
+ * cupão). Numa encomenda consistente o stock continua reservado desde a
+ * criação.
  */
 function buildStripeCheckoutLineItems(
   order: StripeOrderRecord,
-): StripeCheckoutLineItemInput[] {
+): {
+  items: StripeCheckoutLineItemInput[]
+  discount: {
+    amountCents: number
+    name: string
+  } | null
+} {
   const items: Array<
     StripeCheckoutLineItemInput
   > = order.items.map(
@@ -1062,8 +1169,9 @@ function buildStripeCheckoutLineItems(
     })
   }
 
-  // A sessão do Stripe cobra a soma dos artigos; garante que coincide
-  // com o total da encomenda antes de abrir a sessão.
+  // A sessão do Stripe cobra a soma dos artigos MENOS o desconto do
+  // cupão (cupão inline `amount_off`); garante que coincide com o total
+  // da encomenda antes de abrir a sessão.
   const expectedTotalCents =
     decimalMoneyToCents(
       order.total.toString(),
@@ -1077,29 +1185,55 @@ function buildStripeCheckoutLineItems(
       item.quantity
   }
 
+  // Épico 7 — desconto do cupão em cêntimos a partir do snapshot da
+  // encomenda (null/0 = sem cupão).
+  let discountCents = 0
+
+  if (order.discountAmount !== null) {
+    const parsed =
+      decimalMoneyToCents(
+        order.discountAmount.toString(),
+      )
+
+    discountCents = parsed > 0 ? parsed : 0
+  }
+
   if (
-    itemsSumCents !==
+    itemsSumCents - discountCents !==
     expectedTotalCents
   ) {
     throw new StripeCheckoutConflictError(
-      'O total da encomenda não corresponde aos artigos e aos portes de envio',
+      order.couponCode === null
+        ? 'O total da encomenda não corresponde aos artigos e aos portes de envio'
+        : 'O total da encomenda não corresponde aos artigos, portes e desconto do cupão',
     )
   }
 
-  return items
+  const discount =
+    order.couponCode === null ||
+    discountCents === 0
+      ? null
+      : {
+          amountCents: discountCents,
+          name: `Cupão ${order.couponCode}`,
+        }
+
+  return { items, discount }
 }
 
 function getStripeCheckoutProjection(
   order: StripeOrderRecord,
 ): StripeCheckoutProjection {
+  const built =
+    buildStripeCheckoutLineItems(order)
+
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
     customerEmail: order.shippingEmail,
     status: order.status,
-    items: buildStripeCheckoutLineItems(
-      order,
-    ),
+    items: built.items,
+    discount: built.discount,
   }
 }
 
@@ -1284,6 +1418,7 @@ export async function initiateStripeCheckoutForOrder(
         customerEmail:
           projection.customerEmail,
         items: projection.items,
+        discount: projection.discount,
         successUrl: urls.successUrl,
         cancelUrl: urls.cancelUrl,
       },
@@ -1383,6 +1518,7 @@ export async function retryStripeCheckoutForOrder(
         customerEmail:
           projection.customerEmail,
         items: projection.items,
+        discount: projection.discount,
         successUrl:
           urls.buildSuccessUrl(
             projection.orderNumber,

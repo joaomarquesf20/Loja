@@ -13,6 +13,15 @@ import {
 } from './commercial-settings'
 import { prisma } from './db'
 import {
+  COUPON_CODE_MAX_LENGTH,
+  couponAmountToCents,
+  evaluateCoupon,
+  incrementCouponUsage,
+  type CouponEvaluation,
+  type CouponRecord,
+  type CouponSelect,
+} from './coupons'
+import {
   recordStockMovement,
   type StockMovementRecordInput,
 } from './inventory'
@@ -139,7 +148,13 @@ export type CheckoutPaymentInput =
 
 export type CheckoutInput =
   CheckoutFulfillmentInput &
-    CheckoutPaymentInput
+    CheckoutPaymentInput & {
+      /**
+       * Épico 7 — código de cupão opcional. Normalizado no serviço
+       * (trim + maiúsculas; vazio → null = sem cupão).
+       */
+      couponCode?: string | null
+    }
 
 export type CheckoutShipping = {
   name: string
@@ -181,7 +196,10 @@ type NormalizedPaymentInput =
 
 type NormalizedCheckoutInput =
   NormalizedFulfillmentInput &
-    NormalizedPaymentInput
+    NormalizedPaymentInput & {
+      /** Épico 7 — código de cupão normalizado (null = sem cupão). */
+      couponCode: string | null
+    }
 
 export type CheckoutResult = {
   id: string
@@ -208,6 +226,12 @@ type CheckoutAmounts = {
 export type CheckoutPreviewResult = CheckoutAmounts & {
   fingerprint: string
   expressAvailable: boolean
+  /**
+   * Épico 7 — presentes apenas quando há cupão aplicado ao preview:
+   * desconto em euros e código normalizado.
+   */
+  discount?: number
+  couponCode?: string
 }
 
 export class CheckoutValidationError extends Error {
@@ -335,6 +359,40 @@ type CheckoutTransactionClient =
       }>
     }
 
+    /**
+     * Épico 7 — cupão aplicado na MESMA transação serializável do
+     * checkout: a avaliação lê o cupão do mesmo snapshot dos artigos e
+     * o incremento do uso é atómico (`updateMany` guardado).
+     */
+    coupon: {
+      findUnique(args: {
+        where: {
+          code: string
+        }
+        select: CouponSelect
+      }): Promise<CouponRecord | null>
+
+      updateMany(args: {
+        where:
+          | {
+              id: string
+            }
+          | {
+              id: string
+              usedCount: {
+                lt: number
+              }
+            }
+        data: {
+          usedCount: {
+            increment: number
+          }
+        }
+      }): Promise<{
+        count: number
+      }>
+    }
+
     productVariant: {
       updateMany(args: {
         where: {
@@ -406,6 +464,9 @@ type CheckoutTransactionClient =
             | string
             | null
           freeShippingApplied: boolean
+          // Épico 7 — snapshot do cupão aplicado (null = sem cupão).
+          couponCode: string | null
+          discountAmount: string | null
         }
         select: {
           id: true
@@ -841,6 +902,46 @@ function normalizePaymentInput(
   )
 }
 
+/**
+ * Normaliza o código de cupão no input: trim + maiúsculas; ausente,
+ * null ou vazio → null (sem cupão). Comprimento máximo partilhado com
+ * o motor de cupões (`COUPON_CODE_MAX_LENGTH`).
+ */
+function normalizeCouponCodeInput(
+  value: unknown,
+): string | null {
+  if (
+    value === undefined ||
+    value === null
+  ) {
+    return null
+  }
+
+  if (typeof value !== 'string') {
+    throw new CheckoutValidationError(
+      'Código de cupão inválido',
+    )
+  }
+
+  const normalized =
+    value.trim().toUpperCase()
+
+  if (normalized === '') {
+    return null
+  }
+
+  if (
+    normalized.length >
+    COUPON_CODE_MAX_LENGTH
+  ) {
+    throw new CheckoutValidationError(
+      `O código de cupão não pode exceder ${COUPON_CODE_MAX_LENGTH} caracteres`,
+    )
+  }
+
+  return normalized
+}
+
 function normalizeCheckoutInput(
   input: CheckoutServiceInput,
 ): NormalizedCheckoutInput {
@@ -849,6 +950,14 @@ function normalizeCheckoutInput(
       input,
     ),
     ...normalizePaymentInput(input),
+    couponCode:
+      normalizeCouponCodeInput(
+        (
+          input as {
+            couponCode?: unknown
+          }
+        ).couponCode,
+      ),
   } as NormalizedCheckoutInput
 }
 
@@ -1540,11 +1649,45 @@ async function prepareCheckout(
     )
   }
 
+  // Épico 7 — cupão de desconto. A avaliação ocorre DENTRO da mesma
+  // transação serializável (mesmo snapshot dos artigos) e o desconto é
+  // aplicado ao pricing em cêntimos ANTES do fingerprint — o preview e
+  // a criação partilham exatamente os mesmos montantes. O incremento do
+  // uso do cupão fica para DEPOIS da criação da encomenda.
+  let coupon: CouponEvaluation | null = null
+
+  if (
+    fulfillment.couponCode !== null
+  ) {
+    coupon = await evaluateCoupon(tx, {
+      code: fulfillment.couponCode,
+      cartTotal: centsToNumber(
+        pricing.productsSubtotalCents,
+      ),
+    })
+
+    const discountCents =
+      couponAmountToCents(coupon.discount)
+
+    if (discountCents >= pricing.totalCents) {
+      throw new CheckoutPricingError(
+        'O cupão anularia o total da encomenda',
+      )
+    }
+
+    pricing = {
+      ...pricing,
+      totalCents:
+        pricing.totalCents - discountCents,
+    }
+  }
+
   return {
     user,
     shippingEmail,
     preparedItems,
     pricing,
+    coupon,
     expressAvailable,
   }
 }
@@ -1576,7 +1719,7 @@ function createCheckoutFingerprint(
       : null
 
   const snapshot = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     userId: user.id,
     shippingEmail,
     fulfillmentMethod:
@@ -1694,6 +1837,10 @@ function createCheckoutFingerprint(
       expressSurchargeCents:
         pricing.expressSurchargeCents,
     },
+    // Épico 7 — o cupão faz parte do snapshot: um POST com um cupão
+    // diferente do preview reprovado é rejeitado
+    // (CheckoutPreviewChangedError).
+    coupon: fulfillment.couponCode,
   }
 
   return createHash('sha256')
@@ -1753,6 +1900,16 @@ export async function previewCheckout(
         ...createCheckoutAmounts(
           prepared.pricing,
         ),
+        // Épico 7 — chaves presentes apenas quando há cupão aplicado,
+        // para não alterar o contrato dos clientes sem cupão.
+        ...(prepared.coupon === null
+          ? {}
+          : {
+              discount:
+                prepared.coupon.discount,
+              couponCode:
+                prepared.coupon.code,
+            }),
         fingerprint:
           createCheckoutFingerprint(
             prepared,
@@ -1807,6 +1964,7 @@ export async function createCheckoutOrder(
         shippingEmail,
         preparedItems,
         pricing,
+        coupon,
       } = prepared
 
       for (
@@ -1969,6 +2127,19 @@ export async function createCheckoutOrder(
             freeShippingApplied:
               pricing
                 .freeShippingApplied,
+            // Épico 7 — snapshot do cupão: código normalizado e
+            // desconto em euros. O `total` persistido é o valor FINAL
+            // (subtotal − desconto + portes).
+            couponCode:
+              fulfillment.couponCode,
+            discountAmount:
+              coupon === null
+                ? null
+                : centsToString(
+                    couponAmountToCents(
+                      coupon.discount,
+                    ),
+                  ),
           },
           select: {
             id: true,
@@ -2027,6 +2198,17 @@ export async function createCheckoutOrder(
           },
         },
       })
+
+      // Épico 7 — o uso do cupão é incrementado APÓS a criação da
+      // encomenda, na MESMA transação: qualquer falha (limite atingido
+      // concorrentemente incluído) reverte a encomenda e o carrinho.
+      // `couponId`/`maxUses` vêm do prepare — sem reler o cupão.
+      if (coupon !== null) {
+        await incrementCouponUsage(tx, {
+          couponId: coupon.couponId,
+          maxUses: coupon.maxUses,
+        })
+      }
 
       return {
         id: order.id,

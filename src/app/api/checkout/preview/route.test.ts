@@ -77,6 +77,10 @@ const mocks = vi.hoisted(() => {
   }
 })
 
+vi.mock('@/server/db', () => ({
+  prisma: {},
+}))
+
 vi.mock('@/server/user-auth', () => ({
   requireActiveUserId: mocks.requireActiveUserId,
   UnauthorizedUserError: mocks.UnauthorizedUserError,
@@ -308,6 +312,7 @@ describe('/api/checkout/preview', () => {
       shippingMethod: 'EXPRESS',
       paymentMethod: 'CARD',
       installmentCount: null,
+      couponCode: null,
     })
   })
 
@@ -444,6 +449,7 @@ describe('/api/checkout/preview', () => {
         shipping: createShipping(),
         paymentMethod: 'INSTALLMENTS',
         installmentCount: 4,
+        couponCode: null,
       },
     )
     await expect(response.json()).resolves.toEqual({ preview })
@@ -478,6 +484,7 @@ describe('/api/checkout/preview', () => {
         shipping: createShipping(),
         paymentMethod: 'CARD',
         installmentCount: null,
+        couponCode: null,
       },
     )
     await expect(response.json()).resolves.toEqual({ preview })
@@ -508,6 +515,7 @@ describe('/api/checkout/preview', () => {
         shipping: createPickupContact(),
         paymentMethod: 'CARD',
         installmentCount: null,
+        couponCode: null,
       },
     )
     await expect(response.json()).resolves.toEqual({ preview })

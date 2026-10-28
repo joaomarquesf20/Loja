@@ -25,12 +25,19 @@ import {
   type CheckoutFulfillmentInput,
   type CheckoutShippingInput,
 } from './checkout'
+import {
+  CouponRejectedError,
+  type CouponRecord,
+} from './coupons'
 
 const validFingerprint = 'a'.repeat(64)
 
 async function previewFingerprint(
   tx: ReturnType<typeof createTransactionMock>,
-  shippingInput = shipping,
+  shippingInput: CheckoutShippingInput & {
+    /** Épico 7 — cupão opcional no fingerprint. */
+    couponCode?: string | null
+  } = shipping,
 ) {
   const preview = await previewCheckout(
     'user-1', shippingInput, createClient(tx).client,
@@ -352,6 +359,13 @@ function createTransactionMock() {
     },
     stockMovement: {
       create: stockMovementCreate,
+    },
+    // Épico 7 — cupão: preenchido apenas pelos testes de cupão; os
+    // restantes fluxos nunca tocam neste delegate (só é acessado com
+    // `couponCode` no pedido).
+    coupon: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
     },
     order: {
       create: vi.fn(),
@@ -2529,4 +2543,446 @@ describe('método de envio no checkout', () => {
       shippingCost: '0.00',
     })
   })
+})
+
+/**
+ * Épico 7 — integração do motor de cupões no checkout: o preview
+ * devolve o desconto e o total descontado; a criação reavalia o cupão
+ * na MESMA transação serializável, persiste o snapshot
+ * (`couponCode`/`discountAmount`) e incrementa o uso de forma atómica
+ * (guard `updateMany` contra corridas).
+ */
+describe('cupões no checkout (Épico 7)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function createTxCoupon(
+    overrides: Record<string, unknown> = {},
+  ): CouponRecord {
+    return {
+      id: 'coupon-1',
+      code: 'PROMO10',
+      discountType: 'PERCENTAGE',
+      discountValue: 10,
+      minOrderValue: null,
+      maxUses: null,
+      usedCount: 0,
+      startsAt: null,
+      expiresAt: null,
+      isActive: true,
+      ...overrides,
+    }
+  }
+
+  function prepareCoupon(
+    tx: ReturnType<
+      typeof createTransactionMock
+    >,
+    coupon: CouponRecord | null =
+      createTxCoupon(),
+    updateCount = 1,
+  ) {
+    tx.coupon.findUnique.mockResolvedValue(
+      coupon,
+    )
+
+    tx.coupon.updateMany.mockResolvedValue({
+      count: updateCount,
+    })
+  }
+
+  test(
+    'preview com cupão percentagem devolve desconto e total descontado',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+      prepareCoupon(tx)
+
+      const preview =
+        await previewCheckout(
+          'user-1',
+          {
+            ...shipping,
+            couponCode: 'promo10',
+          },
+          createClient(tx).client,
+        )
+
+      expect(preview.subtotal).toBe(
+        39.98,
+      )
+      expect(
+        preview.shippingCost,
+      ).toBe(5.9)
+      expect(preview.discount).toBe(
+        4,
+      )
+      expect(
+        preview.couponCode,
+      ).toBe('PROMO10')
+      expect(preview.total).toBe(
+        41.88,
+      )
+    },
+  )
+
+  test(
+    'preview sem cupão não lê o delegate de cupões',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+
+      await previewCheckout(
+        'user-1',
+        shipping,
+        createClient(tx).client,
+      )
+
+      expect(
+        tx.coupon.findUnique,
+      ).not.toHaveBeenCalled()
+    },
+  )
+
+  test(
+    'fingerprint muda quando o cupão muda',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+      prepareCoupon(tx)
+
+      const semCupao =
+        await previewFingerprint(
+          tx,
+          shipping,
+        )
+
+      const comCupao =
+        await previewFingerprint(tx, {
+          ...shipping,
+          couponCode: 'PROMO10',
+        })
+
+      expect(comCupao).not.toBe(
+        semCupao,
+      )
+    },
+  )
+
+  test.each([
+    [
+      'inativo',
+      {
+        isActive: false,
+      },
+      'INACTIVE',
+    ],
+    [
+      'ainda não começou',
+      {
+        startsAt: new Date(
+          '2099-01-01T00:00:00.000Z',
+        ),
+      },
+      'NOT_STARTED',
+    ],
+    [
+      'expirado',
+      {
+        expiresAt: new Date(
+          '2020-01-01T00:00:00.000Z',
+        ),
+      },
+      'EXPIRED',
+    ],
+    [
+      'limite atingido',
+      {
+        maxUses: 5,
+        usedCount: 5,
+      },
+      'LIMIT_REACHED',
+    ],
+    [
+      'subtotal abaixo do mínimo',
+      {
+        minOrderValue: 100,
+      },
+      'MIN_ORDER_NOT_MET',
+    ],
+  ])(
+    'preview recusa cupão %s',
+    async (
+      _label,
+      overrides,
+      reason,
+    ) => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+      prepareCoupon(
+        tx,
+        createTxCoupon(overrides),
+      )
+
+      await expect(
+        previewCheckout(
+          'user-1',
+          {
+            ...shipping,
+            couponCode: 'PROMO10',
+          },
+          createClient(tx).client,
+        ),
+      ).rejects.toMatchObject({
+        reason,
+      })
+    },
+  )
+
+  test(
+    'preview recusa cupão que anularia o total',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+
+      prepareCoupon(
+        tx,
+        createTxCoupon({
+          discountType:
+            'FIXED_AMOUNT',
+          discountValue: 50,
+        }),
+      )
+
+      // Levantamento (portes 0): o desconto fixo é limitado ao
+      // subtotal e, sem portes, coincide com o total → recusado.
+      await expect(
+        previewCheckout('user-1', {
+          fulfillmentMethod:
+            'PICKUP',
+          shipping: {
+            name: 'Maria Silva',
+            phone:
+              '+351 912 345 678',
+          },
+          couponCode: 'PROMO10',
+        }, createClient(tx).client),
+      ).rejects.toBeInstanceOf(
+        CheckoutPricingError,
+      )
+    },
+  )
+
+  test(
+    'createCheckoutOrder com cupão persiste o snapshot e incrementa o uso',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+      prepareCoupon(tx)
+
+      const fingerprint =
+        await previewFingerprint(tx, {
+          ...shipping,
+          couponCode: 'PROMO10',
+        })
+
+      const order =
+        await createCheckoutOrder(
+          'user-1',
+          {
+            ...shipping,
+            couponCode: 'PROMO10',
+          },
+          fingerprint,
+          createClient(tx).client,
+        )
+
+      expect(order.total).toBe(
+        41.88,
+      )
+
+      const createCall = tx.order
+        .create.mock
+        .calls[0]?.[0] as {
+        data: Record<string, unknown>
+      }
+
+      expect(
+        createCall.data,
+      ).toMatchObject({
+        couponCode: 'PROMO10',
+        discountAmount: '4.00',
+        total: '41.88',
+      })
+
+      expect(
+        tx.coupon.updateMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          id: 'coupon-1',
+        },
+        data: {
+          usedCount: {
+            increment: 1,
+          },
+        },
+      })
+
+      // o incremento corre DEPOIS da criação da encomenda, na mesma
+      // transação — um rollback reverte ambos
+      expect(
+        tx.coupon.updateMany.mock
+          .invocationCallOrder[0],
+      ).toBeGreaterThan(
+        tx.order.create.mock
+          .invocationCallOrder[0],
+      )
+    },
+  )
+
+  test(
+    'createCheckoutOrder com maxUses usa o guard atómico',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+
+      prepareCoupon(
+        tx,
+        createTxCoupon({
+          maxUses: 5,
+          usedCount: 2,
+        }),
+      )
+
+      const fingerprint =
+        await previewFingerprint(tx, {
+          ...shipping,
+          couponCode: 'PROMO10',
+        })
+
+      await createCheckoutOrder(
+        'user-1',
+        {
+          ...shipping,
+          couponCode: 'PROMO10',
+        },
+        fingerprint,
+        createClient(tx).client,
+      )
+
+      expect(
+        tx.coupon.updateMany,
+      ).toHaveBeenCalledWith({
+        where: {
+          id: 'coupon-1',
+          usedCount: {
+            lt: 5,
+          },
+        },
+        data: {
+          usedCount: {
+            increment: 1,
+          },
+        },
+      })
+    },
+  )
+
+  test(
+    'guard perde a corrida → LIMIT_REACHED',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+
+      prepareCoupon(
+        tx,
+        createTxCoupon({
+          maxUses: 1,
+        }),
+        0,
+      )
+
+      const fingerprint =
+        await previewFingerprint(tx, {
+          ...shipping,
+          couponCode: 'PROMO10',
+        })
+
+      await expect(
+        createCheckoutOrder(
+          'user-1',
+          {
+            ...shipping,
+            couponCode: 'PROMO10',
+          },
+          fingerprint,
+          createClient(tx).client,
+        ),
+      ).rejects.toMatchObject({
+        reason: 'LIMIT_REACHED',
+      })
+    },
+  )
+
+  test(
+    'cupão inativado entre o preview e a criação não cria encomenda',
+    async () => {
+      const tx =
+        createTransactionMock()
+
+      prepareSuccessfulCheckout(tx)
+      prepareCoupon(tx)
+
+      const fingerprint =
+        await previewFingerprint(tx, {
+          ...shipping,
+          couponCode: 'PROMO10',
+        })
+
+      prepareCoupon(
+        tx,
+        createTxCoupon({
+          isActive: false,
+        }),
+      )
+
+      await expect(
+        createCheckoutOrder(
+          'user-1',
+          {
+            ...shipping,
+            couponCode: 'PROMO10',
+          },
+          fingerprint,
+          createClient(tx).client,
+        ),
+      ).rejects.toBeInstanceOf(
+        CouponRejectedError,
+      )
+
+      expect(
+        tx.order.create,
+      ).not.toHaveBeenCalled()
+      expect(
+        tx.coupon.updateMany,
+      ).not.toHaveBeenCalled()
+    },
+  )
 })

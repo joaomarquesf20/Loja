@@ -15,6 +15,10 @@ import {
   CheckoutValidationError,
 } from '@/server/checkout'
 import {
+  COUPON_CODE_MAX_LENGTH,
+  CouponRejectedError,
+} from '@/server/coupons'
+import {
   InvalidJsonBodyError,
   RequestPayloadTooLargeError,
 } from '@/server/http-request'
@@ -39,6 +43,7 @@ export type CheckoutApiErrorCode =
   | 'INVALID_SHIPPING_METHOD'
   | 'INVALID_PAYMENT'
   | 'INVALID_FINGERPRINT'
+  | 'INVALID_COUPON_CODE'
   | 'CHECKOUT_PREVIEW_CHANGED'
 
 export function errorResponse(
@@ -195,6 +200,8 @@ export type ParsedCheckoutRequestBody = {
   ok: true
   fulfillment: CheckoutFulfillmentInput
   payment: CheckoutPaymentInput
+  /** Épico 7 — código de cupão normalizado (null = sem cupão). */
+  couponCode: string | null
   expectedFingerprint: string
 } | {
   ok: false
@@ -368,10 +375,59 @@ export function parseCheckoutRequestBody(
     }
   }
 
+  // Épico 7 — código de cupão opcional: normalizado como no serviço
+  // (trim + maiúsculas; vazio → null) e recusado com resposta própria
+  // quando malformado.
+  let couponCode: string | null = null
+
+  if (
+    body.couponCode !== undefined &&
+    body.couponCode !== null
+  ) {
+    if (
+      typeof body.couponCode !==
+        'string'
+    ) {
+      return {
+        ok: false,
+        response: errorResponse(
+          'Código de cupão inválido',
+          400,
+          'INVALID_COUPON_CODE',
+        ),
+      }
+    }
+
+    couponCode =
+      body.couponCode
+        .trim()
+        .toUpperCase()
+
+    if (couponCode === '') {
+      couponCode = null
+    }
+
+    if (
+      couponCode !== null &&
+      couponCode.length >
+        COUPON_CODE_MAX_LENGTH
+    ) {
+      return {
+        ok: false,
+        response: errorResponse(
+          `O código de cupão não pode exceder ${COUPON_CODE_MAX_LENGTH} caracteres`,
+          400,
+          'INVALID_COUPON_CODE',
+        ),
+      }
+    }
+  }
+
   return {
     ok: true,
     fulfillment,
     payment,
+    couponCode,
     expectedFingerprint,
   }
 }
@@ -430,6 +486,18 @@ export function mapCheckoutDomainError(
   if (
     error instanceof
     CheckoutValidationError
+  ) {
+    return errorResponse(
+      error.message,
+      400,
+    )
+  }
+
+  // Épico 7 — cupão recusado no checkout (expirado, limite atingido,
+  // total mínimo não cumprido, ...): 400 com a mensagem de negócio.
+  if (
+    error instanceof
+    CouponRejectedError
   ) {
     return errorResponse(
       error.message,

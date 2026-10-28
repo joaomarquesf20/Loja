@@ -51,6 +51,8 @@ export async function POST(
     const checkoutInput = {
       ...parsed.fulfillment,
       ...parsed.payment,
+      couponCode:
+        parsed.couponCode,
     } as CheckoutInput
 
     const order =

@@ -16,6 +16,10 @@ import {
   previewCheckout,
 } from '@/server/checkout'
 import {
+  COUPON_CODE_MAX_LENGTH,
+  CouponRejectedError,
+} from '@/server/coupons'
+import {
   InvalidJsonBodyError,
   readJsonBody,
   RequestPayloadTooLargeError,
@@ -234,6 +238,18 @@ function handleCheckoutPreviewError(
     )
   }
 
+  // Épico 7 — cupão recusado no preview (expirado, limite atingido,
+  // total mínimo não cumprido, ...): 400 com a mensagem de negócio.
+  if (
+    error instanceof
+    CouponRejectedError
+  ) {
+    return errorResponse(
+      error.message,
+      400,
+    )
+  }
+
   if (
     error instanceof
     CheckoutUserUnavailableError
@@ -396,9 +412,49 @@ export async function POST(
       )
     }
 
+    // Épico 7 — código de cupão opcional, normalizado como no serviço
+    // (trim + maiúsculas; vazio → null). Malformado → 400.
+    let couponCode: string | null = null
+
+    if (
+      body.couponCode !== undefined &&
+      body.couponCode !== null
+    ) {
+      if (
+        typeof body.couponCode !==
+          'string'
+      ) {
+        return errorResponse(
+          'Código de cupão inválido',
+          400,
+        )
+      }
+
+      couponCode =
+        body.couponCode
+          .trim()
+          .toUpperCase()
+
+      if (couponCode === '') {
+        couponCode = null
+      }
+
+      if (
+        couponCode !== null &&
+        couponCode.length >
+          COUPON_CODE_MAX_LENGTH
+      ) {
+        return errorResponse(
+          `O código de cupão não pode exceder ${COUPON_CODE_MAX_LENGTH} caracteres`,
+          400,
+        )
+      }
+    }
+
     const checkoutInput = {
       ...fulfillment,
       ...payment,
+      couponCode,
     } as CheckoutInput
 
     const preview =

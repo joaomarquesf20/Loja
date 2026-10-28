@@ -62,6 +62,9 @@ type CheckoutPreview = {
   total: number
   fingerprint: string
   expressAvailable: boolean
+  // Épico 7 — presentes apenas quando há cupão aplicado ao preview.
+  discount?: number | null
+  couponCode?: string | null
 }
 
 type CheckoutOrder = {
@@ -99,6 +102,7 @@ type PendingAction =
   | 'address'
   | 'preview'
   | 'checkout'
+  | 'coupon'
   | null
 
 type CheckoutFulfillmentRequestInput =
@@ -199,8 +203,78 @@ function isCheckoutPreview(
     value.fingerprint.length === 64 &&
     /^[0-9a-f]{64}$/.test(value.fingerprint) &&
     typeof value.expressAvailable ===
-      'boolean'
+      'boolean' &&
+    // Épico 7 — chaves do cupão opcionais; aceites quando ausentes
+    // (respostas antigas) ou null/string/number válidos.
+    (value.discount === undefined ||
+      value.discount === null ||
+      isMoneyValue(value.discount)) &&
+    (value.couponCode === undefined ||
+      value.couponCode === null ||
+      typeof value.couponCode ===
+        'string')
   )
+}
+
+type CouponValidationApiResult =
+  | {
+      valid: true
+      code: string
+      discount: number
+      newTotal: number
+    }
+  | {
+      valid: false
+      message: string
+    }
+
+/**
+ * Épico 7 — resposta do endpoint de validação de cupões, validada de
+ * forma tolerante: `valid` decide o ramo; `code`/`discount`/`newTotal`
+ * são assumidos do preview real quando presentes.
+ */
+function parseCouponValidation(
+  value: unknown,
+): CouponValidationApiResult | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  if (value.valid === true) {
+    return {
+      valid: true,
+      code:
+        typeof value.code ===
+          'string' &&
+        value.code.trim()
+          ? value.code.trim()
+          : '',
+      discount: isMoneyValue(
+        value.discount,
+      )
+        ? value.discount
+        : 0,
+      newTotal: isMoneyValue(
+        value.newTotal,
+      )
+        ? value.newTotal
+        : 0,
+    }
+  }
+
+  if (value.valid === false) {
+    return {
+      valid: false,
+      message:
+        typeof value.message ===
+          'string' &&
+        value.message.trim()
+          ? value.message
+          : 'Cupão inválido.',
+    }
+  }
+
+  return null
 }
 
 function isFulfillmentMethod(
@@ -547,6 +621,21 @@ export function CheckoutClient() {
 
   const [error, setError] =
     useState<string | null>(null)
+
+  // Épico 7 — cupão: rascunho no input, código aplicado e mensagem
+  // própria (não mistura com o erro global do checkout).
+  const [couponDraft, setCouponDraft] =
+    useState('')
+
+  const [
+    appliedCoupon,
+    setAppliedCoupon,
+  ] = useState<string | null>(null)
+
+  const [
+    couponNotice,
+    setCouponNotice,
+  ] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -1011,15 +1100,15 @@ export function CheckoutClient() {
     }
   }
 
-  async function handlePreview(
-    event: FormEvent<HTMLFormElement>,
+  /**
+   * Épico 7 — o preview passa a incluir o cupão aplicado (`couponCode`
+   * null = sem cupão). Chamado pelo submit do formulário e pelos fluxos
+   * de aplicar/remover cupão; sem guard de `pendingAction` para poder
+   * encadear após a validação do cupão.
+   */
+  async function runPreview(
+    couponCode: string | null,
   ) {
-    event.preventDefault()
-
-    if (pendingAction) {
-      return
-    }
-
     const checkoutInput =
       validateCheckoutInput()
 
@@ -1040,9 +1129,10 @@ export function CheckoutClient() {
               'Content-Type':
                 'application/json',
             },
-            body: JSON.stringify(
-              checkoutInput,
-            ),
+            body: JSON.stringify({
+              ...checkoutInput,
+              couponCode,
+            }),
           },
         )
 
@@ -1070,6 +1160,119 @@ export function CheckoutClient() {
       )
     } finally {
       setPendingAction(null)
+    }
+  }
+
+  async function handlePreview(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+    event.preventDefault()
+
+    if (pendingAction) {
+      return
+    }
+
+    await runPreview(appliedCoupon)
+  }
+
+  // Épico 7 — validar o cupão ANTES do pagamento: o endpoint calcula o
+  // subtotal no servidor; em caso de sucesso, o preview é recalculado
+  // com o cupão para mostrar desconto e total real.
+  async function handleApplyCoupon() {
+    if (pendingAction) {
+      return
+    }
+
+    const code =
+      couponDraft.trim().toUpperCase()
+
+    if (!code) {
+      setCouponNotice(
+        'Introduz o código de cupão.',
+      )
+
+      return
+    }
+
+    setPendingAction('coupon')
+    setCouponNotice(null)
+    setError(null)
+
+    try {
+      const response =
+        await fetch(
+          '/api/checkout/coupons/validate',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type':
+                'application/json',
+            },
+            body: JSON.stringify({
+              code,
+            }),
+          },
+        )
+
+      if (!response.ok) {
+        throw new Error(
+          await getResponseError(
+            response,
+          ),
+        )
+      }
+
+      const result =
+        parseCouponValidation(
+          await response.json(),
+        )
+
+      if (!result) {
+        throw new Error(
+          'Resposta de cupão inválida',
+        )
+      }
+
+      if (result.valid) {
+        const appliedCode =
+          result.code || code
+
+        setAppliedCoupon(appliedCode)
+
+        setCouponNotice(
+          `Cupão ${appliedCode} aplicado.`,
+        )
+
+        if (
+          isCheckoutPreview(preview)
+        ) {
+          await runPreview(appliedCode)
+        }
+      } else {
+        setCouponNotice(result.message)
+      }
+    } catch (caughtError) {
+      setCouponNotice(
+        caughtError instanceof Error
+          ? caughtError.message
+          : 'Não foi possível validar o cupão',
+      )
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleRemoveCoupon() {
+    if (pendingAction) {
+      return
+    }
+
+    setAppliedCoupon(null)
+    setCouponDraft('')
+    setCouponNotice(null)
+
+    if (isCheckoutPreview(preview)) {
+      await runPreview(null)
     }
   }
 
@@ -1103,6 +1306,14 @@ export function CheckoutClient() {
             },
             body: JSON.stringify({
               ...checkoutInput,
+              // Épico 7 — o cupão aplicado vai no pedido; o servidor
+              // reavalia e recomputa o desconto a partir do carrinho.
+              ...(appliedCoupon
+                ? {
+                    couponCode:
+                      appliedCoupon,
+                  }
+                : {}),
               expectedFingerprint:
                 preview.fingerprint,
             }),
@@ -2010,6 +2221,78 @@ export function CheckoutClient() {
             : `Pagamento: ${installmentCount} prestações`}
         </p>
 
+        {/* Épico 7 — cupão de desconto: validar antes do pagamento. */}
+        <div className="mt-5 space-y-2">
+          <label
+            htmlFor="coupon-code"
+            className="text-xs font-bold uppercase tracking-[0.08em] text-gray-600"
+          >
+            Cupão de desconto
+          </label>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="coupon-code"
+              type="text"
+              value={couponDraft}
+              disabled={pendingAction !== null}
+              onChange={(event) =>
+                setCouponDraft(
+                  event.target.value,
+                )
+              }
+              placeholder="PROMO10"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase placeholder:normal-case disabled:cursor-not-allowed disabled:opacity-50"
+            />
+
+            <button
+              type="button"
+              disabled={pendingAction !== null}
+              onClick={() =>
+                void handleApplyCoupon()
+              }
+              className="shrink-0 rounded-lg bg-gray-950 px-4 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pendingAction === 'coupon'
+                ? 'A validar...'
+                : 'Aplicar'}
+            </button>
+
+            {appliedCoupon ? (
+              <button
+                type="button"
+                disabled={
+                  pendingAction !== null
+                }
+                onClick={() =>
+                  void handleRemoveCoupon()
+                }
+                className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remover
+              </button>
+            ) : null}
+          </div>
+
+          {appliedCoupon ? (
+            <p className="text-xs text-gray-600">
+              Cupão aplicado:{' '}
+              <span className="font-bold text-gray-950">
+                {appliedCoupon}
+              </span>
+            </p>
+          ) : null}
+
+          {couponNotice ? (
+            <p
+              role="alert"
+              className="text-xs text-red-700"
+            >
+              {couponNotice}
+            </p>
+          ) : null}
+        </div>
+
         {preview ? (
           <div className="mt-5 space-y-3">
             <div className="flex items-center justify-between text-sm">
@@ -2047,6 +2330,28 @@ export function CheckoutClient() {
                 )}
               </span>
             </div>
+
+            {/* Épico 7 — linha do desconto do cupão: o preview do
+                servidor já devolve o total descontado. */}
+            {preview.discount !=
+              null &&
+            preview.discount > 0 ? (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">
+                  Desconto
+                  {preview.couponCode
+                    ? ` (${preview.couponCode})`
+                    : ''}
+                </span>
+
+                <span className="font-medium text-emerald-700">
+                  −
+                  {formatPrice(
+                    preview.discount,
+                  )}
+                </span>
+              </div>
+            ) : null}
 
             <div className="flex items-center justify-between border-t border-gray-200 pt-3">
               <strong className="text-gray-950">

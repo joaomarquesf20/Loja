@@ -78,6 +78,13 @@ enum StockMovementType {
   RETURN
 }
 
+/// Épico 7 — tipo de desconto de um cupão: percentagem do carrinho ou
+/// valor fixo em euros.
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
 model User {
   id                         String           @id @default(cuid())
   email                      String           @unique
@@ -250,6 +257,29 @@ model StockMovement {
 
   @@index([variantId, createdAt])
   @@index([createdAt])
+}
+
+/**
+ * Épico 7 — cupão de desconto. `code` é único e NORMALIZADO em
+ * maiúsculas pelo serviço. Os limites (`maxUses`, `usedCount`) são
+ * impostos atomicamente com `updateMany` guardado — ver
+ * `src/server/coupons.ts`. `discountValue` em euros (FIXED_AMOUNT) ou
+ * percentagem (PERCENTAGE); `minOrderValue` refere-se ao subtotal de
+ * produtos do carrinho.
+ */
+model Coupon {
+  id            String             @id @default(cuid())
+  code          String             @unique
+  discountType  CouponDiscountType
+  discountValue Float
+  minOrderValue Float?
+  maxUses       Int?
+  usedCount     Int                @default(0)
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  isActive      Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 }
 
 model ProductOption {
@@ -447,6 +477,12 @@ model Order {
   shippingCost            Decimal           @db.Decimal(10, 2)
   tax                     Decimal           @default(0) @db.Decimal(10, 2)
   total                   Decimal           @db.Decimal(10, 2)
+  /// Épico 7 — código do cupão aplicado na compra (normalizado em
+  /// maiúsculas; null = sem cupão). Snapshot no momento da criação.
+  couponCode              String?
+  /// Épico 7 — desconto do cupão aplicado ao subtotal (em euros).
+  /// O `total` é o valor FINAL (subtotal − desconto + portes).
+  discountAmount          Decimal?          @db.Decimal(10, 2)
   status                  OrderStatus       @default(PENDING)
   paymentStatus           PaymentStatus     @default(PENDING)
   paymentMethod           PaymentMethod?

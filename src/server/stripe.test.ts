@@ -159,6 +159,9 @@ function createOrderRecord(
     total: {
       toString: () => '205.90',
     },
+    // Épico 7 — sem cupão por omissão nos fixtures.
+    couponCode: null,
+    discountAmount: null,
     shippingEmail:
       'maria@example.com',
     items: [
@@ -473,6 +476,24 @@ describe(
           customerEmail: ' ',
         },
       },
+      {
+        field: 'discount',
+        overrides: {
+          discount: {
+            amountCents: -100,
+            name: 'Cupão PROMO10',
+          },
+        },
+      },
+      {
+        field: 'discount',
+        overrides: {
+          discount: {
+            amountCents: 10.5,
+            name: 'Cupão PROMO10',
+          },
+        },
+      },
     ])(
       'rejeita entrada inválida do campo $field',
       ({
@@ -489,6 +510,69 @@ describe(
           expect.objectContaining({
             name: 'StripeValidationError',
             field,
+          }),
+        )
+      },
+    )
+
+    test(
+      'com cupão inclui o desconto inline do Stripe',
+      () => {
+        const params =
+          buildStripeCheckoutSessionParams(
+            createCheckoutSessionInput({
+              discount: {
+                amountCents: 1000,
+                name: 'Cupão PROMO10',
+              },
+            }),
+          )
+
+        expect(
+          params.discounts,
+        ).toEqual([
+          {
+            coupon: {
+              name: 'Cupão PROMO10',
+              amount_off: 1000,
+              currency: 'eur',
+              duration: 'once',
+            },
+          },
+        ])
+      },
+    )
+
+    test(
+      'sem cupão não define discounts',
+      () => {
+        const params =
+          buildStripeCheckoutSessionParams(
+            createCheckoutSessionInput(),
+          )
+
+        expect(
+          params.discounts,
+        ).toBeUndefined()
+      },
+    )
+
+    test(
+      'desconto que anula o total é recusado',
+      () => {
+        expect(() =>
+          buildStripeCheckoutSessionParams(
+            createCheckoutSessionInput({
+              discount: {
+                amountCents: 20000,
+                name: 'Cupão PROMO10',
+              },
+            }),
+          ),
+        ).toThrow(
+          expect.objectContaining({
+            name: 'StripeValidationError',
+            field: 'items',
           }),
         )
       },
@@ -951,6 +1035,64 @@ describe(
       },
     )
 
+    test(
+      'cupão aplicado devolve discount com o nome do cupão',
+      async () => {
+        const { client } =
+          createStripeFakeDb({
+            order: createOrderRecord({
+              couponCode: 'PROMO10',
+              discountAmount: {
+                toString: () =>
+                  '10.00',
+              },
+              total: {
+                toString: () =>
+                  '195.90',
+              },
+            }),
+          })
+
+        const projection =
+          await loadStripeCheckoutProjection(
+            'order-1',
+            'user-1',
+            client,
+          )
+
+        expect(
+          projection.discount,
+        ).toEqual({
+          amountCents: 1000,
+          name: 'Cupão PROMO10',
+        })
+        expect(
+          projection.items,
+        ).toHaveLength(2)
+      },
+    )
+
+    test(
+      'sem cupão devolve discount null',
+      async () => {
+        const { client } =
+          createStripeFakeDb({
+            order: createOrderRecord(),
+          })
+
+        const projection =
+          await loadStripeCheckoutProjection(
+            'order-1',
+            'user-1',
+            client,
+          )
+
+        expect(
+          projection.discount,
+        ).toBeNull()
+      },
+    )
+
     test.each([
       {
         name: 'encomenda inexistente',
@@ -993,6 +1135,17 @@ describe(
         error:
           StripeCheckoutConflictError,
       },
+      {
+        name: 'desconto desalinhado',
+        order: createOrderRecord({
+          couponCode: 'PROMO10',
+          discountAmount: {
+            toString: () => '10.00',
+          },
+        }),
+        error:
+          StripeCheckoutConflictError,
+      },
     ])(
       'rejeita projeção: $name',
       async ({
@@ -1011,6 +1164,32 @@ describe(
             client,
           ),
         ).rejects.toThrow(error)
+      },
+    )
+
+    test(
+      'conflicto com cupão menciona o desconto na mensagem',
+      async () => {
+        const { client } =
+          createStripeFakeDb({
+            order: createOrderRecord({
+              couponCode: 'PROMO10',
+              discountAmount: {
+                toString: () =>
+                  '10.00',
+              },
+            }),
+          })
+
+        await expect(
+          loadStripeCheckoutProjection(
+            'order-1',
+            'user-1',
+            client,
+          ),
+        ).rejects.toThrow(
+          'artigos, portes e desconto do cupão',
+        )
       },
     )
   },
@@ -1244,6 +1423,8 @@ describe(
             fulfillmentMethod: true,
             shippingCost: true,
             total: true,
+            couponCode: true,
+            discountAmount: true,
             shippingEmail: true,
             items: {
               select: {
