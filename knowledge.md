@@ -1315,3 +1315,9 @@ pedido (imediato via role="alert", sem `fetch` nem
 ser alterados."), com `window.confirm` mockado nos testes
 jsdom (`Not implemented` devolve undefined e abortaria o
 fluxo).
+
+## §27 — Épico 6: Advanced Inventory & Stock Audit
+
+- **Atomic Stock Audit Trail:** Ensure every inventory change (purchases, cancellations, admin restocking, manual corrections) is recorded in a `StockMovement` table within the same database transaction that updates the variant's `stockQuantity`, creating an immutable and fully traceable history.
+- **Granular vs. Global Thresholds:** Implement flexible business rules by allowing global configuration parameters (e.g., a baseline low-stock threshold) to be overridden at the entity level (variant-specific thresholds), deriving real-time statuses gracefully via fallback logic (e.g., `lowStockThreshold ?? globalThreshold`).
+- **Client-Side Derived KPIs:** When complex comparison logic (like comparing a dynamic field against a fallback) becomes too expensive or unsupported for database aggregation (`COUNT` via Prisma `where`), derive KPIs in-memory on the server using the fetched paginated rows, while documenting the pagination limits (e.g., capping at 1000 rows) as a known systemic boundary.
