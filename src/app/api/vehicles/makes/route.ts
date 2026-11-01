@@ -1,10 +1,19 @@
+import { ZodError } from 'zod'
+
 import {
   ValidationError,
-  listVehicleMakes,
-} from '@/server/vehicle-search'
+  getVehicleMakes,
+} from '@/server/vehicles'
 
+/**
+ * Épico 8 — GET /api/vehicles/makes: lista de marcas de veículos
+ * (primeiro nível do seletor de compatibilidade).
+ */
 function handleError(error: unknown) {
-  if (error instanceof ValidationError) {
+  if (
+    error instanceof ZodError ||
+    error instanceof ValidationError
+  ) {
     return Response.json(
       { error: 'Dados inválidos' },
       { status: 400 },
@@ -24,12 +33,13 @@ function handleError(error: unknown) {
 
 export async function GET() {
   try {
-    const vehicleMakes =
-      await listVehicleMakes()
+    const makes =
+      await getVehicleMakes()
 
-    return Response.json(vehicleMakes, {
-      status: 200,
-    })
+    return Response.json(
+      { makes },
+      { status: 200 },
+    )
   } catch (error) {
     return handleError(error)
   }

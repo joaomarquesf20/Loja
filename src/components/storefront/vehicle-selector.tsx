@@ -17,17 +17,18 @@ import {
 } from './vehicle-selection'
 
 /**
- * Selector em cascata de veículo (Épico 2 — Etapa
- * 4): Marca → Modelo → Configuração, combinando os
- * endpoints públicos do serviço de pesquisa de
- * veículos. A configuração escolhida é persistida
- * (localStorage + evento) e consultada pelo filtro
- * da grelha de categoria e pelo badge de ficha.
+ * Selector em cascata de veículo (Épico 8):
+ * Marca → Modelo → Especificação, sobre os
+ * endpoints públicos do motor de fitment
+ * (/api/vehicles/makes, /models?makeId=,
+ * /specs?modelId=). A especificação escolhida é
+ * persistida (localStorage + evento) e consultada
+ * pelo filtro da grelha de categoria e pelo badge
+ * da ficha.
  *
- * Os `slugs` demasiado vagos não são guardados como
- * identidade — o que persiste é o
- * `configurationId`; os slugs servem apenas para
- * voltar a pré-selecionar a cascata.
+ * O que persiste como identidade é o `specId`;
+ * `makeId`/`modelId` viajam na seleção para voltar
+ * a pré-selecionar a cascata após recarregar.
  */
 
 type VehicleMakePayload = {
@@ -42,17 +43,14 @@ type VehicleModelPayload = {
   slug: string
 }
 
-type VehicleConfigurationPayload = {
+type VehicleSpecPayload = {
   id: string
-  name: string
+  engine: string
   engineCode: string | null
-  powerKw: string | number | null
-}
-
-type VehicleGenerationPayload = {
-  id: string
-  name: string
-  configurations: VehicleConfigurationPayload[]
+  yearStart: number
+  yearEnd: number | null
+  fuelType: string
+  powerHp: number | null
 }
 
 async function fetchJson<T>(url: string) {
@@ -67,22 +65,17 @@ async function fetchJson<T>(url: string) {
   return (await response.json()) as T
 }
 
-function findConfiguration(
-  generations: VehicleGenerationPayload[],
-  configurationId: string,
+function specOptionLabel(
+  spec: VehicleSpecPayload,
 ) {
-  for (const generation of generations) {
-    const configuration =
-      generation.configurations.find(
-        (item) => item.id === configurationId,
-      )
+  const years =
+    spec.yearEnd !== null
+      ? `${spec.yearStart}–${spec.yearEnd}`
+      : `desde ${spec.yearStart}`
 
-    if (configuration) {
-      return configuration
-    }
-  }
-
-  return null
+  return spec.engineCode
+    ? `${spec.engine} (${spec.engineCode}) · ${years}`
+    : `${spec.engine} · ${years}`
 }
 
 const SELECT_CLASS =
@@ -101,20 +94,19 @@ export default function VehicleSelector() {
   const [models, setModels] = useState<
     VehicleModelPayload[]
   >([])
-  const [generations, setGenerations] =
-    useState<VehicleGenerationPayload[]>([])
-  const [makeSlug, setMakeSlug] = useState('')
-  const [modelSlug, setModelSlug] = useState('')
+  const [specs, setSpecs] = useState<
+    VehicleSpecPayload[]
+  >([])
+  const [makeId, setMakeId] = useState('')
+  const [modelId, setModelId] = useState('')
   const [selected, setSelected] =
     useState<VehicleSelection | null>(null)
   const [loadingMakes, setLoadingMakes] =
     useState(true)
   const [loadingModels, setLoadingModels] =
     useState(false)
-  const [
-    loadingGenerations,
-    setLoadingGenerations,
-  ] = useState(false)
+  const [loadingSpecs, setLoadingSpecs] =
+    useState(false)
   const [error, setError] = useState<
     string | null
   >(null)
@@ -134,11 +126,15 @@ export default function VehicleSelector() {
 
     try {
       const data =
-        await fetchJson<VehicleMakePayload[]>(
-          '/api/vehicles/makes',
-        )
+        await fetchJson<{
+          makes: VehicleMakePayload[]
+        }>('/api/vehicles/makes')
 
-      setMakes(Array.isArray(data) ? data : [])
+      setMakes(
+        Array.isArray(data.makes)
+          ? data.makes
+          : [],
+      )
 
       return true
     } catch {
@@ -153,9 +149,121 @@ export default function VehicleSelector() {
     }
   }, [])
 
+  const loadModelsForMake =
+    useCallback(
+      async (
+        nextMakeId: string,
+      ): Promise<VehicleModelPayload[]> => {
+        const request =
+          ++makeRequestRef.current
+
+        setLoadingModels(true)
+        setError(null)
+
+        try {
+          const data =
+            await fetchJson<{
+              models: VehicleModelPayload[]
+            }>(
+              `/api/vehicles/models?makeId=${encodeURIComponent(nextMakeId)}`,
+            )
+
+          const loadedModels =
+            Array.isArray(data.models)
+              ? data.models
+              : []
+
+          if (
+            request ===
+            makeRequestRef.current
+          ) {
+            setModels(loadedModels)
+          }
+
+          return loadedModels
+        } catch {
+          if (
+            request ===
+            makeRequestRef.current
+          ) {
+            setModels([])
+            setError(
+              'Não foi possível carregar os modelos desta marca. Tenta novamente.',
+            )
+          }
+
+          return []
+        } finally {
+          if (
+            request ===
+            makeRequestRef.current
+          ) {
+            setLoadingModels(false)
+          }
+        }
+      },
+      [],
+    )
+
+  const loadSpecsForModel =
+    useCallback(
+      async (
+        nextModelId: string,
+      ): Promise<VehicleSpecPayload[]> => {
+        const request =
+          ++modelRequestRef.current
+
+        setLoadingSpecs(true)
+        setError(null)
+
+        try {
+          const data =
+            await fetchJson<{
+              specs: VehicleSpecPayload[]
+            }>(
+              `/api/vehicles/specs?modelId=${encodeURIComponent(nextModelId)}`,
+            )
+
+          const loadedSpecs =
+            Array.isArray(data.specs)
+              ? data.specs
+              : []
+
+          if (
+            request ===
+            modelRequestRef.current
+          ) {
+            setSpecs(loadedSpecs)
+          }
+
+          return loadedSpecs
+        } catch {
+          if (
+            request ===
+            modelRequestRef.current
+          ) {
+            setSpecs([])
+            setError(
+              'Não foi possível carregar as especificações deste modelo. Tenta novamente.',
+            )
+          }
+
+          return []
+        } finally {
+          if (
+            request ===
+            modelRequestRef.current
+          ) {
+            setLoadingSpecs(false)
+          }
+        }
+      },
+      [],
+    )
+
   /**
    * Carga inicial: lista de marcas + pré-seleção da
-   * cadeia guardada (marca → modelo → configuração).
+   * cadeia guardada (marca → modelo → especificação).
    */
   useEffect(() => {
     let cancelled = false
@@ -176,97 +284,38 @@ export default function VehicleSelector() {
         return
       }
 
-      const nextMakeRequest =
-        ++makeRequestRef.current
-
-      setLoadingModels(true)
-
-      try {
-        const data =
-          await fetchJson<
-            VehicleModelPayload[]
-          >(
-            `/api/vehicles/makes/${encodeURIComponent(stored.makeSlug)}/models`,
-          )
-
-        if (
-          cancelled ||
-          nextMakeRequest !==
-            makeRequestRef.current
-        ) {
-          return
-        }
-
-        setModels(
-          Array.isArray(data)
-            ? data
-            : [],
-        )
-        setMakeSlug(stored.makeSlug)
-      } catch {
-        if (cancelled) {
-          return
-        }
-
-        setError(
-          'Não foi possível restaurar os modelos do veículo guardado.',
+      const loadedModels =
+        await loadModelsForMake(
+          stored.makeId,
         )
 
+      if (
+        cancelled ||
+        !loadedModels.some(
+          (model) =>
+            model.id === stored.modelId,
+        )
+      ) {
         return
-      } finally {
-        if (
-          !cancelled &&
-          nextMakeRequest ===
-            makeRequestRef.current
-        ) {
-          setLoadingModels(false)
-        }
       }
 
-      const nextModelRequest =
-        ++modelRequestRef.current
+      setMakeId(stored.makeId)
 
-      setLoadingGenerations(true)
-
-      try {
-        const data =
-          await fetchJson<
-            VehicleGenerationPayload[]
-          >(
-            `/api/vehicles/models/${encodeURIComponent(stored.modelSlug)}/generations`,
-          )
-
-        if (
-          cancelled ||
-          nextModelRequest !==
-            modelRequestRef.current
-        ) {
-          return
-        }
-
-        setGenerations(
-          Array.isArray(data)
-            ? data
-            : [],
+      const loadedSpecs =
+        await loadSpecsForModel(
+          stored.modelId,
         )
-        setModelSlug(stored.modelSlug)
-      } catch {
-        if (cancelled) {
-          return
-        }
 
-        setError(
-          'Não foi possível restaurar as configurações do veículo guardado.',
+      if (
+        cancelled ||
+        !loadedSpecs.some(
+          (spec) => spec.id === stored.specId,
         )
-      } finally {
-        if (
-          !cancelled &&
-          nextModelRequest ===
-            modelRequestRef.current
-        ) {
-          setLoadingGenerations(false)
-        }
+      ) {
+        return
       }
+
+      setModelId(stored.modelId)
     }
 
     bootstrap()
@@ -274,175 +323,75 @@ export default function VehicleSelector() {
     return () => {
       cancelled = true
     }
-  }, [loadMakes])
+  }, [loadMakes, loadModelsForMake, loadSpecsForModel])
 
   const handleMakeChange: ChangeEventHandler<HTMLSelectElement> =
     async (event) => {
-      const nextMakeSlug =
+      const nextMakeId =
         event.target.value
 
-      setMakeSlug(nextMakeSlug)
-      setModelSlug('')
-      setModels([])
-      setGenerations([])
+      setMakeId(nextMakeId)
+      setModelId('')
+      setSpecs([])
 
-      if (!nextMakeSlug) {
+      if (!nextMakeId) {
         return
       }
 
-      const request =
-        ++makeRequestRef.current
-
-      setLoadingModels(true)
-      setError(null)
-
-      try {
-        const data =
-          await fetchJson<
-            VehicleModelPayload[]
-          >(
-            `/api/vehicles/makes/${encodeURIComponent(nextMakeSlug)}/models`,
-          )
-
-        if (
-          request !==
-          makeRequestRef.current
-        ) {
-          return
-        }
-
-        setModels(
-          Array.isArray(data)
-            ? data
-            : [],
-        )
-      } catch {
-        if (
-          request !==
-          makeRequestRef.current
-        ) {
-          return
-        }
-
-        setModels([])
-        setError(
-          'Não foi possível carregar os modelos desta marca. Tenta novamente.',
-        )
-      } finally {
-        if (
-          request ===
-          makeRequestRef.current
-        ) {
-          setLoadingModels(false)
-        }
-      }
+      await loadModelsForMake(nextMakeId)
     }
 
   const handleModelChange: ChangeEventHandler<HTMLSelectElement> =
     async (event) => {
-      const nextModelSlug =
+      const nextModelId =
         event.target.value
 
-      setModelSlug(nextModelSlug)
-      setGenerations([])
+      setModelId(nextModelId)
 
-      if (!nextModelSlug) {
+      if (!nextModelId) {
+        setSpecs([])
         return
       }
 
-      const request =
-        ++modelRequestRef.current
-
-      setLoadingGenerations(true)
-      setError(null)
-
-      try {
-        const data =
-          await fetchJson<
-            VehicleGenerationPayload[]
-          >(
-            `/api/vehicles/models/${encodeURIComponent(nextModelSlug)}/generations`,
-          )
-
-        if (
-          request !==
-          modelRequestRef.current
-        ) {
-          return
-        }
-
-        setGenerations(
-          Array.isArray(data)
-            ? data
-            : [],
-        )
-      } catch {
-        if (
-          request !==
-          modelRequestRef.current
-        ) {
-          return
-        }
-
-        setGenerations([])
-        setError(
-          'Não foi possível carregar as configurações deste modelo. Tenta novamente.',
-        )
-      } finally {
-        if (
-          request ===
-          modelRequestRef.current
-        ) {
-          setLoadingGenerations(false)
-        }
-      }
+      await loadSpecsForModel(nextModelId)
     }
 
-  const handleConfigurationChange: ChangeEventHandler<HTMLSelectElement> =
+  const handleSpecChange: ChangeEventHandler<HTMLSelectElement> =
     (event) => {
-      const configurationId =
+      const nextSpecId =
         event.target.value
 
       if (
-        !configurationId ||
-        !makeSlug ||
-        !modelSlug
+        !nextSpecId ||
+        !makeId ||
+        !modelId
       ) {
         return
       }
 
       const make = makes.find(
-        (item) => item.slug === makeSlug,
+        (item) => item.id === makeId,
       )
       const model = models.find(
-        (item) => item.slug === modelSlug,
+        (item) => item.id === modelId,
       )
-      const configuration =
-        findConfiguration(
-          generations,
-          configurationId,
-        )
+      const spec = specs.find(
+        (item) => item.id === nextSpecId,
+      )
 
-      if (
-        !make ||
-        !model ||
-        !configuration
-      ) {
+      if (!make || !model || !spec) {
         return
       }
 
       const next: VehicleSelection = {
-        configurationId:
-          configuration.id,
-        label:
-          buildVehicleSelectionLabel({
-            makeName: make.name,
-            modelName: model.name,
-            configurationName:
-              configuration.name,
-          }),
-        makeSlug,
-        modelSlug,
+        specId: spec.id,
+        label: buildVehicleSelectionLabel({
+          makeName: make.name,
+          modelName: model.name,
+          specLabel: spec.engine,
+        }),
+        makeId,
+        modelId,
       }
 
       setSelected(next)
@@ -522,7 +471,7 @@ export default function VehicleSelector() {
 
           <select
             id="vehicle-make"
-            value={makeSlug}
+            value={makeId}
             onChange={handleMakeChange}
             disabled={
               loadingMakes || makes.length === 0
@@ -536,7 +485,7 @@ export default function VehicleSelector() {
             {makes.map((make) => (
               <option
                 key={make.id}
-                value={make.slug}
+                value={make.id}
               >
                 {make.name}
               </option>
@@ -554,10 +503,10 @@ export default function VehicleSelector() {
 
           <select
             id="vehicle-model"
-            value={modelSlug}
+            value={modelId}
             onChange={handleModelChange}
             disabled={
-              !makeSlug ||
+              !makeId ||
               loadingModels ||
               models.length === 0
             }
@@ -572,7 +521,7 @@ export default function VehicleSelector() {
             {models.map((model) => (
               <option
                 key={model.id}
-                value={model.slug}
+                value={model.id}
               >
                 {model.name}
               </option>
@@ -582,50 +531,37 @@ export default function VehicleSelector() {
 
         <div>
           <label
-            htmlFor="vehicle-configuration"
+            htmlFor="vehicle-spec"
             className={LABEL_CLASS}
           >
-            Configuração
+            Especificação
           </label>
 
           <select
-            id="vehicle-configuration"
-            value={selected?.configurationId ?? ''}
-            onChange={handleConfigurationChange}
+            id="vehicle-spec"
+            value={selected?.specId ?? ''}
+            onChange={handleSpecChange}
             disabled={
-              !modelSlug ||
-              loadingGenerations ||
-              generations.length === 0
+              !modelId ||
+              loadingSpecs ||
+              specs.length === 0
             }
             className={SELECT_CLASS}
           >
             <option value="">
-              {loadingGenerations
+              {loadingSpecs
                 ? 'A carregar…'
-                : 'Escolhe a configuração'}
+                : 'Escolhe a especificação'}
             </option>
 
-            {generations.map(
-              (generation) => (
-                <optgroup
-                  key={generation.id}
-                  label={generation.name}
-                >
-                  {generation.configurations.map(
-                    (configuration) => (
-                      <option
-                        key={configuration.id}
-                        value={configuration.id}
-                      >
-                        {configuration.engineCode
-                          ? `${configuration.name} (${configuration.engineCode})`
-                          : configuration.name}
-                      </option>
-                    ),
-                  )}
-                </optgroup>
-              ),
-            )}
+            {specs.map((spec) => (
+              <option
+                key={spec.id}
+                value={spec.id}
+              >
+                {specOptionLabel(spec)}
+              </option>
+            ))}
           </select>
         </div>
       </div>

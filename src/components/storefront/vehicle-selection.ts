@@ -4,19 +4,23 @@ import { useSyncExternalStore } from 'react'
 
 /**
  * Persistência do veículo selecionado na loja
- * (Épico 2 — Etapa 4): localStorage + eventos DOM
- * para sincronizar o selector (home), o filtro da
- * grelha de categoria e o badge de compatibilidade
- * da ficha de produto, sem todos partilharem prop
- * drilling. Em SSR devolve sempre null (leitura só
- * acontece em efeito, depois da hidratação).
+ * (Épico 8): localStorage + eventos DOM para
+ * sincronizar o selector (home), o filtro da grelha
+ * de categoria e o badge de compatibilidade da ficha
+ * de produto, sem todos partilharem prop drilling.
+ * Em SSR devolve sempre null (leitura só acontece em
+ * efeito, depois da hidratação).
+ *
+ * A identidade guardada é a especificação de veículo
+ * (specId); makeId/modelId viajam junto para a
+ * cascata voltar a pré-selecionar.
  */
 
 export type VehicleSelection = {
-  configurationId: string
+  specId: string
   label: string
-  makeSlug: string
-  modelSlug: string
+  makeId: string
+  modelId: string
 }
 
 const STORAGE_KEY = 'pfa-veiculo'
@@ -36,15 +40,14 @@ export function isVehicleSelection(
     value as Partial<VehicleSelection>
 
   return (
-    typeof candidate.configurationId ===
-      'string' &&
-    candidate.configurationId.trim() !== '' &&
+    typeof candidate.specId === 'string' &&
+    candidate.specId.trim() !== '' &&
     typeof candidate.label === 'string' &&
     candidate.label.trim() !== '' &&
-    typeof candidate.makeSlug === 'string' &&
-    candidate.makeSlug.trim() !== '' &&
-    typeof candidate.modelSlug === 'string' &&
-    candidate.modelSlug.trim() !== ''
+    typeof candidate.makeId === 'string' &&
+    candidate.makeId.trim() !== '' &&
+    typeof candidate.modelId === 'string' &&
+    candidate.modelId.trim() !== ''
   )
 }
 
@@ -54,13 +57,13 @@ export function isVehicleSelection(
 export function buildVehicleSelectionLabel({
   makeName,
   modelName,
-  configurationName,
+  specLabel,
 }: {
   makeName: string
   modelName: string
-  configurationName: string
+  specLabel: string
 }) {
-  return `${makeName} ${modelName} ${configurationName}`
+  return `${makeName} ${modelName} ${specLabel}`
 }
 
 export function readVehicleSelection(): VehicleSelection | null {

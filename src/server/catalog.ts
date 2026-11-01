@@ -96,29 +96,23 @@ type CatalogBrandRecord = {
 }
 
 type CatalogVehicleCompatibilityRecord = {
-  vehicleConfiguration: {
+  vehicleSpec: {
     id: string
-    name: string
+    engine: string
     engineCode: string | null
-    engineType: string | null
-    displacementCc: number | null
-    powerKw: CatalogPrice | null
-    bodyType: string | null
-    yearFrom: number | null
-    yearTo: number | null
-    generation: {
+    yearStart: number
+    yearEnd: number | null
+    fuelType: string
+    powerHp: CatalogPrice | null
+    model: {
       id: string
       name: string
-      model: {
+      make: {
         id: string
         name: string
-        brand: {
-          id: string
-          name: string
-        }
       }
     }
-  } | null
+  }
 }
 
 export type CatalogVariantOption = {
@@ -180,26 +174,20 @@ export type CatalogBrand = {
   slug: string
 }
 
-export type CatalogVehicleConfiguration = {
+export type CatalogVehicleSpec = {
   id: string
-  name: string
+  engine: string
   engineCode: string | null
-  engineType: string | null
-  displacementCc: number | null
-  powerKw: number | null
-  bodyType: string | null
-  yearFrom: number | null
-  yearTo: number | null
-  generation: {
+  yearStart: number
+  yearEnd: number | null
+  fuelType: string
+  powerHp: number | null
+  model: {
     id: string
     name: string
-    model: {
+    make: {
       id: string
       name: string
-      brand: {
-        id: string
-        name: string
-      }
     }
   }
 }
@@ -214,8 +202,7 @@ export type CatalogSort =
 export type CatalogCategoryPage = {
   category: CatalogCategory
   brands: CatalogBrand[]
-  vehicleConfigurations:
-    CatalogVehicleConfiguration[]
+  vehicleSpecs: CatalogVehicleSpec[]
   products: CatalogProduct[]
 }
 
@@ -232,12 +219,12 @@ export type CatalogCategoryFilters = {
   /**
    * Veículo selecionado. Um produto é compatível quando
    * tem uma compatibilidade da marca, do modelo ou da
-   * geração selecionados (valores do mesmo nível são
-   * alternativas).
+   * especificação selecionados (valores do mesmo nível
+   * são alternativas).
    */
   vehicleMakeIds?: string[]
   vehicleModelIds?: string[]
-  vehicleGenerationIds?: string[]
+  vehicleSpecIds?: string[]
   variantSelections?:
     CatalogVariantSelection[]
   sort?: CatalogSort
@@ -394,14 +381,18 @@ type CatalogProductFindManyArgs = {
     compatibilities?: {
       some: {
         OR: Array<{
-          vehicleBrandId?: {
+          vehicleSpecId?: {
             in: string[]
           }
-          vehicleModelId?: {
-            in: string[]
-          }
-          vehicleGenerationId?: {
-            in: string[]
+          vehicleSpec?: {
+            modelId?: {
+              in: string[]
+            }
+            model?: {
+              makeId: {
+                in: string[]
+              }
+            }
           }
         }>
       }
@@ -508,7 +499,7 @@ export interface CatalogClient {
     }): Promise<CatalogBrandRecord[]>
   }
 
-  productVehicleCompatibility?: {
+  productCompatibility?: {
     findMany(
       args:
         | {
@@ -519,36 +510,25 @@ export interface CatalogClient {
                   in: string[]
                 }
               }
-              vehicleConfigurationId: {
-                not: null
-              }
             }
             select: {
-              vehicleConfiguration: {
+              vehicleSpec: {
                 select: {
                   id: true
-                  name: true
+                  engine: true
                   engineCode: true
-                  engineType: true
-                  displacementCc: true
-                  powerKw: true
-                  bodyType: true
-                  yearFrom: true
-                  yearTo: true
-                  generation: {
+                  yearStart: true
+                  yearEnd: true
+                  fuelType: true
+                  powerHp: true
+                  model: {
                     select: {
                       id: true
                       name: true
-                      model: {
+                      make: {
                         select: {
                           id: true
                           name: true
-                          brand: {
-                            select: {
-                              id: true
-                              name: true
-                            }
-                          }
                         }
                       }
                     }
@@ -568,19 +548,31 @@ export interface CatalogClient {
             }
             select: {
               productId: true
-              vehicleBrandId: true
-              vehicleModelId: true
-              vehicleGenerationId: true
+              vehicleSpec: {
+                select: {
+                  id: true
+                  model: {
+                    select: {
+                      id: true
+                      make: {
+                        select: {
+                          id: true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           },
     ): Promise<CatalogCompatibilityFindManyResult>
   }
 
-  vehicleBrand?: {
+  vehicleMake?: {
     findMany(args?: {
       orderBy?: { name: 'asc' }
       select?: Record<string, unknown>
-    }): Promise<CatalogVehicleBrandRecord[]>
+    }): Promise<CatalogVehicleMakeRecord[]>
   }
 }
 
@@ -820,44 +812,28 @@ function toCatalogBrand(
   }
 }
 
-function toCatalogVehicleConfiguration(
-  configuration: NonNullable<
-    CatalogVehicleCompatibilityRecord[
-      'vehicleConfiguration'
-    ]
-  >,
-): CatalogVehicleConfiguration {
+function toCatalogVehicleSpec(
+  spec: CatalogVehicleCompatibilityRecord['vehicleSpec'],
+): CatalogVehicleSpec {
   return {
-    id: configuration.id,
-    name: configuration.name,
-    engineCode: configuration.engineCode,
-    engineType: configuration.engineType,
-    displacementCc:
-      configuration.displacementCc,
-    powerKw:
-      configuration.powerKw === null
+    id: spec.id,
+    engine: spec.engine,
+    engineCode: spec.engineCode,
+    yearStart: spec.yearStart,
+    yearEnd: spec.yearEnd,
+    fuelType: spec.fuelType,
+    powerHp:
+      spec.powerHp === null
         ? null
         : Number(
-            configuration.powerKw.toString(),
+            spec.powerHp.toString(),
           ),
-    bodyType: configuration.bodyType,
-    yearFrom: configuration.yearFrom,
-    yearTo: configuration.yearTo,
-    generation: {
-      id: configuration.generation.id,
-      name: configuration.generation.name,
-      model: {
-        id: configuration.generation.model.id,
-        name:
-          configuration.generation.model.name,
-        brand: {
-          id:
-            configuration.generation.model.brand
-              .id,
-          name:
-            configuration.generation.model.brand
-              .name,
-        },
+    model: {
+      id: spec.model.id,
+      name: spec.model.name,
+      make: {
+        id: spec.model.make.id,
+        name: spec.model.make.name,
       },
     },
   }
@@ -1302,15 +1278,15 @@ function sortCatalogProducts(
   )
 }
 
-function compareVehicleConfigurations(
-  first: CatalogVehicleConfiguration,
-  second: CatalogVehicleConfiguration,
+function compareVehicleSpecs(
+  first: CatalogVehicleSpec,
+  second: CatalogVehicleSpec,
 ) {
   const firstBrand =
-    first.generation.model.brand.name
+    first.model.make.name
 
   const secondBrand =
-    second.generation.model.brand.name
+    second.model.make.name
 
   const brandComparison =
     firstBrand.localeCompare(secondBrand)
@@ -1320,37 +1296,37 @@ function compareVehicleConfigurations(
   }
 
   const modelComparison =
-    first.generation.model.name.localeCompare(
-      second.generation.model.name,
+    first.model.name.localeCompare(
+      second.model.name,
     )
 
   if (modelComparison !== 0) {
     return modelComparison
   }
 
-  const generationComparison =
-    first.generation.name.localeCompare(
-      second.generation.name,
+  const engineComparison =
+    first.engine.localeCompare(
+      second.engine,
     )
 
-  if (generationComparison !== 0) {
-    return generationComparison
+  if (engineComparison !== 0) {
+    return engineComparison
   }
 
-  return first.name.localeCompare(second.name)
+  return first.yearStart - second.yearStart
 }
 
-async function listCatalogVehicleConfigurations(
+async function listCatalogVehicleSpecs(
   db: CatalogClient,
   categoryIds: string[],
 ) {
-  if (!db.productVehicleCompatibility) {
+  if (!db.productCompatibility) {
     return []
   }
 
   const compatibilities =
     (
-      await db.productVehicleCompatibility.findMany({
+      await db.productCompatibility.findMany({
         where: {
           product: {
             isActive: true,
@@ -1358,35 +1334,25 @@ async function listCatalogVehicleConfigurations(
               in: categoryIds,
             },
           },
-          vehicleConfigurationId: {
-            not: null,
-          },
         },
-      select: {
-        vehicleConfiguration: {
-          select: {
-            id: true,
-            name: true,
-            engineCode: true,
-            engineType: true,
-            displacementCc: true,
-            powerKw: true,
-            bodyType: true,
-            yearFrom: true,
-            yearTo: true,
-            generation: {
-              select: {
-                id: true,
-                name: true,
-                model: {
-                  select: {
-                    id: true,
-                    name: true,
-                    brand: {
-                      select: {
-                        id: true,
-                        name: true,
-                      },
+        select: {
+          vehicleSpec: {
+            select: {
+              id: true,
+              engine: true,
+              engineCode: true,
+              yearStart: true,
+              yearEnd: true,
+              fuelType: true,
+              powerHp: true,
+              model: {
+                select: {
+                  id: true,
+                  name: true,
+                  make: {
+                    select: {
+                      id: true,
+                      name: true,
                     },
                   },
                 },
@@ -1394,43 +1360,32 @@ async function listCatalogVehicleConfigurations(
             },
           },
         },
-      },
-    })
+      })
     ) as CatalogVehicleCompatibilityRecord[]
 
-  const configurationsById =
+  const specsById =
     new Map<
       string,
-      CatalogVehicleConfiguration
+      CatalogVehicleSpec
     >()
 
   for (const compatibility of compatibilities) {
-    const configuration =
-      compatibility.vehicleConfiguration
+    const spec =
+      compatibility.vehicleSpec
 
-    if (!configuration) {
+    if (specsById.has(spec.id)) {
       continue
     }
 
-    if (
-      configurationsById.has(
-        configuration.id,
-      )
-    ) {
-      continue
-    }
-
-    configurationsById.set(
-      configuration.id,
-      toCatalogVehicleConfiguration(
-        configuration,
-      ),
+    specsById.set(
+      spec.id,
+      toCatalogVehicleSpec(spec),
     )
   }
 
   return Array.from(
-    configurationsById.values(),
-  ).sort(compareVehicleConfigurations)
+    specsById.values(),
+  ).sort(compareVehicleSpecs)
 }
 
 export async function listCatalogProducts(
@@ -1574,7 +1529,7 @@ export async function getCatalogCategoryPageBySlug(
 
   const [
     brands,
-    vehicleConfigurations,
+    vehicleSpecs,
   ] = await Promise.all([
     db.productBrand.findMany({
       where: {
@@ -1596,7 +1551,7 @@ export async function getCatalogCategoryPageBySlug(
         slug: true,
       },
     }),
-    listCatalogVehicleConfigurations(
+    listCatalogVehicleSpecs(
       db,
       categoryIds,
     ),
@@ -1628,9 +1583,9 @@ export async function getCatalogCategoryPageBySlug(
       filters.vehicleModelIds,
     )
 
-  const normalizedVehicleGenerationIds =
+  const normalizedVehicleSpecIds =
     normalizeIdList(
-      filters.vehicleGenerationIds,
+      filters.vehicleSpecIds,
     )
 
   const where: CatalogProductFindManyArgs['where'] =
@@ -1683,7 +1638,7 @@ export async function getCatalogCategoryPageBySlug(
   if (
     normalizedVehicleMakeIds.length > 0 ||
     normalizedVehicleModelIds.length > 0 ||
-    normalizedVehicleGenerationIds.length > 0
+    normalizedVehicleSpecIds.length > 0
   ) {
     where.compatibilities = {
       some: {
@@ -1692,8 +1647,13 @@ export async function getCatalogCategoryPageBySlug(
           0
             ? [
                 {
-                  vehicleBrandId: {
-                    in: normalizedVehicleMakeIds,
+                  vehicleSpec: {
+                    model: {
+                      makeId: {
+                        in:
+                          normalizedVehicleMakeIds,
+                      },
+                    },
                   },
                 },
               ]
@@ -1702,19 +1662,22 @@ export async function getCatalogCategoryPageBySlug(
           0
             ? [
                 {
-                  vehicleModelId: {
-                    in: normalizedVehicleModelIds,
+                  vehicleSpec: {
+                    modelId: {
+                      in:
+                        normalizedVehicleModelIds,
+                    },
                   },
                 },
               ]
             : []),
-          ...(normalizedVehicleGenerationIds
+          ...(normalizedVehicleSpecIds
             .length > 0
             ? [
                 {
-                  vehicleGenerationId: {
+                  vehicleSpecId: {
                     in:
-                      normalizedVehicleGenerationIds,
+                      normalizedVehicleSpecIds,
                   },
                 },
               ]
@@ -1807,7 +1770,7 @@ export async function getCatalogCategoryPageBySlug(
       toCatalogCategory(category),
     brands:
       brands.map(toCatalogBrand),
-    vehicleConfigurations,
+    vehicleSpecs,
     products: sortCatalogProducts(
       mappedProducts,
       filters.sort,
@@ -1864,9 +1827,14 @@ export async function listCatalogCategories(
     .map(toCatalogCategory)
 }
 
-export type CatalogVehicleGenerationFacet = {
+export type CatalogVehicleSpecFacet = {
   id: string
-  name: string
+  engine: string
+  engineCode: string | null
+  yearStart: number
+  yearEnd: number | null
+  fuelType: string
+  powerHp: number | null
   modelId: string
   productCount: number
 }
@@ -1874,9 +1842,9 @@ export type CatalogVehicleGenerationFacet = {
 export type CatalogVehicleModelFacet = {
   id: string
   name: string
-  brandId: string
+  makeId: string
   productCount: number
-  generations: CatalogVehicleGenerationFacet[]
+  specs: CatalogVehicleSpecFacet[]
 }
 
 export type CatalogVehicleMakeFacet = {
@@ -1899,24 +1867,42 @@ export type CatalogCategoryFacets = {
 
 type CatalogProductVehicleRecord = {
   productId: string
-  vehicleBrandId: string
-  vehicleModelId: string
-  vehicleGenerationId: string | null
+  vehicleSpecId: string
+  modelId: string
+  makeId: string
+}
+
+type CatalogFlatCompatibilityRecord = {
+  productId: string
+  vehicleSpec: {
+    id: string
+    model: {
+      id: string
+      make: {
+        id: string
+      }
+    }
+  }
 }
 
 type CatalogCompatibilityFindManyResult =
   | CatalogVehicleCompatibilityRecord[]
-  | CatalogProductVehicleRecord[]
+  | CatalogFlatCompatibilityRecord[]
 
-type CatalogVehicleBrandRecord = {
+type CatalogVehicleMakeRecord = {
   id: string
   name: string
   models: Array<{
     id: string
     name: string
-    generations: Array<{
+    specs: Array<{
       id: string
-      name: string
+      engine: string
+      engineCode: string | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
     }>
   }>
 }
@@ -1990,22 +1976,19 @@ function matchesVehicleSelection(
   compatibilities: CatalogProductVehicleRecord[],
   makeIds: string[],
   modelIds: string[],
-  generationIds: string[],
+  specIds: string[],
 ) {
   return compatibilities.some(
     (compatibility) =>
       makeIds.includes(
-        compatibility.vehicleBrandId,
+        compatibility.makeId,
       ) ||
       modelIds.includes(
-        compatibility.vehicleModelId,
+        compatibility.modelId,
       ) ||
-      (compatibility.vehicleGenerationId !=
-        null &&
-        generationIds.includes(
-          compatibility
-            .vehicleGenerationId,
-        )),
+      specIds.includes(
+        compatibility.vehicleSpecId,
+      ),
   )
 }
 
@@ -2046,7 +2029,7 @@ function matchesFacetFilters(
     variantSelections: CatalogVariantSelection[]
     makeIds: string[]
     modelIds: string[]
-    generationIds: string[]
+    specIds: string[]
     skip?: FacetDimension
   },
 ) {
@@ -2081,7 +2064,7 @@ function matchesFacetFilters(
     options.skip !== 'vehicle' &&
     (options.makeIds.length > 0 ||
       options.modelIds.length > 0 ||
-      options.generationIds.length > 0) &&
+      options.specIds.length > 0) &&
     !matchesVehicleSelection(
       getFacetProductVehicle(
         product,
@@ -2089,7 +2072,7 @@ function matchesFacetFilters(
       ),
       options.makeIds,
       options.modelIds,
-      options.generationIds,
+      options.specIds,
     )
   ) {
     return false
@@ -2135,12 +2118,12 @@ function countProducts(
 export function buildCategoryFacets({
   products,
   compatibilities,
-  vehicleBrands,
+  vehicleMakes,
   filters,
 }: {
   products: CatalogProductRecord[]
   compatibilities: CatalogProductVehicleRecord[]
-  vehicleBrands: CatalogVehicleBrandRecord[]
+  vehicleMakes: CatalogVehicleMakeRecord[]
   filters: CatalogCategoryFilters
 }): CatalogCategoryFacets {
   const compatibilitiesByProductId =
@@ -2168,8 +2151,8 @@ export function buildCategoryFacets({
       filters.variantSelections,
     )
 
-  const generationIds = normalizeIdList(
-    filters.vehicleGenerationIds,
+  const specIds = normalizeIdList(
+    filters.vehicleSpecIds,
   )
 
   const modelIds = normalizeIdList(
@@ -2185,7 +2168,7 @@ export function buildCategoryFacets({
     variantSelections,
     makeIds,
     modelIds,
-    generationIds,
+    specIds,
   }
 
   const matches = (
@@ -2249,14 +2232,19 @@ export function buildCategoryFacets({
       ),
     )
 
-  const vehicleMakes: CatalogVehicleMakeFacet[] =
-    vehicleBrands
-      .map((brand) => {
-        const models = (brand.models ?? []).map((model) => {
-            const generations = (model.generations ?? []).map(
-                (generation) => ({
-                  id: generation.id,
-                  name: generation.name,
+  const vehicleMakeFacets: CatalogVehicleMakeFacet[] =
+    vehicleMakes
+      .map((make) => {
+        const models = (make.models ?? []).map((model) => {
+            const specs = (model.specs ?? []).map(
+                (spec) => ({
+                  id: spec.id,
+                  engine: spec.engine,
+                  engineCode: spec.engineCode,
+                  yearStart: spec.yearStart,
+                  yearEnd: spec.yearEnd,
+                  fuelType: spec.fuelType,
+                  powerHp: spec.powerHp,
                   modelId: model.id,
                   productCount:
                     countProducts(
@@ -2271,24 +2259,27 @@ export function buildCategoryFacets({
                           compatibilitiesByProductId,
                         ).some(
                           (compatibility) =>
-                            (compatibility
-                              .vehicleGenerationId ===
-                              generation.id ||
-                              (compatibility
-                                .vehicleGenerationId ===
-                                null &&
-                                compatibility
-                                  .vehicleModelId ===
-                                  model.id)),
+                            compatibility
+                              .vehicleSpecId ===
+                              spec.id,
                         ),
                     ),
                 }),
+              )
+              .sort(
+                (first, second) =>
+                  first.engine.localeCompare(
+                    second.engine,
+                    'pt-PT',
+                  ) ||
+                  first.yearStart -
+                    second.yearStart,
               )
 
             return {
               id: model.id,
               name: model.name,
-              brandId: brand.id,
+              makeId: make.id,
               productCount:
                 countProducts(
                   products,
@@ -2303,11 +2294,11 @@ export function buildCategoryFacets({
                     ).some(
                       (compatibility) =>
                         compatibility
-                          .vehicleModelId ===
+                          .modelId ===
                         model.id,
                     ),
                 ),
-              generations,
+              specs,
             }
           })
           .sort((first, second) =>
@@ -2318,8 +2309,8 @@ export function buildCategoryFacets({
           )
 
         return {
-          id: brand.id,
-          name: brand.name,
+          id: make.id,
+          name: make.name,
           productCount:
             countProducts(
               products,
@@ -2331,8 +2322,8 @@ export function buildCategoryFacets({
                 ).some(
                   (compatibility) =>
                     compatibility
-                      .vehicleBrandId ===
-                    brand.id,
+                      .makeId ===
+                    make.id,
                 ),
             ),
           models,
@@ -2353,7 +2344,7 @@ export function buildCategoryFacets({
         matches(product, 'stock'),
     ),
     brands,
-    vehicleMakes,
+    vehicleMakes: vehicleMakeFacets,
     variantFacets: buildVariantFacets(
       productsForVariantFacets,
       variantSelections,
@@ -2416,10 +2407,10 @@ export async function getCatalogCategoryFacetsBySlug(
     select: catalogProductSelect,
   })
 
-  const [compatibilities, vehicleBrands] =
+  const [compatibilityRows, vehicleMakeRecords] =
     await Promise.all([
-      db.productVehicleCompatibility
-        ? (db.productVehicleCompatibility.findMany(
+      db.productCompatibility
+        ? (db.productCompatibility.findMany(
             {
               where: {
                 product: {
@@ -2431,17 +2422,29 @@ export async function getCatalogCategoryFacetsBySlug(
               },
               select: {
                 productId: true,
-                vehicleBrandId: true,
-                vehicleModelId: true,
-                vehicleGenerationId: true,
+                vehicleSpec: {
+                  select: {
+                    id: true,
+                    model: {
+                      select: {
+                        id: true,
+                        make: {
+                          select: {
+                            id: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           ) as Promise<
-            CatalogProductVehicleRecord[]
+            CatalogFlatCompatibilityRecord[]
           >)
         : Promise.resolve([]),
-      db.vehicleBrand && includeVehicleFacets
-        ? db.vehicleBrand.findMany({
+      db.vehicleMake && includeVehicleFacets
+        ? db.vehicleMake.findMany({
             orderBy: { name: 'asc' as const },
             select: {
               id: true,
@@ -2451,11 +2454,22 @@ export async function getCatalogCategoryFacetsBySlug(
                 select: {
                   id: true,
                   name: true,
-                  generations: {
-                    orderBy: { name: 'asc' as const },
+                  specs: {
+                    orderBy: [
+                      { engine: 'asc' as const },
+                      {
+                        yearStart:
+                          'asc' as const,
+                      },
+                    ],
                     select: {
                       id: true,
-                      name: true,
+                      engine: true,
+                      engineCode: true,
+                      yearStart: true,
+                      yearEnd: true,
+                      fuelType: true,
+                      powerHp: true,
                     },
                   },
                 },
@@ -2465,10 +2479,21 @@ export async function getCatalogCategoryFacetsBySlug(
         : Promise.resolve([]),
     ])
 
+  // Aplaina os registos: cada compatibilidade fica com
+  // os ids de make/model/spec que as facetas consultam.
+  const compatibilities: CatalogProductVehicleRecord[] =
+    compatibilityRows.map((row) => ({
+      productId: row.productId,
+      vehicleSpecId: row.vehicleSpec.id,
+      modelId: row.vehicleSpec.model.id,
+      makeId: row.vehicleSpec.model.make.id,
+    }))
+
   return buildCategoryFacets({
     products,
     compatibilities,
-    vehicleBrands,
+    vehicleMakes:
+      vehicleMakeRecords as CatalogVehicleMakeRecord[],
     filters,
   })
 }

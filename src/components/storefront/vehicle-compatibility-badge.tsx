@@ -6,13 +6,14 @@ import { useVehicleSelection } from './vehicle-selection'
 
 /**
  * Badge de compatibilidade da ficha de produto
- * (Épico 2 — Etapa 4): com um veículo guardado,
- * interroga o endpoint público de estado de
- * compatibilidade e apresenta "Compatível com o teu
- * veículo" ou "Não compatível".
+ * (Épico 8): com uma especificação de veículo
+ * guardada, interroga o endpoint público de estado
+ * de compatibilidade e apresenta "Compatível com o
+ * teu veículo" ou "Não compatível" (com as notas do
+ * administrador em tooltip).
  *
- * Sem veículo selecionado, erro de rede ou 404
- * (produto/configuração removida), o badge não é
+ * Sem veículo selecionado, erro de rede ou falha
+ * (produto/especificação removida), o badge não é
  * apresentado — a ficha nunca fica poluída.
  */
 
@@ -28,25 +29,26 @@ function getCompatibilityStateClass(
 }
 
 type VehicleCompatibilityBadgeProps = {
-  productSlug: string
+  productId: string
 }
 
 type CompatibilityOutcome =
   | {
-      configurationId: string
+      specId: string
       kind: 'compatible'
+      notes: string | null
     }
   | {
-      configurationId: string
+      specId: string
       kind: 'incompatible'
     }
   | {
-      configurationId: string
+      specId: string
       kind: 'error'
     }
 
 export default function VehicleCompatibilityBadge({
-  productSlug,
+  productId,
 }: VehicleCompatibilityBadgeProps) {
   const selection = useVehicleSelection()
   const [outcome, setOutcome] =
@@ -54,16 +56,15 @@ export default function VehicleCompatibilityBadge({
       null,
     )
 
-  const activeConfigurationId =
-    selection?.configurationId ?? ''
+  const activeSpecId =
+    selection?.specId ?? ''
 
   const outcomeIsCurrent =
-    activeConfigurationId !== '' &&
-    outcome?.configurationId ===
-      activeConfigurationId
+    activeSpecId !== '' &&
+    outcome?.specId === activeSpecId
 
   useEffect(() => {
-    if (!activeConfigurationId) {
+    if (!activeSpecId) {
       return
     }
 
@@ -72,10 +73,10 @@ export default function VehicleCompatibilityBadge({
     const run = async () => {
       try {
         const response = await fetch(
-          `/api/vehicles/products/${encodeURIComponent(
-            productSlug,
-          )}/compatibility?configurationId=${encodeURIComponent(
-            activeConfigurationId,
+          `/api/vehicles/compatibility?productId=${encodeURIComponent(
+            productId,
+          )}&specId=${encodeURIComponent(
+            activeSpecId,
           )}`,
         )
 
@@ -84,11 +85,10 @@ export default function VehicleCompatibilityBadge({
         }
 
         if (!response.ok) {
-          // 404: produto/configuração já não existe
-          // → badge silencioso.
+          // 404/400: produto ou especificação já
+          // não existe → badge silencioso.
           setOutcome({
-            configurationId:
-              activeConfigurationId,
+            specId: activeSpecId,
             kind: 'error',
           })
 
@@ -97,20 +97,22 @@ export default function VehicleCompatibilityBadge({
 
         const body = (await response.json()) as {
           compatible: boolean
+          notes?: string | null
         }
 
         setOutcome({
-          configurationId:
-            activeConfigurationId,
+          specId: activeSpecId,
           kind: body.compatible
             ? 'compatible'
             : 'incompatible',
+          notes: body.compatible
+            ? (body.notes ?? null)
+            : null,
         })
       } catch {
         if (!cancelled) {
           setOutcome({
-            configurationId:
-              activeConfigurationId,
+            specId: activeSpecId,
             kind: 'error',
           })
         }
@@ -122,10 +124,10 @@ export default function VehicleCompatibilityBadge({
     return () => {
       cancelled = true
     }
-  }, [activeConfigurationId, productSlug])
+  }, [activeSpecId, productId])
 
   if (
-    !activeConfigurationId ||
+    !activeSpecId ||
     (outcomeIsCurrent &&
       outcome?.kind === 'error')
   ) {
@@ -154,6 +156,11 @@ export default function VehicleCompatibilityBadge({
         compatible,
       )}
       data-testid="vehicle-compatibility-badge"
+      title={
+        compatible && outcome.notes
+          ? outcome.notes
+          : undefined
+      }
     >
       <span aria-hidden="true">
         {compatible ? '✓' : '✕'}

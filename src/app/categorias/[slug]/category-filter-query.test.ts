@@ -9,7 +9,7 @@ import type {
 } from '@/server/catalog'
 import {
   buildCategoryHref,
-  getVisibleVehicleGenerations,
+  getVisibleVehicleSpecs,
   getVisibleVehicleModels,
   normalizeVehicleSelections,
   parseSortParam,
@@ -24,7 +24,7 @@ const baseFilters: CategoryFilterState = {
   brandSlugs: [],
   vehicleMakeIds: [],
   vehicleModelIds: [],
-  vehicleGenerationIds: [],
+  vehicleSpecIds: [],
   variantSelections: [],
   sort: 'newest',
 }
@@ -57,18 +57,28 @@ const makes: CatalogVehicleMakeFacet[] = [
       {
         id: 'model-golf',
         name: 'Golf',
-        brandId: 'make-vw',
+        makeId: 'make-vw',
         productCount: 2,
-        generations: [
+        specs: [
           {
-            id: 'gen-mk7',
-            name: 'Mk7',
+            id: 'spec-gtd',
+            engine: '2.0 TDI GTD',
+            engineCode: 'CRLB',
+            yearStart: 2013,
+            yearEnd: 2020,
+            fuelType: 'DIESEL',
+            powerHp: 184,
             modelId: 'model-golf',
             productCount: 1,
           },
           {
-            id: 'gen-mk8',
-            name: 'Mk8',
+            id: 'spec-gti',
+            engine: '2.0 TSI GTI',
+            engineCode: null,
+            yearStart: 2013,
+            yearEnd: 2020,
+            fuelType: 'GASOLINA',
+            powerHp: 220,
             modelId: 'model-golf',
             productCount: 1,
           },
@@ -77,12 +87,17 @@ const makes: CatalogVehicleMakeFacet[] = [
       {
         id: 'model-passat',
         name: 'Passat',
-        brandId: 'make-vw',
+        makeId: 'make-vw',
         productCount: 1,
-        generations: [
+        specs: [
           {
-            id: 'gen-b8',
-            name: 'B8',
+            id: 'spec-passat-20tdi',
+            engine: '2.0 TDI',
+            engineCode: 'DFGA',
+            yearStart: 2015,
+            yearEnd: null,
+            fuelType: 'DIESEL',
+            powerHp: 150,
             modelId: 'model-passat',
             productCount: 1,
           },
@@ -98,12 +113,17 @@ const makes: CatalogVehicleMakeFacet[] = [
       {
         id: 'model-serie-3',
         name: 'Série 3',
-        brandId: 'make-bmw',
+        makeId: 'make-bmw',
         productCount: 1,
-        generations: [
+        specs: [
           {
-            id: 'gen-f30',
-            name: 'F30',
+            id: 'spec-f30-18d',
+            engine: '318d',
+            engineCode: 'N47D20C1',
+            yearStart: 2011,
+            yearEnd: 2015,
+            fuelType: 'DIESEL',
+            powerHp: 143,
             modelId: 'model-serie-3',
             productCount: 1,
           },
@@ -126,7 +146,7 @@ describe(
           priceMax: 900,
           vehicleMakeIds: ['make-vw'],
           vehicleModelIds: ['model-golf'],
-          vehicleGenerationIds: ['gen-mk7'],
+          vehicleSpecIds: ['spec-gtd'],
           variantSelections: [
             {
               code: 'diameter',
@@ -140,7 +160,7 @@ describe(
           sort: 'price-asc',
         }),
       ).toBe(
-        '/categorias/jantes?stock=available&brand=bbs&brand=oz-racing&priceMin=100&priceMax=900&make=make-vw&model=model-golf&generation=gen-mk7&v_diameter=18%22&v_diameter=19%22&v_pcd=5x120&sort=price-asc',
+        '/categorias/jantes?stock=available&brand=bbs&brand=oz-racing&priceMin=100&priceMax=900&make=make-vw&model=model-golf&spec=spec-gtd&v_diameter=18%22&v_diameter=19%22&v_pcd=5x120&sort=price-asc',
       )
     })
 
@@ -280,7 +300,7 @@ describe(
       ).toEqual([])
     })
 
-    test('toggleId alterna ids de marca, modelo e geração', () => {
+    test('toggleId alterna ids de marca, modelo e especificação', () => {
       expect(
         toggleId(['a'], 'b'),
       ).toEqual(['a', 'b'])
@@ -290,7 +310,7 @@ describe(
       ).toEqual(['b'])
     })
 
-    test('selecionar uma marca restringe os modelos visíveis', () => {
+    test('selecionar uma marca restringe os modelos e especificações visíveis', () => {
       const all = getVisibleVehicleModels(
         makes,
         [],
@@ -322,15 +342,24 @@ describe(
       ])
 
       expect(
-        getVisibleVehicleGenerations(
+        getVisibleVehicleSpecs(
+          onlyVolkswagen,
+          [],
+        ).map((spec) => spec.id),
+      ).toEqual([
+        'spec-gtd',
+        'spec-gti',
+        'spec-passat-20tdi',
+      ])
+
+      expect(
+        getVisibleVehicleSpecs(
           onlyVolkswagen,
           ['model-golf'],
-        ).map(
-          (generation) => generation.id,
-        ),
+        ).map((spec) => spec.id),
       ).toEqual([
-        'gen-mk7',
-        'gen-mk8',
+        'spec-gtd',
+        'spec-gti',
       ])
     })
 
@@ -339,29 +368,29 @@ describe(
         normalizeVehicleSelections({
           makeIds: ['make-vw'],
           modelIds: ['model-serie-3'],
-          generationIds: ['gen-mk7'],
+          specIds: ['spec-gtd'],
           makes,
         }),
       ).toEqual({
         vehicleMakeIds: ['make-vw'],
         vehicleModelIds: [],
-        vehicleGenerationIds: ['gen-mk7'],
+        vehicleSpecIds: ['spec-gtd'],
         hasInvalid: true,
       })
     })
 
-    test('aceita a hierarquia coerente marca > modelo > geração', () => {
+    test('aceita a hierarquia coerente marca > modelo > especificação', () => {
       expect(
         normalizeVehicleSelections({
           makeIds: ['make-vw'],
           modelIds: ['model-golf'],
-          generationIds: ['gen-mk8'],
+          specIds: ['spec-gti'],
           makes,
         }),
       ).toEqual({
         vehicleMakeIds: ['make-vw'],
         vehicleModelIds: ['model-golf'],
-        vehicleGenerationIds: ['gen-mk8'],
+        vehicleSpecIds: ['spec-gti'],
         hasInvalid: false,
       })
     })
@@ -371,13 +400,13 @@ describe(
         normalizeVehicleSelections({
           makeIds: ['make-fantasma'],
           modelIds: ['model-fantasma'],
-          generationIds: ['gen-fantasma'],
+          specIds: ['spec-fantasma'],
           makes,
         }),
       ).toEqual({
         vehicleMakeIds: [],
         vehicleModelIds: [],
-        vehicleGenerationIds: [],
+        vehicleSpecIds: [],
         hasInvalid: true,
       })
     })

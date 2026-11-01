@@ -1882,30 +1882,31 @@ function isValidImportImageUrl(value: string) {
  * o mesmo "BMW"/"Série 4" repete-se em dezenas de linhas.
  */
 type ImportVehicleEntityCache = {
-  vehicleBrand: Map<string, { id: string }>
+  vehicleMake: Map<string, { id: string }>
   vehicleModel: Map<string, { id: string }>
-  vehicleGeneration: Map<string, { id: string }>
+  vehicleSpec: Map<string, { id: string }>
 }
 
 function createVehicleEntityCache(): ImportVehicleEntityCache {
   return {
-    vehicleBrand: new Map(),
+    vehicleMake: new Map(),
     vehicleModel: new Map(),
-    vehicleGeneration: new Map(),
+    vehicleSpec: new Map(),
   }
 }
 
 /**
- * Marca de veículo por slug OU nome (case-insensitive), criando
- * quando não existe. O importador nunca silencia uma marca nova.
+ * Marca de veículo (make) por slug OU nome (case-insensitive),
+ * criando quando não existe. O importador nunca silencia uma
+ * marca nova.
  */
-async function resolveVehicleBrandId(
+async function resolveVehicleMakeId(
   transaction: ImportTransaction,
   cache: ImportVehicleEntityCache,
   name: string,
 ) {
   const cacheKey = name.trim().toLocaleLowerCase('pt-PT')
-  const cached = cache.vehicleBrand.get(cacheKey)
+  const cached = cache.vehicleMake.get(cacheKey)
 
   if (cached) {
     return cached
@@ -1914,25 +1915,25 @@ async function resolveVehicleBrandId(
   const slug = toSlug(name)
 
   const existing = slug
-    ? await transaction.vehicleBrand.findFirst({
+    ? await transaction.vehicleMake.findFirst({
         where: {
           OR: [{ slug }, { name: { equals: name, mode: 'insensitive' } }],
         },
         select: { id: true },
       })
-    : await transaction.vehicleBrand.findFirst({
+    : await transaction.vehicleMake.findFirst({
         where: { name: { equals: name, mode: 'insensitive' } },
         select: { id: true },
       })
 
   const resolved =
     existing ??
-    (await transaction.vehicleBrand.create({
+    (await transaction.vehicleMake.create({
       data: { name, slug },
       select: { id: true },
     }))
 
-  cache.vehicleBrand.set(cacheKey, resolved)
+  cache.vehicleMake.set(cacheKey, resolved)
 
   return resolved
 }
@@ -1944,10 +1945,10 @@ async function resolveVehicleBrandId(
 async function resolveVehicleModelId(
   transaction: ImportTransaction,
   cache: ImportVehicleEntityCache,
-  brandId: string,
+  makeId: string,
   name: string,
 ) {
-  const cacheKey = `${brandId}\u0000${name
+  const cacheKey = `${makeId}\u0000${name
     .trim()
     .toLocaleLowerCase('pt-PT')}`
   const cached = cache.vehicleModel.get(cacheKey)
@@ -1961,14 +1962,14 @@ async function resolveVehicleModelId(
   const existing = slug
     ? await transaction.vehicleModel.findFirst({
         where: {
-          brandId,
+          makeId,
           OR: [{ slug }, { name: { equals: name, mode: 'insensitive' } }],
         },
         select: { id: true },
       })
     : await transaction.vehicleModel.findFirst({
         where: {
-          brandId,
+          makeId,
           name: { equals: name, mode: 'insensitive' },
         },
         select: { id: true },
@@ -1977,7 +1978,7 @@ async function resolveVehicleModelId(
   const resolved =
     existing ??
     (await transaction.vehicleModel.create({
-      data: { brandId, name, slug },
+      data: { makeId, name, slug },
       select: { id: true },
     }))
 
@@ -1987,45 +1988,56 @@ async function resolveVehicleModelId(
 }
 
 /**
- * Geração/chassis dentro do modelo por nome (case-insensitive),
- * criando quando não existe. Devolve null para geração vazia.
+ * Especificação de compatibilidade (fitment) dentro do modelo,
+ * por chave natural [modelId, engine, yearStart], criando quando
+ * não existe. No esquema do Épico 8 é a unidade atómica — a CSV
+ * Maxton não traz motor nomeado em todas as linhas: quando falta,
+ * a designação da geração/chassis distingue as aplicações.
  */
-async function resolveVehicleGenerationId(
+async function resolveVehicleSpecId(
   transaction: ImportTransaction,
   cache: ImportVehicleEntityCache,
   modelId: string,
-  name: string,
+  spec: {
+    engine: string
+    yearStart: number
+    yearEnd: number | null
+    fuelType: string
+  },
 ) {
-  const trimmed = name.trim()
-
-  if (!trimmed) {
-    return null
-  }
-
-  const cacheKey = `${modelId}\u0000${trimmed.toLocaleLowerCase('pt-PT')}`
-  const cached = cache.vehicleGeneration.get(cacheKey)
+  const cacheKey = `${modelId}\u0000${spec.engine
+    .trim()
+    .toLocaleLowerCase('pt-PT')}\u0000${spec.yearStart}`
+  const cached = cache.vehicleSpec.get(cacheKey)
 
   if (cached) {
     return cached
   }
 
   const existing =
-    await transaction.vehicleGeneration.findFirst({
+    await transaction.vehicleSpec.findFirst({
       where: {
         modelId,
-        name: { equals: trimmed, mode: 'insensitive' },
+        engine: spec.engine,
+        yearStart: spec.yearStart,
       },
       select: { id: true },
     })
 
   const resolved =
     existing ??
-    (await transaction.vehicleGeneration.create({
-      data: { modelId, name: trimmed },
+    (await transaction.vehicleSpec.create({
+      data: {
+        modelId,
+        engine: spec.engine,
+        yearStart: spec.yearStart,
+        yearEnd: spec.yearEnd,
+        fuelType: spec.fuelType,
+      },
       select: { id: true },
     }))
 
-  cache.vehicleGeneration.set(cacheKey, resolved)
+  cache.vehicleSpec.set(cacheKey, resolved)
 
   return resolved
 }
@@ -2045,7 +2057,7 @@ async function upsertImportedCompatibilities(
   }
 
   for (const compatibility of compatibilities) {
-    const brand = await resolveVehicleBrandId(
+    const make = await resolveVehicleMakeId(
       transaction,
       cache,
       compatibility.make,
@@ -2054,47 +2066,43 @@ async function upsertImportedCompatibilities(
     const model = await resolveVehicleModelId(
       transaction,
       cache,
-      brand.id,
+      make.id,
       compatibility.model,
     )
 
-    const generation =
-      await resolveVehicleGenerationId(
-        transaction,
-        cache,
-        model.id,
-        compatibility.generation ?? '',
-      )
+    // O VehicleSpec exige motor + ano inicial + combustível.
+    // Sem designação de motor, a geração/chassis (ex.: "G22")
+    // distingue as aplicações; sem ambos, "Padrão".
+    // Sem anos, 1900 marca "desconhecido" (o mínimo aceite
+    // pelo admin), corrigível depois no backoffice.
+    const engine =
+      compatibility.engine ||
+      compatibility.generation ||
+      'Padrão'
 
-    let configurationId: string | null = null
+    const yearStart =
+      compatibility.yearFrom ??
+      compatibility.yearTo ??
+      1900
 
-    if (generation && compatibility.engine) {
-      const configuration =
-        await transaction.vehicleConfiguration.findFirst(
-          {
-            where: {
-              generationId: generation.id,
-              engineCode:
-                compatibility.engine,
-            },
-            select: { id: true },
-          },
-        )
-
-      configurationId =
-        configuration?.id ?? null
-    }
+    const spec = await resolveVehicleSpecId(
+      transaction,
+      cache,
+      model.id,
+      {
+        engine,
+        yearStart,
+        yearEnd: compatibility.yearTo,
+        fuelType: compatibility.fuelType,
+      },
+    )
 
     const existing =
-      await transaction.productVehicleCompatibility.findFirst(
+      await transaction.productCompatibility.findFirst(
         {
           where: {
             productId,
-            vehicleModelId: model.id,
-            vehicleGenerationId:
-              generation?.id ?? null,
-            vehicleConfigurationId:
-              configurationId,
+            vehicleSpecId: spec.id,
           },
           select: { id: true },
         },
@@ -2104,21 +2112,12 @@ async function upsertImportedCompatibilities(
       continue
     }
 
-    await transaction.productVehicleCompatibility.create(
-      {
-        data: {
-          productId,
-          vehicleBrandId: brand.id,
-          vehicleModelId: model.id,
-          vehicleGenerationId:
-            generation?.id ?? null,
-          vehicleConfigurationId:
-            configurationId,
-          yearMin: compatibility.yearFrom,
-          yearMax: compatibility.yearTo,
-        },
+    await transaction.productCompatibility.create({
+      data: {
+        productId,
+        vehicleSpecId: spec.id,
       },
-    )
+    })
   }
 }
 

@@ -76,8 +76,11 @@ const brands = [
 ]
 
 // Árvore de veículos usada para compatibilidade
-// (família VW Golf, audi A3/S3 e BMW Série 3).
-const vehicleBrands = [
+// (família VW Golf, Audi A3 e BMW Série 3).
+// Épico 8: geração e configuração fundiram-se numa única
+// VehicleSpec — motor + código + intervalo de anos +
+// combustível + potência em cv.
+const vehicleMakes = [
   {
     name: 'Volkswagen',
     slug: 'dev-volkswagen',
@@ -85,58 +88,38 @@ const vehicleBrands = [
       {
         name: 'Golf',
         slug: 'dev-golf',
-        generations: [
+        specs: [
           {
-            name: 'Mk7',
-            platform: 'MQB',
-            configurations: [
-              {
-                name: '2.0 TDI 150',
-                engineCode: 'CRLB',
-                engineType: 'Diesel',
-                displacementCc: 1968,
-                powerKw: '110',
-                bodyType: 'Hatchback',
-                yearFrom: 2012,
-                yearTo: 2019,
-              },
-              {
-                name: '1.4 TSI 125',
-                engineCode: 'CZCA',
-                engineType: 'Gasolina',
-                displacementCc: 1395,
-                powerKw: '92',
-                bodyType: 'Hatchback',
-                yearFrom: 2014,
-                yearTo: 2019,
-              },
-              {
-                name: 'GTI Performance 2.0 TSI 245',
-                engineCode: 'CHHB',
-                engineType: 'Gasolina',
-                displacementCc: 1984,
-                powerKw: '180',
-                bodyType: 'Hatchback',
-                yearFrom: 2013,
-                yearTo: 2019,
-              },
-            ],
+            engine: '2.0 TDI 150',
+            engineCode: 'CRLB',
+            fuelType: 'DIESEL',
+            powerHp: 150,
+            yearStart: 2012,
+            yearEnd: 2019,
           },
           {
-            name: 'Mk7 GTI Clubsport',
-            platform: 'MQB',
-            configurations: [
-              {
-                name: '2.0 TSI 265',
-                engineCode: 'CJXF',
-                engineType: 'Gasolina',
-                displacementCc: 1984,
-                powerKw: '195',
-                bodyType: 'Hatchback',
-                yearFrom: 2016,
-                yearTo: 2019,
-              },
-            ],
+            engine: '1.4 TSI 125',
+            engineCode: 'CZCA',
+            fuelType: 'GASOLINA',
+            powerHp: 125,
+            yearStart: 2014,
+            yearEnd: 2019,
+          },
+          {
+            engine: 'GTI Performance 2.0 TSI 245',
+            engineCode: 'CHHB',
+            fuelType: 'GASOLINA',
+            powerHp: 245,
+            yearStart: 2013,
+            yearEnd: 2019,
+          },
+          {
+            engine: 'GTI Clubsport 2.0 TSI 265',
+            engineCode: 'CJXF',
+            fuelType: 'GASOLINA',
+            powerHp: 265,
+            yearStart: 2016,
+            yearEnd: 2019,
           },
         ],
       },
@@ -149,32 +132,22 @@ const vehicleBrands = [
       {
         name: 'A3',
         slug: 'dev-a3',
-        generations: [
+        specs: [
           {
-            name: '8V',
-            platform: 'MQB',
-            configurations: [
-              {
-                name: '2.0 TDI 150',
-                engineCode: 'CRLB',
-                engineType: 'Diesel',
-                displacementCc: 1968,
-                powerKw: '110',
-                bodyType: 'Sportback',
-                yearFrom: 2012,
-                yearTo: 2018,
-              },
-              {
-                name: 'S3 2.0 TFSI 300',
-                engineCode: 'CJXC',
-                engineType: 'Gasolina',
-                displacementCc: 1984,
-                powerKw: '221',
-                bodyType: 'Sportback',
-                yearFrom: 2013,
-                yearTo: 2016,
-              },
-            ],
+            engine: '2.0 TDI 150',
+            engineCode: 'CRLB',
+            fuelType: 'DIESEL',
+            powerHp: 150,
+            yearStart: 2012,
+            yearEnd: 2018,
+          },
+          {
+            engine: 'S3 2.0 TFSI 300',
+            engineCode: 'CJXC',
+            fuelType: 'GASOLINA',
+            powerHp: 300,
+            yearStart: 2013,
+            yearEnd: 2016,
           },
         ],
       },
@@ -187,22 +160,14 @@ const vehicleBrands = [
       {
         name: 'Série 3',
         slug: 'dev-serie-3',
-        generations: [
+        specs: [
           {
-            name: 'F30',
-            platform: 'CLAR',
-            configurations: [
-              {
-                name: '320d 184',
-                engineCode: 'N47D20',
-                engineType: 'Diesel',
-                displacementCc: 1995,
-                powerKw: '135',
-                bodyType: 'Sedan',
-                yearFrom: 2011,
-                yearTo: 2015,
-              },
-            ],
+            engine: '320d 184',
+            engineCode: 'N47D20',
+            fuelType: 'DIESEL',
+            powerHp: 184,
+            yearStart: 2011,
+            yearEnd: 2015,
           },
         ],
       },
@@ -848,28 +813,28 @@ const compatibilities = [
   {
     productSku: 'DEV-PFA-SUS-001',
     vehicleModelSlug: 'dev-golf',
-    vehicleConfigurationEngineCode: 'CRLB',
-    note: 'Aplicação por configuração de motor',
+    vehicleSpecEngineCode: 'CRLB',
+    note: 'Aplicação por especificação de motor',
   },
   {
     productSku: 'DEV-PFA-SUS-001',
     vehicleModelSlug: 'dev-a3',
-    vehicleConfigurationEngineCode: 'CRLB',
+    vehicleSpecEngineCode: 'CRLB',
   },
   {
     productSku: 'DEV-PFA-SUS-003',
     vehicleModelSlug: 'dev-golf',
-    vehicleGenerationName: 'Mk7',
+    vehicleSpecEngineCode: 'CRLB',
   },
   {
     productSku: 'DEV-PFA-SUS-003',
     vehicleModelSlug: 'dev-serie-3',
-    vehicleGenerationName: 'F30',
+    vehicleSpecEngineCode: 'N47D20',
   },
   {
     productSku: 'DEV-PFA-SUS-004',
     vehicleModelSlug: 'dev-golf',
-    vehicleGenerationName: 'Mk7',
+    vehicleSpecEngineCode: 'CRLB',
   },
 ]
 
@@ -929,43 +894,42 @@ async function findOrCreateBrand(
 }
 
 async function upsertVehicleTree() {
-  const vehicleBrandBySlug = new Map()
+  const vehicleMakeBySlug = new Map()
   const vehicleModelBySlug = new Map()
-  const generationByKey = new Map()
-  const configurationByKey = new Map()
+  const specByKey = new Map()
 
-  for (const brandDefinition of vehicleBrands) {
-    const vehicleBrandSlug =
-      brandDefinition.slug
+  for (const makeDefinition of vehicleMakes) {
+    const vehicleMakeSlug =
+      makeDefinition.slug
 
-    const vehicleBrand =
-      await prisma.vehicleBrand.upsert({
+    const vehicleMake =
+      await prisma.vehicleMake.upsert({
         where: {
-          slug: vehicleBrandSlug,
+          slug: vehicleMakeSlug,
         },
         update: {
-          name: brandDefinition.name,
+          name: makeDefinition.name,
         },
         create: {
-          name: brandDefinition.name,
-          slug: vehicleBrandSlug,
+          name: makeDefinition.name,
+          slug: vehicleMakeSlug,
         },
       })
 
-    vehicleBrandBySlug.set(
-      vehicleBrandSlug,
-      vehicleBrand,
+    vehicleMakeBySlug.set(
+      vehicleMakeSlug,
+      vehicleMake,
     )
 
-    for (const modelDefinition of brandDefinition.models) {
+    for (const modelDefinition of makeDefinition.models) {
       const vehicleModelSlug =
         modelDefinition.slug
 
       const vehicleModel =
         await prisma.vehicleModel.upsert({
           where: {
-            brandId_slug: {
-              brandId: vehicleBrand.id,
+            makeId_slug: {
+              makeId: vehicleMake.id,
               slug: vehicleModelSlug,
             },
           },
@@ -975,7 +939,7 @@ async function upsertVehicleTree() {
           create: {
             name: modelDefinition.name,
             slug: vehicleModelSlug,
-            brandId: vehicleBrand.id,
+            makeId: vehicleMake.id,
           },
         })
 
@@ -984,89 +948,48 @@ async function upsertVehicleTree() {
         vehicleModel,
       )
 
-      for (const generationDefinition of modelDefinition.generations) {
-        const generationKey = `${vehicleModelSlug}:${generationDefinition.name}`
+      for (const specDefinition of modelDefinition.specs) {
+        const specKey = `${vehicleModelSlug}:${specDefinition.engineCode}`
 
-        const vehicleGeneration =
-          await prisma.vehicleGeneration.upsert({
-            where: {
-              modelId_name: {
+        const existingSpec =
+          await prisma.vehicleSpec.findFirst(
+            {
+              where: {
                 modelId: vehicleModel.id,
-                name: generationDefinition.name,
+                engine: specDefinition.engine,
+                yearStart:
+                  specDefinition.yearStart,
               },
             },
-            update: {
-              platform:
-                generationDefinition.platform,
-            },
-            create: {
-              name: generationDefinition.name,
-              platform:
-                generationDefinition.platform,
-              modelId: vehicleModel.id,
-            },
-          })
-
-        generationByKey.set(
-          generationKey,
-          vehicleGeneration,
-        )
-
-        for (const configurationDefinition of generationDefinition.configurations) {
-          const configurationKey = `${generationKey}:${configurationDefinition.name}`
-
-          const existingConfiguration =
-            await prisma.vehicleConfiguration.findFirst(
-              {
-                where: {
-                  generationId:
-                    vehicleGeneration.id,
-                  name: configurationDefinition.name,
-                },
-              },
-            )
-
-          const vehicleConfiguration =
-            existingConfiguration ??
-            (await prisma.vehicleConfiguration.create(
-              {
-                data: {
-                  generationId:
-                    vehicleGeneration.id,
-                  name: configurationDefinition.name,
-                  engineCode:
-                    configurationDefinition.engineCode,
-                  engineType:
-                    configurationDefinition.engineType,
-                  displacementCc:
-                    configurationDefinition.displacementCc,
-                  powerKw: configurationDefinition.powerKw
-                    ? configurationDefinition.powerKw
-                    : null,
-                  bodyType:
-                    configurationDefinition.bodyType,
-                  yearFrom:
-                    configurationDefinition.yearFrom,
-                  yearTo:
-                    configurationDefinition.yearTo,
-                },
-              },
-            ))
-
-          configurationByKey.set(
-            configurationKey,
-            vehicleConfiguration,
           )
-        }
+
+        const vehicleSpec =
+          existingSpec ??
+          (await prisma.vehicleSpec.create({
+            data: {
+              modelId: vehicleModel.id,
+              engine: specDefinition.engine,
+              engineCode:
+                specDefinition.engineCode,
+              yearStart:
+                specDefinition.yearStart,
+              yearEnd:
+                specDefinition.yearEnd,
+              fuelType:
+                specDefinition.fuelType,
+              powerHp:
+                specDefinition.powerHp,
+            },
+          }))
+
+        specByKey.set(specKey, vehicleSpec)
       }
     }
   }
 
   return {
-    vehicleBrandBySlug,
     vehicleModelBySlug,
-    generationByKey,
-    configurationByKey,
+    specByKey,
   }
 }
 
@@ -1334,56 +1257,29 @@ async function upsertCompatibility(
     )
   }
 
-  const generation =
-    compatibilityDefinition.vehicleGenerationName
-      ? vehicleTree.generationByKey.get(
-          `${compatibilityDefinition.vehicleModelSlug}:${compatibilityDefinition.vehicleGenerationName}`,
-        )
-      : null
+  // No Épico 8 a compatibilidade é sempre ao nível da
+  // especificação de motor — os dados DEV declaram o
+  // código do motor da aplicação.
+  const spec =
+    vehicleTree.specByKey.get(
+      `${compatibilityDefinition.vehicleModelSlug}:${compatibilityDefinition.vehicleSpecEngineCode}`,
+    )
 
   if (
-    compatibilityDefinition.vehicleGenerationName &&
-    !generation
+    !compatibilityDefinition.vehicleSpecEngineCode ||
+    !spec
   ) {
     throw new Error(
-      `Geração "${compatibilityDefinition.vehicleGenerationName}" não encontrada`,
+      `Especificação com código de motor "${compatibilityDefinition.vehicleSpecEngineCode}" não encontrada no modelo "${compatibilityDefinition.vehicleModelSlug}"`,
     )
   }
 
-  let configuration = null
-
-  if (
-    compatibilityDefinition.vehicleConfigurationEngineCode
-  ) {
-    const configurations =
-      await prisma.vehicleConfiguration.findMany(
-        {
-          where: {
-            engineCode:
-              compatibilityDefinition.vehicleConfigurationEngineCode,
-            generation: {
-              modelId: vehicleModel.id,
-            },
-          },
-          take: 1,
-        },
-      )
-
-    configuration =
-      configurations[0] ?? null
-  }
-
   const existingCompatibility =
-    await prisma.productVehicleCompatibility.findFirst(
+    await prisma.productCompatibility.findFirst(
       {
         where: {
           productId: product.id,
-          vehicleBrandId: vehicleModel.brandId,
-          vehicleModelId: vehicleModel.id,
-          vehicleGenerationId:
-            generation?.id ?? null,
-          vehicleConfigurationId:
-            configuration?.id ?? null,
+          vehicleSpecId: spec.id,
         },
       },
     )
@@ -1392,19 +1288,13 @@ async function upsertCompatibility(
     return existingCompatibility
   }
 
-  return prisma.productVehicleCompatibility.create(
-    {
-      data: {
-        productId: product.id,
-        vehicleBrandId: vehicleModel.brandId,
-        vehicleModelId: vehicleModel.id,
-        vehicleGenerationId:
-          generation?.id ?? null,
-        vehicleConfigurationId:
-          configuration?.id ?? null,
-      },
+  return prisma.productCompatibility.create({
+    data: {
+      productId: product.id,
+      vehicleSpecId: spec.id,
+      notes: compatibilityDefinition.note ?? null,
     },
-  )
+  })
 }
 
 async function seed() {

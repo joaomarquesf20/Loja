@@ -106,56 +106,55 @@ model User {
   updatedAt                  DateTime         @updatedAt
 }
 
-model VehicleBrand {
-  id                     String                        @id @default(cuid())
-  name                   String                        @unique
-  slug                   String                        @unique
+/// Épico 8 — motor de compatibilidade: marca de veículo (make).
+model VehicleMake {
+  id                     String                 @id @default(cuid())
+  name                   String                 @unique
+  slug                   String                 @unique
+  createdAt              DateTime             @default(now())
   models                 VehicleModel[]
-  productCompatibilities ProductVehicleCompatibility[]
 
   @@index([slug])
 }
 
+/// Épico 8 — modelo de veículo pertencente a uma marca.
 model VehicleModel {
-  id                     String                        @id @default(cuid())
-  brandId                String
+  id                     String                 @id @default(cuid())
+  makeId                 String
   name                   String
   slug                   String
-  description            String?
-  brand                  VehicleBrand                  @relation(fields: [brandId], references: [id])
-  generations            VehicleGeneration[]
-  productCompatibilities ProductVehicleCompatibility[]
+  createdAt              DateTime               @default(now())
+  make                   VehicleMake            @relation(fields: [makeId], references: [id], onDelete: Cascade)
+  specs                  VehicleSpec[]
 
-  @@unique([brandId, slug])
+  @@unique([makeId, slug])
+  @@index([makeId])
 }
 
-model VehicleGeneration {
-  id                     String                        @id @default(cuid())
+/// Épico 8 — especificação de compatibilidade (fitment) de um modelo:
+/// motor + código do motor + intervalo de anos + combustível + potência.
+/// É a unidade atómica de compatibilidade com produtos.
+model VehicleSpec {
+  id                     String                 @id @default(cuid())
   modelId                String
-  name                   String
-  platform               String?
-  description            String?
-  model                  VehicleModel                  @relation(fields: [modelId], references: [id])
-  configurations         VehicleConfiguration[]
-  productCompatibilities ProductVehicleCompatibility[]
-
-  @@unique([modelId, name])
-}
-
-model VehicleConfiguration {
-  id                     String                               @id @default(cuid())
-  generationId           String
-  name                   String
+  /// Designação comercial do motor (ex.: "1.5 TD").
+  engine                 String
+  /// Código interno do motor (ex.: "4EC1-T"); opcional.
   engineCode             String?
-  engineType             String?
-  displacementCc         Int?
-  powerKw                Decimal?
-  bodyType               String?
-  yearFrom               Int?
-  yearTo                 Int?
-  generation             VehicleGeneration                    @relation(fields: [generationId], references: [id])
-  productCompatibilities ProductVehicleCompatibility[]
-  variantCompatibilities ProductVariantVehicleCompatibility[]
+  /// Primeiro ano de aplicação (inclusive).
+  yearStart              Int
+  /// Último ano de aplicação (inclusive); null = em produção.
+  yearEnd                Int?
+  /// Tipo de combustível em maiúsculas (ex.: "DIESEL").
+  fuelType               String
+  /// Potência em cavalos (cv); opcional.
+  powerHp                Int?
+  createdAt              DateTime               @default(now())
+  model                  VehicleModel           @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  productCompatibilities ProductCompatibility[]
+
+  @@unique([modelId, engine, yearStart])
+  @@index([modelId])
 }
 
 model Category {
@@ -194,7 +193,7 @@ model Product {
   shippingClass   ShippingClass                 @default(UNASSIGNED)
   category        Category                      @relation(fields: [categoryId], references: [id])
   brand           ProductBrand?                 @relation(fields: [productBrandId], references: [id])
-  compatibilities ProductVehicleCompatibility[]
+  compatibilities ProductCompatibility[]
   cartItems       CartItem[]
   orderItems      OrderItem[]
   shippingRates   ProductShippingRate[]
@@ -229,7 +228,6 @@ model ProductVariant {
   specifications         ProductVariantSpecification[]
   cartItems              CartItem[]
   orderItems             OrderItem[]
-  vehicleCompatibilities ProductVariantVehicleCompatibility[]
   movements              StockMovement[]
 
   @@unique([productId, optionKey])
@@ -349,36 +347,21 @@ model ProductVariantSpecification {
   @@index([variantId, position])
 }
 
-model ProductVehicleCompatibility {
-  id                     String                @id @default(cuid())
-  productId              String
-  vehicleBrandId         String
-  vehicleModelId         String
-  vehicleGenerationId    String?
-  vehicleConfigurationId String?
-  yearMin                Int?
-  yearMax                Int?
-  product                Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
-  vehicleBrand           VehicleBrand          @relation(fields: [vehicleBrandId], references: [id])
-  vehicleModel           VehicleModel          @relation(fields: [vehicleModelId], references: [id])
-  vehicleGeneration      VehicleGeneration?    @relation(fields: [vehicleGenerationId], references: [id])
-  vehicleConfiguration   VehicleConfiguration? @relation(fields: [vehicleConfigurationId], references: [id])
+/// Épico 8 — compatibilidade de um PRODUTO (nível de produto, não de
+/// variante) com uma especificação de veículo. Única por par
+/// (produto, especificação); notas livres do administrador.
+model ProductCompatibility {
+  id            String      @id @default(cuid())
+  productId     String
+  vehicleSpecId String
+  /// Nota opcional do administrador (ex.: "requer apoios originais").
+  notes         String?
+  createdAt     DateTime    @default(now())
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  vehicleSpec   VehicleSpec @relation(fields: [vehicleSpecId], references: [id], onDelete: Cascade)
 
-  @@index([productId])
-  @@index([vehicleBrandId, vehicleModelId])
-  @@index([vehicleGenerationId])
-  @@index([vehicleConfigurationId])
-}
-
-model ProductVariantVehicleCompatibility {
-  id                     String               @id @default(cuid())
-  productVariantId       String
-  vehicleConfigurationId String
-  variant                ProductVariant       @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
-  vehicleConfiguration   VehicleConfiguration @relation(fields: [vehicleConfigurationId], references: [id], onDelete: Cascade)
-
-  @@unique([productVariantId, vehicleConfigurationId])
-  @@index([vehicleConfigurationId])
+  @@unique([productId, vehicleSpecId])
+  @@index([vehicleSpecId])
 }
 
 model CartItem {

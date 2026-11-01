@@ -13,8 +13,8 @@ import {
 
 /**
  * Filtro de compatibilidade da grelha de produtos
- * (Épico 2 — Etapa 4): vê o veículo guardado no
- * localStorage (vehicle-selection), interroga o
+ * (Épico 8): vê a especificação de veículo guardada
+ * no localStorage (vehicle-selection), interroga o
  * endpoint público de produtos compatíveis e
  * esconde as fichas sem ligação registada.
  *
@@ -31,12 +31,12 @@ import {
 
 type ProductsOutcome =
   | {
-      configurationId: string
+      specId: string
       kind: 'ready'
       compatibleProductIds: string[]
     }
   | {
-      configurationId: string
+      specId: string
       kind: 'error'
     }
 
@@ -75,16 +75,15 @@ export default function VehicleCompatibleProducts({
     setSelectorVisible,
   ] = useState(false)
 
-  const activeConfigurationId =
-    selection?.configurationId ?? ''
+  const activeSpecId =
+    selection?.specId ?? ''
 
   const vehicleFilterActive =
-    activeConfigurationId !== ''
+    activeSpecId !== ''
 
   const outcomeIsCurrent =
     vehicleFilterActive &&
-    outcome?.configurationId ===
-      activeConfigurationId
+    outcome?.specId === activeSpecId
 
   const checkingCompatibility =
     vehicleFilterActive && !outcomeIsCurrent
@@ -94,7 +93,7 @@ export default function VehicleCompatibleProducts({
     outcome?.kind === 'error'
 
   useEffect(() => {
-    if (!activeConfigurationId) {
+    if (!activeSpecId) {
       return
     }
 
@@ -103,9 +102,9 @@ export default function VehicleCompatibleProducts({
     const run = async () => {
       try {
         const response = await fetch(
-          `/api/vehicles/configurations/${encodeURIComponent(
-            activeConfigurationId,
-          )}/products`,
+          `/api/vehicles/compatible-products?specId=${encodeURIComponent(
+            activeSpecId,
+          )}`,
         )
 
         if (!response.ok) {
@@ -115,10 +114,7 @@ export default function VehicleCompatibleProducts({
         }
 
         const body = (await response.json()) as {
-          products: Array<{
-            id: string
-            slug: string
-          }>
+          productIds: string[]
         }
 
         if (cancelled) {
@@ -126,19 +122,18 @@ export default function VehicleCompatibleProducts({
         }
 
         setOutcome({
-          configurationId:
-            activeConfigurationId,
+          specId: activeSpecId,
           kind: 'ready',
-          compatibleProductIds:
-            body.products.map(
-              (product) => product.id,
-            ),
+          compatibleProductIds: Array.isArray(
+            body.productIds,
+          )
+            ? body.productIds
+            : [],
         })
       } catch {
         if (!cancelled) {
           setOutcome({
-            configurationId:
-              activeConfigurationId,
+            specId: activeSpecId,
             kind: 'error',
           })
         }
@@ -150,7 +145,7 @@ export default function VehicleCompatibleProducts({
     return () => {
       cancelled = true
     }
-  }, [activeConfigurationId])
+  }, [activeSpecId])
 
   const compatibleProductIdSet =
     outcomeIsCurrent &&

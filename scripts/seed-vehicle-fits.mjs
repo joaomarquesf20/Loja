@@ -2,15 +2,17 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 
 /**
- * Seed de TESTE do Epic 2 (Vehicle Search): veículos de referência
- * + ligações variante↔configuração (ProductVariantVehicleCompatibility).
+ * Seed de TESTE do Épico 8 (Vehicle Fitment): veículos de
+ * referência (make/model/spec) + compatibilidades ao nível do
+ * PRODUTO (ProductCompatibility).
  *
  * - Idempotente: todos os upserts usam chaves únicas reais
- *   (brand slug, brandId+slug, modelId+name, M2M composto).
- * - Reutiliza dados existentes: a marca BMW e o modelo "Série 1"
- *   (slug serie-1) já existem na BD — só a geração F20 é criada.
- * - NÃO apaga nada (sem "clear"): as ligações M2M só se acrescentam
- *   (o par variante↔configuração é único e fica estável).
+ *   (make slug, makeId+slug do modelo, chave natural
+ *   [modelId, engine, yearStart] da spec, par composto
+ *   [productId, vehicleSpecId] da compatibilidade).
+ * - Reutiliza dados existentes: as marcas/makes "Opel" e "BMW"
+ *   já podem existir (name é @unique) — só se cria o que falta.
+ * - NÃO apaga nada: compatibilidades só se acrescentam.
  *
  * Uso: node --env-file=.env scripts/seed-vehicle-fits.mjs
  */
@@ -32,97 +34,91 @@ const prisma = new PrismaClient({
   adapter,
 })
 
-// Veículos de teste do Epic 2.
+// Veículos de teste do Épico 8.
 // Opel Corsa B: o 1.5 TD tem dois códigos de motor usados em
-// catálogos (X15DT e a designação de família 4EC1-T); o schema guarda
-// um código por configuração, por isso entram como duas
-// configurações irmãs — assim as consultas continuam a encontrar os
-// motores por igualdade em engineCode.
+// catálogos (X15DT e a designação de família 4EC1-T); a spec guarda
+// um código por especificação, por isso entram como duas specs
+// irmãs — assim as consultas continuam a encontrar os motores por
+// igualdade em engineCode.
+// Potência: o catálogo declara cv (powerHp) — 50 kW ≈ 68 cv.
 const testVehicles = [
   {
-    brand: { name: 'Opel', slug: 'opel' },
+    make: { name: 'Opel', slug: 'opel' },
     model: {
       name: 'Corsa B',
       slug: 'corsa-b',
     },
-    generation: {
-      name: '1993-2000',
-      platform: 'GM Gamma',
-    },
-    configurations: [
+    specs: [
       {
-        name: '1.5 TD Sport',
+        engine: '1.5 TD Sport',
         engineCode: 'X15DT',
-        engineType: 'Diesel',
-        displacementCc: 1488,
-        powerKw: '50',
-        bodyType: '3-door hatchback',
-        yearFrom: 1994,
-        yearTo: 2000,
+        fuelType: 'DIESEL',
+        powerHp: 68,
+        yearStart: 1994,
+        yearEnd: 2000,
       },
       {
-        name: '1.5 TD',
+        engine: '1.5 TD',
         engineCode: '4EC1-T',
-        engineType: 'Diesel',
-        displacementCc: 1488,
-        powerKw: '50',
-        bodyType: '3-door hatchback',
-        yearFrom: 1994,
-        yearTo: 2000,
+        fuelType: 'DIESEL',
+        powerHp: 68,
+        yearStart: 1994,
+        yearEnd: 2000,
       },
     ],
   },
   {
-    brand: { name: 'BMW', slug: 'bmw' },
+    make: { name: 'BMW', slug: 'bmw' },
     model: {
       name: 'Série 1',
       slug: 'serie-1',
     },
-    generation: {
-      name: 'F20',
-      platform: null,
-    },
-    configurations: [
+    specs: [
       {
-        name: '116d',
+        engine: '116d',
         engineCode: 'N47D20C1',
-        engineType: 'Diesel',
-        displacementCc: 1995,
-        powerKw: '85',
-        bodyType: '5-door hatchback',
-        yearFrom: 2011,
-        yearTo: 2015,
+        fuelType: 'DIESEL',
+        powerHp: 116,
+        yearStart: 2011,
+        yearEnd: 2015,
       },
     ],
   },
 ]
 
-// Ligações variante↔configuração para testes:
-// - o difusor BMW real (BM-2-44-MPACK-SD1G) fica ligado ao 116d F20;
-// - a variante "bicos" fica ligada ao 1.5 TD Sport da Corsa B.
+// Compatibilidades produto↔especificação para testes:
+// - o produto do difusor BMW real (BM-2-44-MPACK-SD1G) fica
+//   compatível com o 116d (Série 1 F20);
+// - o produto dos "bicos" fica compatível com o 1.5 TD Sport
+//   da Corsa B.
+// A compatibilidade é do PRODUTO: resolve-se o produto através
+// da variante declarada.
 const compatibilityLinks = [
   {
     variantSku: 'BM-2-44-MPACK-SD1G',
-    // Marca BMW pré-existente: criada pelo dev seed com slug dev-bmw.
-    brandSlug: 'dev-bmw',
-    generationName: 'F20',
-    configurationName: '116d',
+    // Marca BMW pré-existente: criada pelo dev seed com slug
+    // dev-bmw (VehicleMake.name é @unique — a seed reutiliza-a).
+    makeSlug: 'dev-bmw',
+    modelSlug: 'serie-1',
+    specEngine: '116d',
+    note: 'Ajuste direto na Série 1 (F20)',
   },
   {
     variantSku: 'bicos',
-    brandSlug: 'opel',
-    generationName: '1993-2000',
-    configurationName: '1.5 TD Sport',
+    makeSlug: 'opel',
+    modelSlug: 'corsa-b',
+    specEngine: '1.5 TD Sport',
+    note: null,
   },
 ]
 
-async function upsertVehicleBrand(
+async function upsertVehicleMake(
   definition,
 ) {
-  // Marcas "raciais" já podem existir criadas pelo administrador
-  // (VehicleBrand.name é @unique): reutilizar nesse caso.
+  // Makes "raciais" já podem existir criadas pelo administrador
+  // (VehicleMake.name é @unique): reutilizar nesse caso.
   const existingByName =
-    await prisma.vehicleBrand.findUnique({
+    await prisma.vehicleMake.findUnique({
       where: {
         name: definition.name,
       },
@@ -132,7 +128,7 @@ async function upsertVehicleBrand(
     return existingByName
   }
 
-  return prisma.vehicleBrand.upsert({
+  return prisma.vehicleMake.upsert({
     where: {
       slug: definition.slug,
     },
@@ -147,13 +143,13 @@ async function upsertVehicleBrand(
 }
 
 async function upsertVehicleModel(
-  vehicleBrand,
+  vehicleMake,
   definition,
 ) {
   return prisma.vehicleModel.upsert({
     where: {
-      brandId_slug: {
-        brandId: vehicleBrand.id,
+      makeId_slug: {
+        makeId: vehicleMake.id,
         slug: definition.slug,
       },
     },
@@ -163,69 +159,42 @@ async function upsertVehicleModel(
     create: {
       name: definition.name,
       slug: definition.slug,
-      brandId: vehicleBrand.id,
+      makeId: vehicleMake.id,
     },
   })
 }
 
-async function upsertVehicleGeneration(
+async function upsertVehicleSpec(
   vehicleModel,
   definition,
 ) {
-  return prisma.vehicleGeneration.upsert({
+  return prisma.vehicleSpec.upsert({
     where: {
-      modelId_name: {
+      modelId_engine_yearStart: {
         modelId: vehicleModel.id,
-        name: definition.name,
+        engine: definition.engine,
+        yearStart: definition.yearStart,
       },
     },
     update: {
-      platform: definition.platform,
+      engineCode: definition.engineCode,
+      yearEnd: definition.yearEnd,
+      fuelType: definition.fuelType,
+      powerHp: definition.powerHp,
     },
     create: {
-      name: definition.name,
-      platform: definition.platform,
       modelId: vehicleModel.id,
-    },
-  })
-}
-
-async function upsertVehicleConfiguration(
-  vehicleGeneration,
-  definition,
-) {
-  const existing =
-    await prisma.vehicleConfiguration.findFirst(
-      {
-        where: {
-          generationId:
-            vehicleGeneration.id,
-          name: definition.name,
-        },
-      },
-    )
-
-  if (existing) {
-    return existing
-  }
-
-  return prisma.vehicleConfiguration.create({
-    data: {
-      generationId: vehicleGeneration.id,
-      name: definition.name,
+      engine: definition.engine,
       engineCode: definition.engineCode,
-      engineType: definition.engineType,
-      displacementCc:
-        definition.displacementCc,
-      powerKw: definition.powerKw,
-      bodyType: definition.bodyType,
-      yearFrom: definition.yearFrom,
-      yearTo: definition.yearTo,
+      yearStart: definition.yearStart,
+      yearEnd: definition.yearEnd,
+      fuelType: definition.fuelType,
+      powerHp: definition.powerHp,
     },
   })
 }
 
-async function linkVariantToConfiguration(
+async function linkProductToSpec(
   link,
 ) {
   const variant =
@@ -233,133 +202,117 @@ async function linkVariantToConfiguration(
       where: {
         sku: link.variantSku,
       },
+      select: {
+        id: true,
+        productId: true,
+        product: { select: { name: true } },
+      },
     })
 
   if (!variant) {
     throw new Error(
-      `Variante "${link.variantSku}" não existe na BD — sem ela não é possível ligar a configuração "${link.configurationName}"`,
+      `Variante "${link.variantSku}" não existe na BD — sem ela não é possível ligar o produto à especificação "${link.specEngine}"`,
     )
   }
 
-  const configuration =
-    await prisma.vehicleConfiguration.findFirst(
-      {
-        where: {
-          name: link.configurationName,
-          generation: {
-            name: link.generationName,
-            model: {
-              brand: {
-                slug: link.brandSlug,
-              },
-            },
+  const spec =
+    await prisma.vehicleSpec.findFirst({
+      where: {
+        engine: link.specEngine,
+        model: {
+          slug: link.modelSlug,
+          make: {
+            slug: link.makeSlug,
           },
         },
       },
-    )
+    })
 
-  if (!configuration) {
+  if (!spec) {
     throw new Error(
-      `Configuração "${link.configurationName}" (${link.generationName}, ${link.brandSlug}) não existe — corre o seed outra vez após verificar o veículo`,
+      `Especificação "${link.specEngine}" (${link.makeSlug} / ${link.modelSlug}) não existe — corre o seed outra vez após verificar o veículo`,
     )
   }
 
-  await prisma.productVariantVehicleCompatibility.upsert(
-    {
-      where: {
-        productVariantId_vehicleConfigurationId:
-          {
-            productVariantId: variant.id,
-            vehicleConfigurationId:
-              configuration.id,
-          },
-      },
-      update: {},
-      create: {
-        productVariantId: variant.id,
-        vehicleConfigurationId:
-          configuration.id,
+  await prisma.productCompatibility.upsert({
+    where: {
+      productId_vehicleSpecId: {
+        productId: variant.productId,
+        vehicleSpecId: spec.id,
       },
     },
-  )
+    update: {
+      notes: link.note ?? null,
+    },
+    create: {
+      productId: variant.productId,
+      vehicleSpecId: spec.id,
+      notes: link.note ?? null,
+    },
+  })
 
   console.log(
-    `Ligação: ${variant.sku} → ${link.brandSlug} / ${link.generationName} / ${link.configurationName}`,
+    `Ligação: ${variant.product.name} → ${link.makeSlug} / ${link.modelSlug} / ${link.specEngine}`,
   )
 }
 
 async function main() {
   for (const vehicle of testVehicles) {
-    const vehicleBrand =
-      await upsertVehicleBrand(
-        vehicle.brand,
+    const vehicleMake =
+      await upsertVehicleMake(
+        vehicle.make,
       )
 
     const vehicleModel =
       await upsertVehicleModel(
-        vehicleBrand,
+        vehicleMake,
         vehicle.model,
       )
 
-    const vehicleGeneration =
-      await upsertVehicleGeneration(
+    for (const spec of vehicle.specs) {
+      await upsertVehicleSpec(
         vehicleModel,
-        vehicle.generation,
-      )
-
-    for (const configuration of vehicle.configurations) {
-      await upsertVehicleConfiguration(
-        vehicleGeneration,
-        configuration,
+        spec,
       )
     }
 
     console.log(
-      `Veículo: ${vehicleBrand.name} / ${vehicleModel.name} / ${vehicleGeneration.name} (${vehicle.configurations.length} configurações)`,
+      `Veículo: ${vehicleMake.name} / ${vehicleModel.name} (${vehicle.specs.length} especificações)`,
     )
   }
 
   for (const link of compatibilityLinks) {
-    await linkVariantToConfiguration(
+    await linkProductToSpec(
       link,
     )
   }
 
   const linked =
-    await prisma.productVariantVehicleCompatibility.findMany(
+    await prisma.productCompatibility.findMany(
       {
         include: {
-          variant: {
-            include: {
-              product: {
-                select: { name: true },
-              },
-            },
+          product: {
+            select: { name: true },
           },
-          vehicleConfiguration: {
+          vehicleSpec: {
             include: {
-              generation: {
-                include: {
-                  model: {
-                    include: {
-                      brand: true,
-                    },
-                  },
-                },
+              model: {
+                include: { make: true },
               },
             },
           },
         },
+        orderBy: [{ id: 'asc' }],
       },
     )
 
   console.log(
-    `Ligações variante↔configuração na BD (${linked.length}):`,
+    `Compatibilidades produto↔especificação na BD (${linked.length}):`,
   )
 
   for (const link of linked) {
     console.log(
-      `  ${link.variant.sku} (${link.variant.product.name}) → ${link.vehicleConfiguration.generation.model.brand.name} ${link.vehicleConfiguration.generation.model.name} ${link.vehicleConfiguration.generation.name} / ${link.vehicleConfiguration.name}`,
+      `  ${link.product.name} → ${link.vehicleSpec.model.make.name} ${link.vehicleSpec.model.name} ${link.vehicleSpec.engine} (${link.vehicleSpec.engineCode ?? 'sem código'})`,
     )
   }
 }

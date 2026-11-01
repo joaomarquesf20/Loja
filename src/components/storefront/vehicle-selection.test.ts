@@ -17,10 +17,10 @@ import {
 } from './vehicle-selection'
 
 const storedSelection = {
-  configurationId: 'configuration-15td',
+  specId: 'spec-15td',
   label: 'Opel Corsa B 1.5 TD Sport',
-  makeSlug: 'opel',
-  modelSlug: 'corsa-b',
+  makeId: 'make-opel',
+  modelId: 'model-corsa-b',
 }
 
 const STORAGE_KEY = 'pfa-veiculo'
@@ -75,10 +75,30 @@ describe(
         window.localStorage.setItem(
           STORAGE_KEY,
           JSON.stringify({
-            configurationId: '',
+            specId: '',
             label: 'x',
+            makeId: 'make-opel',
+            modelId: null,
+          }),
+        )
+
+        expect(
+          readVehicleSelection(),
+        ).toBeNull()
+      },
+    )
+
+    test(
+      'invalida graciosamente seleções antigas (configurationId)',
+      () => {
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({
+            configurationId:
+              'configuration-15td',
+            label: 'Opel Corsa B 1.5 TD',
             makeSlug: 'opel',
-            modelSlug: null,
+            modelSlug: 'corsa-b',
           }),
         )
 
@@ -270,14 +290,13 @@ describe(
   'buildVehicleSelectionLabel',
   () => {
     test(
-      'compõe marca modelo configuração',
+      'compõe marca modelo especificação',
       () => {
         expect(
           buildVehicleSelectionLabel({
             makeName: 'Opel',
             modelName: 'Corsa B',
-            configurationName:
-              '1.5 TD Sport',
+            specLabel: '1.5 TD Sport',
           }),
         ).toBe('Opel Corsa B 1.5 TD Sport')
       },

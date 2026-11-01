@@ -65,6 +65,7 @@ export type ProductRowInput = {
     model: string
     generation: string
     engine: string
+    fuelType: string
     yearFrom: number | null
     yearTo: number | null
   }>

@@ -7,104 +7,64 @@ import {
 } from './products'
 import { productCompatibilitySchema } from '../lib/product-compatibility-validation'
 
-type DecimalLike =
-  | number
-  | string
-  | {
-      toString(): string
-    }
+/**
+ * Épico 8 — compatibilidade de PRODUTO com especificações de veículo
+ * (ProductCompatibility: productId + vehicleSpecId + notes, par
+ * único). Substitui a ProductVehicleCompatibility do Épico 2, que
+ * duplicava a hierarquia na própria linha.
+ */
 
-type ProductVehicleCompatibilityRecord = {
+type ProductCompatibilityRecord = {
   id: string
   productId: string
-  vehicleConfigurationId: string | null
+  vehicleSpecId: string
+  notes: string | null
+  /** ISO string — serializado na fronteira do serviço. */
+  createdAt: string
 }
 
-type ProductVehicleCompatibilityListRecord =
-  ProductVehicleCompatibilityRecord & {
-    vehicleBrand: {
-      id: string
-      name: string
-    }
-    vehicleModel: {
-      id: string
-      name: string
-    }
-    vehicleGeneration: {
-      id: string
-      name: string
-    } | null
-    vehicleConfiguration: {
-      id: string
-      name: string
-      engineCode: string | null
-      engineType: string | null
-      displacementCc: number | null
-      powerKw: DecimalLike | null
-      bodyType: string | null
-      yearFrom: number | null
-      yearTo: number | null
-    } | null
-  }
-
-type VehicleConfigurationHierarchyRecord = {
-  id: string
-  generation: {
+type ProductCompatibilityListRecord = ProductCompatibilityRecord & {
+  vehicleSpec: {
     id: string
+    engine: string
+    engineCode: string | null
+    yearStart: number
+    yearEnd: number | null
+    fuelType: string
+    powerHp: number | null
     model: {
       id: string
-      brand: {
+      name: string
+      slug: string
+      make: {
         id: string
+        name: string
+        slug: string
       }
     }
   }
 }
 
 const compatibilityInclude = {
-  vehicleBrand: {
+  vehicleSpec: {
     select: {
       id: true,
-      name: true,
-    },
-  },
-  vehicleModel: {
-    select: {
-      id: true,
-      name: true,
-    },
-  },
-  vehicleGeneration: {
-    select: {
-      id: true,
-      name: true,
-    },
-  },
-  vehicleConfiguration: {
-    select: {
-      id: true,
-      name: true,
+      engine: true,
       engineCode: true,
-      engineType: true,
-      displacementCc: true,
-      powerKw: true,
-      bodyType: true,
-      yearFrom: true,
-      yearTo: true,
-    },
-  },
-} as const
-
-const vehicleConfigurationHierarchySelect = {
-  id: true,
-  generation: {
-    select: {
-      id: true,
+      yearStart: true,
+      yearEnd: true,
+      fuelType: true,
+      powerHp: true,
       model: {
         select: {
           id: true,
-          brand: {
+          name: true,
+          slug: true,
+          make: {
             select: {
               id: true,
+              name: true,
+              slug: true,
             },
           },
         },
@@ -114,32 +74,33 @@ const vehicleConfigurationHierarchySelect = {
 } as const
 
 export interface ProductCompatibilityClient {
-  productVehicleCompatibility: {
+  productCompatibility: {
     findMany(args: {
       where: { productId: string }
       include: typeof compatibilityInclude
-    }): Promise<ProductVehicleCompatibilityListRecord[]>
+      orderBy: { createdAt: 'asc' }[]
+    }): Promise<ProductCompatibilityListRecord[]>
 
-    findFirst(args: {
+    findUnique(args: {
       where: {
-        productId: string
-        vehicleConfigurationId: string
+        productId_vehicleSpecId: {
+          productId: string
+          vehicleSpecId: string
+        }
       }
-    }): Promise<ProductVehicleCompatibilityRecord | null>
+    }): Promise<{ id: string } | null>
 
     create(args: {
       data: {
         productId: string
-        vehicleBrandId: string
-        vehicleModelId: string
-        vehicleGenerationId: string
-        vehicleConfigurationId: string
+        vehicleSpecId: string
+        notes: string | null
       }
-    }): Promise<ProductVehicleCompatibilityRecord>
+    }): Promise<ProductCompatibilityRecord>
 
     delete(args: {
       where: { id: string }
-    }): Promise<ProductVehicleCompatibilityRecord>
+    }): Promise<ProductCompatibilityRecord>
   }
 
   product: {
@@ -162,11 +123,11 @@ export interface ProductCompatibilityClient {
     } | null>
   }
 
-  vehicleConfiguration: {
+  vehicleSpec: {
     findUnique(args: {
       where: { id: string }
-      select: typeof vehicleConfigurationHierarchySelect
-    }): Promise<VehicleConfigurationHierarchyRecord | null>
+      select: { id: true }
+    }): Promise<{ id: string } | null>
   }
 }
 
@@ -182,31 +143,11 @@ function validateId(id: string) {
   }
 }
 
-function normalizePowerKw(value: DecimalLike | null) {
-  if (value === null) {
-    return null
-  }
-
-  return Number(value.toString())
-}
-
-function normalizeCompatibility(
-  record: ProductVehicleCompatibilityListRecord,
-) {
-  return {
-    ...record,
-    vehicleConfiguration:
-      record.vehicleConfiguration === null
-        ? null
-        : {
-            ...record.vehicleConfiguration,
-            powerKw: normalizePowerKw(
-              record.vehicleConfiguration.powerKw,
-            ),
-          },
-  }
-}
-
+/**
+ * Lista as compatibilidades de um produto com a hierarquia veicular
+ * incluída (make → model → spec) para o editor admin e a ficha de
+ * produto na loja.
+ */
 export async function listProductCompatibilities(
   productId: string,
   client?: ProductCompatibilityClient,
@@ -223,24 +164,28 @@ export async function listProductCompatibilities(
     throw new NotFoundError('Produto não encontrado')
   }
 
-  const compatibilities =
-    await db.productVehicleCompatibility.findMany({
-      where: { productId },
-      include: compatibilityInclude,
-    })
-
-  return compatibilities.map(normalizeCompatibility)
+  return db.productCompatibility.findMany({
+    where: { productId },
+    include: compatibilityInclude,
+    orderBy: [{ createdAt: 'asc' }],
+  })
 }
 
+/**
+ * Associa um produto a uma especificação de veículo. Produtos da
+ * categoria Jantes (profile 'wheels') não usam compatibilidade
+ * manual: a adequação é calculada a partir das especificações da
+ * variante (furação, furo central, diâmetro, largura e offset).
+ */
 export async function addProductCompatibility(
-  productId: string,
-  vehicleConfigurationId: string,
+  input: {
+    productId?: unknown
+    vehicleSpecId?: unknown
+    notes?: unknown
+  },
   client?: ProductCompatibilityClient,
 ) {
-  const data = productCompatibilitySchema.parse({
-    productId,
-    vehicleConfigurationId,
-  })
+  const data = productCompatibilitySchema.parse(input)
 
   const db = getClient(client)
 
@@ -260,13 +205,6 @@ export async function addProductCompatibility(
     throw new NotFoundError('Produto não encontrado')
   }
 
-  /**
-   * Jantes não podem ter uma lista de veículos compatível
-   * mantida à mão: many modelos encaixam em vários
-   * veículos e a adequação resulta das especificações da
-   * variante (furação, furo central, diâmetro, largura e
-   * offset).
-   */
   if (
     product.category &&
     getCategoryFilterProfile(
@@ -278,66 +216,71 @@ export async function addProductCompatibility(
     )
   }
 
-  const vehicleConfiguration =
-    await db.vehicleConfiguration.findUnique({
-      where: { id: data.vehicleConfigurationId },
-      select: vehicleConfigurationHierarchySelect,
+  const vehicleSpec =
+    await db.vehicleSpec.findUnique({
+      where: { id: data.vehicleSpecId },
+      select: { id: true },
     })
 
-  if (!vehicleConfiguration) {
+  if (!vehicleSpec) {
     throw new NotFoundError(
-      'Configuração do veículo não encontrada',
+      'Especificação de veículo não encontrada',
     )
   }
 
   const existing =
-    await db.productVehicleCompatibility.findFirst({
+    await db.productCompatibility.findUnique({
       where: {
-        productId: data.productId,
-        vehicleConfigurationId:
-          data.vehicleConfigurationId,
+        productId_vehicleSpecId: {
+          productId: data.productId,
+          vehicleSpecId: data.vehicleSpecId,
+        },
       },
     })
 
   if (existing) {
     throw new ConflictError(
-      'Este produto já está associado a esta configuração de veículo',
+      'Este produto já está associado a esta especificação de veículo',
     )
   }
 
-  return db.productVehicleCompatibility.create({
+  return db.productCompatibility.create({
     data: {
       productId: data.productId,
-      vehicleBrandId:
-        vehicleConfiguration.generation.model.brand.id,
-      vehicleModelId:
-        vehicleConfiguration.generation.model.id,
-      vehicleGenerationId:
-        vehicleConfiguration.generation.id,
-      vehicleConfigurationId:
-        vehicleConfiguration.id,
+      vehicleSpecId: data.vehicleSpecId,
+      notes: data.notes ?? null,
     },
   })
 }
 
+/**
+ * Remove a associação produto ↔ especificação identificada pelo par
+ * composto.
+ */
 export async function removeProductCompatibility(
   productId: string,
-  vehicleConfigurationId: string,
+  vehicleSpecId: string,
   client?: ProductCompatibilityClient,
 ) {
-  const data = productCompatibilitySchema.parse({
-    productId,
-    vehicleConfigurationId,
-  })
+  const data = productCompatibilitySchema
+    .pick({
+      productId: true,
+      vehicleSpecId: true,
+    })
+    .parse({
+      productId,
+      vehicleSpecId,
+    })
 
   const db = getClient(client)
 
   const existing =
-    await db.productVehicleCompatibility.findFirst({
+    await db.productCompatibility.findUnique({
       where: {
-        productId: data.productId,
-        vehicleConfigurationId:
-          data.vehicleConfigurationId,
+        productId_vehicleSpecId: {
+          productId: data.productId,
+          vehicleSpecId: data.vehicleSpecId,
+        },
       },
     })
 
@@ -347,7 +290,7 @@ export async function removeProductCompatibility(
     )
   }
 
-  return db.productVehicleCompatibility.delete({
+  return db.productCompatibility.delete({
     where: { id: existing.id },
   })
 }

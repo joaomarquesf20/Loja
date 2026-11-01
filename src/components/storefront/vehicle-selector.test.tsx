@@ -34,14 +34,14 @@ function jsonResponse(
 
 const makes = [
   {
-    id: 'brand-opel',
+    id: 'make-opel',
     name: 'Opel',
     slug: 'opel',
   },
   {
-    id: 'brand-bmw',
+    id: 'make-bmw',
     name: 'BMW',
-    slug: 'dev-bmw',
+    slug: 'bmw',
   },
 ]
 
@@ -53,33 +53,32 @@ const corsaModels = [
   },
 ]
 
-const corsaGenerations = [
+const corsaSpecs = [
   {
-    id: 'generation-corsa-b',
-    name: 'Corsa B (1993-2000)',
-    configurations: [
-      {
-        id: 'configuration-15td-sport',
-        name: '1.5 TD Sport',
-        engineCode: 'X15DT',
-        powerKw: '54',
-      },
-      {
-        id: 'configuration-15td',
-        name: '1.5 TD',
-        engineCode: '4EC1-T',
-        powerKw: '49',
-      },
-    ],
+    id: 'spec-15td-sport',
+    engine: '1.5 TD Sport',
+    engineCode: 'X15DT',
+    yearStart: 1993,
+    yearEnd: 2000,
+    fuelType: 'DIESEL',
+    powerHp: 73,
+  },
+  {
+    id: 'spec-15td',
+    engine: '1.5 TD',
+    engineCode: '4EC1-T',
+    yearStart: 1993,
+    yearEnd: 2000,
+    fuelType: 'DIESEL',
+    powerHp: 67,
   },
 ]
 
 const storedSelection = {
-  configurationId:
-    'configuration-15td-sport',
+  specId: 'spec-15td-sport',
   label: 'Opel Corsa B 1.5 TD Sport',
-  makeSlug: 'opel',
-  modelSlug: 'corsa-b',
+  makeId: 'make-opel',
+  modelId: 'model-corsa-b',
 }
 
 const STORAGE_KEY = 'pfa-veiculo'
@@ -93,27 +92,25 @@ beforeEach(() => {
 
       if (url === '/api/vehicles/makes') {
         return Promise.resolve(
-          jsonResponse(makes),
+          jsonResponse({ makes }),
         )
       }
 
       if (
         url ===
-        '/api/vehicles/makes/opel/models'
+        '/api/vehicles/models?makeId=make-opel'
       ) {
         return Promise.resolve(
-          jsonResponse(corsaModels),
+          jsonResponse({ models: corsaModels }),
         )
       }
 
       if (
         url ===
-        '/api/vehicles/models/corsa-b/generations'
+        '/api/vehicles/specs?modelId=model-corsa-b'
       ) {
         return Promise.resolve(
-          jsonResponse(
-            corsaGenerations,
-          ),
+          jsonResponse({ specs: corsaSpecs }),
         )
       }
 
@@ -202,7 +199,7 @@ describe(
               '/api/vehicles/makes'
             ) {
               return Promise.resolve(
-                jsonResponse(makes),
+                jsonResponse({ makes }),
               )
             }
 
@@ -223,7 +220,7 @@ describe(
     )
 
     test(
-      'carrega modelos e configurações em cascata',
+      'carrega modelos e especificações em cascata',
       async () => {
         render(<VehicleSelector />)
 
@@ -231,7 +228,7 @@ describe(
 
         fireEvent.change(
           screen.getByLabelText('Marca'),
-          { target: { value: 'opel' } },
+          { target: { value: 'make-opel' } },
         )
 
         expect(
@@ -242,62 +239,61 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/makes/opel/models',
+          '/api/vehicles/models?makeId=make-opel',
         )
 
         fireEvent.change(
           screen.getByLabelText('Modelo'),
           {
             target: {
-              value: 'corsa-b',
+              value: 'model-corsa-b',
             },
           },
         )
 
         expect(
           await screen.findByText(
-            '1.5 TD Sport (X15DT)',
+            '1.5 TD Sport (X15DT) · 1993–2000',
           ),
         ).toBeInTheDocument()
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/models/corsa-b/generations',
+          '/api/vehicles/specs?modelId=model-corsa-b',
         )
       },
     )
 
     test(
-      'guarda a seleção ao escolher a configuração',
+      'guarda a seleção ao escolher a especificação',
       async () => {
         render(<VehicleSelector />)
 
         await screen.findByText('Opel')
         fireEvent.change(
           screen.getByLabelText('Marca'),
-          { target: { value: 'opel' } },
+          { target: { value: 'make-opel' } },
         )
         await screen.findByText('Corsa B')
         fireEvent.change(
           screen.getByLabelText('Modelo'),
           {
             target: {
-              value: 'corsa-b',
+              value: 'model-corsa-b',
             },
           },
         )
         await screen.findByText(
-          '1.5 TD Sport (X15DT)',
+          '1.5 TD Sport (X15DT) · 1993–2000',
         )
 
         fireEvent.change(
           screen.getByLabelText(
-            'Configuração',
+            'Especificação',
           ),
           {
             target: {
-              value:
-                'configuration-15td-sport',
+              value: 'spec-15td-sport',
             },
           },
         )
@@ -344,7 +340,7 @@ describe(
         await waitFor(() =>
           expect(
             makeSelect,
-          ).toHaveValue('opel'),
+          ).toHaveValue('make-opel'),
         )
 
         const modelSelect =
@@ -353,31 +349,31 @@ describe(
         await waitFor(() =>
           expect(
             modelSelect,
-          ).toHaveValue('corsa-b'),
+          ).toHaveValue('model-corsa-b'),
         )
 
-        const configurationSelect =
+        const specSelect =
           screen.getByLabelText(
-            'Configuração',
+            'Especificação',
           )
 
         await waitFor(() =>
           expect(
-            configurationSelect,
+            specSelect,
           ).toHaveValue(
-            'configuration-15td-sport',
+            'spec-15td-sport',
           ),
         )
 
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/makes/opel/models',
+          '/api/vehicles/models?makeId=make-opel',
         )
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/models/corsa-b/generations',
+          '/api/vehicles/specs?modelId=model-corsa-b',
         )
       },
     )

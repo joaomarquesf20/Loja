@@ -204,7 +204,7 @@ function createClient() {
       })),
       create: vi.fn(async () => ({})),
     },
-    productVehicleCompatibility: {
+    productCompatibility: {
       count: vi.fn(async () => 0),
       deleteMany: vi.fn(async () => ({
         count: 0,
@@ -223,8 +223,11 @@ function createClient() {
         slug: 'jantes',
       })),
     },
-    vehicleModel: {
-      findUnique: vi.fn(async () => null),
+    vehicleSpec: {
+      findUnique: vi.fn(async () => ({
+        id: 'spec-1',
+        modelId: 'model-golf',
+      })),
     },
     cartItem: {
       count: vi.fn(async () => 0),
@@ -318,12 +321,8 @@ describe('admin products service', () => {
         wheelInput({
           compatibilities: [
             {
-              vehicleBrandId: 'vw',
-              vehicleModelId: 'golf',
-              vehicleGenerationId: null,
-              vehicleConfigurationId: null,
-              yearMin: null,
-              yearMax: null,
+              vehicleSpecId: 'spec-1',
+              notes: null,
             },
           ],
         }),
@@ -439,7 +438,7 @@ describe('admin products service', () => {
       transaction.productOption.upsert,
     ).toHaveBeenCalledTimes(6)
     expect(
-      transaction.productVehicleCompatibility.create,
+      transaction.productCompatibility.create,
     ).not.toHaveBeenCalled()
     expect(result.variants[0].sku).toBe(
       'JR11-18',

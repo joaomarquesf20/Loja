@@ -132,43 +132,35 @@ function formatYears(
 function formatCompatibility(
   compatibility: ProductCompatibility,
 ) {
-  const parts = [
-    compatibility.vehicleBrand.name,
-    compatibility.vehicleModel.name,
-    compatibility.vehicleGeneration
-      ?.name ?? null,
-    compatibility.vehicleConfiguration
-      ?.name ?? null,
-  ].filter(
-    (value): value is string =>
-      Boolean(value),
-  )
+  const spec = compatibility.vehicleSpec
 
-  const configuration =
-    compatibility.vehicleConfiguration
+  const label = [
+    spec.model.make.name,
+    spec.model.name,
+    spec.engine,
+  ].join(' · ')
 
   const engineParts = [
-    configuration?.engineCode ?? null,
-    configuration?.powerKw != null
-      ? `${configuration.powerKw} kW`
+    spec.engineCode ?? null,
+    spec.powerHp != null
+      ? `${spec.powerHp} cv`
       : null,
+    spec.fuelType,
   ].filter(
     (value): value is string =>
       Boolean(value),
   )
 
-  const years = configuration
-    ? formatYears(
-        configuration.yearFrom,
-        configuration.yearTo,
-      )
-    : null
+  const years = formatYears(
+    spec.yearStart,
+    spec.yearEnd,
+  )
 
   return {
-    label: parts.join(' · '),
+    label,
     years,
     engine: engineParts.join(' · ') || null,
-    bodyType: configuration?.bodyType ?? null,
+    notes: compatibility.notes ?? null,
   }
 }
 
@@ -376,14 +368,6 @@ export default async function ProductPage({
                         </p>
 
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-gray-400">
-                          {formatted.bodyType && (
-                            <span>
-                              {
-                                formatted.bodyType
-                              }
-                            </span>
-                          )}
-
                           {formatted.engine && (
                             <span>
                               {
@@ -505,7 +489,7 @@ export default async function ProductPage({
 
             <div className="mt-4">
               <VehicleCompatibilityBadge
-                productSlug={product.slug}
+                productId={product.id}
               />
             </div>
 

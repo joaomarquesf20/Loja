@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 
-type VehicleBrand = {
+type VehicleMake = {
   id: string
   name: string
   slug: string
@@ -15,10 +15,9 @@ type VehicleBrand = {
 
 type VehicleModel = {
   id: string
-  brandId: string
+  makeId: string
   name: string
   slug: string
-  description: string | null
 }
 
 type ApiError = {
@@ -41,10 +40,10 @@ async function getApiError(
   return `Erro no pedido (${response.status})`
 }
 
-function sortVehicleBrands(
-  brands: VehicleBrand[],
+function sortVehicleMakes(
+  makes: VehicleMake[],
 ) {
-  return [...brands].sort((a, b) =>
+  return [...makes].sort((a, b) =>
     a.name.localeCompare(b.name, 'pt'),
   )
 }
@@ -58,20 +57,20 @@ function sortVehicleModels(
 }
 
 export default function VehicleModelsPage() {
-  const [brands, setBrands] = useState<
-    VehicleBrand[]
+  const [makes, setMakes] = useState<
+    VehicleMake[]
   >([])
   const [
-    selectedBrandId,
-    setSelectedBrandId,
+    selectedMakeId,
+    setSelectedMakeId,
   ] = useState('')
   const [models, setModels] = useState<
     VehicleModel[]
   >([])
 
   const [
-    loadingBrands,
-    setLoadingBrands,
+    loadingMakes,
+    setLoadingMakes,
   ] = useState(true)
   const [
     loadingModels,
@@ -83,12 +82,10 @@ export default function VehicleModelsPage() {
   const [actionError, setActionError] =
     useState('')
 
-  const [formBrandId, setFormBrandId] =
+  const [formMakeId, setFormMakeId] =
     useState('')
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
-  const [description, setDescription] =
-    useState('')
 
   const [editingId, setEditingId] =
     useState<string | null>(null)
@@ -101,13 +98,13 @@ export default function VehicleModelsPage() {
   useEffect(() => {
     const controller = new AbortController()
 
-    async function loadVehicleBrands() {
+    async function loadVehicleMakes() {
       try {
-        setLoadingBrands(true)
+        setLoadingMakes(true)
         setLoadError('')
 
         const response = await fetch(
-          '/api/admin/vehicle-brands',
+          '/api/admin/vehicle-makes',
           {
             signal: controller.signal,
           },
@@ -120,22 +117,22 @@ export default function VehicleModelsPage() {
         }
 
         const data =
-          (await response.json()) as VehicleBrand[]
+          (await response.json()) as VehicleMake[]
 
-        const sortedBrands =
-          sortVehicleBrands(data)
+        const sortedMakes =
+          sortVehicleMakes(data)
 
-        setBrands(sortedBrands)
+        setMakes(sortedMakes)
 
-        if (sortedBrands.length > 0) {
-          const firstBrandId =
-            sortedBrands[0].id
+        if (sortedMakes.length > 0) {
+          const firstmakeId =
+            sortedMakes[0].id
 
-          setSelectedBrandId(firstBrandId)
-          setFormBrandId(firstBrandId)
+          setSelectedMakeId(firstmakeId)
+          setFormMakeId(firstmakeId)
         } else {
-          setSelectedBrandId('')
-          setFormBrandId('')
+          setSelectedMakeId('')
+          setFormMakeId('')
           setModels([])
         }
       } catch (error) {
@@ -153,12 +150,12 @@ export default function VehicleModelsPage() {
         )
       } finally {
         if (!controller.signal.aborted) {
-          setLoadingBrands(false)
+          setLoadingMakes(false)
         }
       }
     }
 
-    void loadVehicleBrands()
+    void loadVehicleMakes()
 
     return () => {
       controller.abort()
@@ -166,7 +163,7 @@ export default function VehicleModelsPage() {
   }, [])
 
   useEffect(() => {
-  if (!selectedBrandId) {
+  if (!selectedMakeId) {
     return
   }
 
@@ -180,12 +177,11 @@ export default function VehicleModelsPage() {
         setEditingId(null)
         setName('')
         setSlug('')
-        setDescription('')
-        setFormBrandId(selectedBrandId)
+        setFormMakeId(selectedMakeId)
 
         const response = await fetch(
-          `/api/admin/vehicle-models?brandId=${encodeURIComponent(
-            selectedBrandId,
+          `/api/admin/vehicle-models?makeId=${encodeURIComponent(
+            selectedMakeId,
           )}`,
           {
             signal: controller.signal,
@@ -231,13 +227,12 @@ export default function VehicleModelsPage() {
     return () => {
       controller.abort()
     }
-  }, [selectedBrandId])
+  }, [selectedMakeId])
 
   function resetForm() {
-    setFormBrandId(selectedBrandId)
+    setFormMakeId(selectedMakeId)
     setName('')
     setSlug('')
-    setDescription('')
     setEditingId(null)
     setActionError('')
   }
@@ -246,12 +241,9 @@ export default function VehicleModelsPage() {
     vehicleModel: VehicleModel,
   ) {
     setEditingId(vehicleModel.id)
-    setFormBrandId(vehicleModel.brandId)
+    setFormMakeId(vehicleModel.makeId)
     setName(vehicleModel.name)
     setSlug(vehicleModel.slug)
-    setDescription(
-      vehicleModel.description ?? '',
-    )
     setActionError('')
   }
 
@@ -264,7 +256,7 @@ export default function VehicleModelsPage() {
       return
     }
 
-    if (!formBrandId) {
+    if (!formMakeId) {
       setActionError(
         'Selecione uma marca de veículo.',
       )
@@ -288,13 +280,9 @@ export default function VehicleModelsPage() {
             'application/json',
         },
         body: JSON.stringify({
-          brandId: formBrandId,
+          makeId: formMakeId,
           name,
           slug,
-          description:
-            description.trim() === ''
-              ? null
-              : description,
         }),
       })
 
@@ -316,8 +304,8 @@ export default function VehicleModelsPage() {
           )
 
         if (
-          savedVehicleModel.brandId !==
-          selectedBrandId
+          savedVehicleModel.makeId !==
+          selectedMakeId
         ) {
           return sortVehicleModels(
             withoutSavedModel,
@@ -396,7 +384,7 @@ export default function VehicleModelsPage() {
   const operationInProgress =
     submitting || deletingId !== null
 
-  const hasBrands = brands.length > 0
+  const hasMakes = makes.length > 0
 
   return (
     <main className="mx-auto max-w-5xl p-6">
@@ -417,22 +405,22 @@ export default function VehicleModelsPage() {
             : 'Novo modelo'}
         </h2>
 
-        {loadingBrands && (
+        {loadingMakes && (
           <p className="text-sm text-gray-600">
             A carregar marcas...
           </p>
         )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           !loadError &&
-          !hasBrands && (
+          !hasMakes && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600">
                 Ainda não existem marcas de veículos.
               </p>
 
               <Link
-                href="/admin/vehicle-brands"
+                href="/admin/vehicle-makes"
                 className="inline-block text-sm font-medium underline"
               >
                 Gerir marcas de veículos
@@ -440,25 +428,25 @@ export default function VehicleModelsPage() {
             </div>
           )}
 
-        {!loadingBrands &&
-          hasBrands && (
+        {!loadingMakes &&
+          hasMakes && (
             <form
               onSubmit={handleSubmit}
               className="space-y-4"
             >
               <div>
                 <label
-                  htmlFor="vehicle-model-brand"
+                  htmlFor="vehicle-model-make"
                   className="mb-1 block text-sm font-medium"
                 >
                   Marca
                 </label>
 
                 <select
-                  id="vehicle-model-brand"
-                  value={formBrandId}
+                  id="vehicle-model-make"
+                  value={formMakeId}
                   onChange={(event) =>
-                    setFormBrandId(
+                    setFormMakeId(
                       event.target.value,
                     )
                   }
@@ -468,12 +456,12 @@ export default function VehicleModelsPage() {
                   required
                   className="w-full rounded-md border px-3 py-2 disabled:opacity-60"
                 >
-                  {brands.map((brand) => (
+                  {makes.map((make) => (
                     <option
-                      key={brand.id}
-                      value={brand.id}
+                      key={make.id}
+                      value={make.id}
                     >
-                      {brand.name}
+                      {make.name}
                     </option>
                   ))}
                 </select>
@@ -530,30 +518,6 @@ export default function VehicleModelsPage() {
                 />
               </div>
 
-              <div>
-                <label
-                  htmlFor="vehicle-model-description"
-                  className="mb-1 block text-sm font-medium"
-                >
-                  Descrição
-                </label>
-
-                <textarea
-                  id="vehicle-model-description"
-                  value={description}
-                  onChange={(event) =>
-                    setDescription(
-                      event.target.value,
-                    )
-                  }
-                  disabled={
-                    operationInProgress
-                  }
-                  rows={4}
-                  className="w-full rounded-md border px-3 py-2 disabled:opacity-60"
-                />
-              </div>
-
               {actionError && (
                 <p
                   role="alert"
@@ -594,9 +558,9 @@ export default function VehicleModelsPage() {
             </form>
           )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           loadError &&
-          !hasBrands && (
+          !hasMakes && (
             <p
               role="alert"
               className="text-sm text-red-600"
@@ -612,20 +576,20 @@ export default function VehicleModelsPage() {
             Modelos existentes
           </h2>
 
-          {hasBrands && (
+          {hasMakes && (
             <div className="w-full sm:w-72">
               <label
-                htmlFor="vehicle-model-filter-brand"
+                htmlFor="vehicle-model-filter-make"
                 className="mb-1 block text-sm font-medium"
               >
                 Marca apresentada
               </label>
 
               <select
-                id="vehicle-model-filter-brand"
-                value={selectedBrandId}
+                id="vehicle-model-filter-make"
+                value={selectedMakeId}
                 onChange={(event) =>
-                  setSelectedBrandId(
+                  setSelectedMakeId(
                     event.target.value,
                   )
                 }
@@ -635,12 +599,12 @@ export default function VehicleModelsPage() {
                 }
                 className="w-full rounded-md border px-3 py-2 disabled:opacity-60"
               >
-                {brands.map((brand) => (
+                {makes.map((make) => (
                   <option
-                    key={brand.id}
-                    value={brand.id}
+                    key={make.id}
+                    value={make.id}
                   >
-                    {brand.name}
+                    {make.name}
                   </option>
                 ))}
               </select>
@@ -648,21 +612,21 @@ export default function VehicleModelsPage() {
           )}
         </div>
 
-        {loadingBrands && (
+        {loadingMakes && (
           <p className="text-sm text-gray-600">
             A carregar marcas...
           </p>
         )}
 
-        {!loadingBrands &&
-          hasBrands &&
+        {!loadingMakes &&
+          hasMakes &&
           loadingModels && (
             <p className="text-sm text-gray-600">
               A carregar modelos...
             </p>
           )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           !loadingModels &&
           loadError && (
             <p
@@ -673,28 +637,28 @@ export default function VehicleModelsPage() {
             </p>
           )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           !loadError &&
-          !hasBrands && (
+          !hasMakes && (
             <p className="text-sm text-gray-600">
               Ainda não existem marcas de veículos.
             </p>
           )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           !loadingModels &&
           !loadError &&
-          hasBrands &&
+          hasMakes &&
           models.length === 0 && (
             <p className="text-sm text-gray-600">
               Ainda não existem modelos para esta marca.
             </p>
           )}
 
-        {!loadingBrands &&
+        {!loadingMakes &&
           !loadingModels &&
           !loadError &&
-          hasBrands &&
+          hasMakes &&
           models.length > 0 && (
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-left text-sm">
@@ -706,10 +670,6 @@ export default function VehicleModelsPage() {
 
                     <th className="px-4 py-3 font-medium">
                       Slug
-                    </th>
-
-                    <th className="px-4 py-3 font-medium">
-                      Descrição
                     </th>
 
                     <th className="px-4 py-3 text-right font-medium">
@@ -737,11 +697,6 @@ export default function VehicleModelsPage() {
                           {
                             vehicleModel.slug
                           }
-                        </td>
-
-                        <td className="px-4 py-3">
-                          {vehicleModel.description ??
-                            '—'}
                         </td>
 
                         <td className="px-4 py-3">

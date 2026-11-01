@@ -128,15 +128,15 @@ describe(
       const casos = [
         {
           pathname:
-            '/admin/vehicle-generations',
+            '/admin/vehicle-makes',
           label:
-            'Gerações de veículos',
+            'Marcas de veículos',
         },
         {
           pathname:
-            '/admin/vehicle-configurations',
+            '/admin/vehicle-specs',
           label:
-            'Configurações de veículos',
+            'Especificações de veículos',
         },
         {
           pathname:

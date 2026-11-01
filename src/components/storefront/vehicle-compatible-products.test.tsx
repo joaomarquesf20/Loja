@@ -68,11 +68,10 @@ const productBicos =
   )
 
 const storedSelection = {
-  configurationId:
-    'configuration-15td-sport',
+  specId: 'spec-15td-sport',
   label: 'Opel Corsa B 1.5 TD Sport',
-  makeSlug: 'opel',
-  modelSlug: 'corsa-b',
+  makeId: 'make-opel',
+  modelId: 'model-corsa-b',
 }
 
 const STORAGE_KEY = 'pfa-veiculo'
@@ -193,12 +192,7 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            products: [
-              {
-                id: 'product-difusores',
-                slug: 'difusores-bm',
-              },
-            ],
+            productIds: ['product-difusores'],
           }),
         )
 
@@ -246,7 +240,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/configurations/configuration-15td-sport/products',
+          '/api/vehicles/compatible-products?specId=spec-15td-sport',
         )
       },
     )
@@ -294,7 +288,7 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            products: [],
+            productIds: [],
           }),
         )
 
@@ -370,12 +364,7 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            products: [
-              {
-                id: 'product-difusores',
-                slug: 'difusores-bm',
-              },
-            ],
+            productIds: ['product-difusores'],
           }),
         )
 
@@ -426,12 +415,7 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            products: [
-              {
-                id: 'product-difusores',
-                slug: 'difusores-bm',
-              },
-            ],
+            productIds: ['product-difusores'],
           }),
         )
 

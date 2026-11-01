@@ -5,10 +5,16 @@ import type {
 
 import { prisma } from './db'
 
+/**
+ * Épico 8 — árvore completa de veículos (Make → Model → Spec) para a
+ * consola admin de compatibilidade e para o editor de produtos.
+ * Uma única query com aninhamento ordenado por nome.
+ */
 const vehicleCompatibilityTreeSelect = {
   id: true,
   name: true,
   slug: true,
+  createdAt: true,
   models: {
     orderBy: {
       name: 'asc' as const,
@@ -17,69 +23,52 @@ const vehicleCompatibilityTreeSelect = {
       id: true,
       name: true,
       slug: true,
-      description: true,
-      generations: {
-        orderBy: {
-          name: 'asc' as const,
-        },
+      createdAt: true,
+      specs: {
+        orderBy: [
+          { engine: 'asc' as const },
+          { yearStart: 'asc' as const },
+        ],
         select: {
           id: true,
-          name: true,
-          platform: true,
-          description: true,
-          configurations: {
-            orderBy: {
-              name: 'asc' as const,
-            },
-            select: {
-              id: true,
-              name: true,
-              engineCode: true,
-              engineType: true,
-              displacementCc: true,
-              powerKw: true,
-              bodyType: true,
-              yearFrom: true,
-              yearTo: true,
-            },
-          },
+          engine: true,
+          engineCode: true,
+          yearStart: true,
+          yearEnd: true,
+          fuelType: true,
+          powerHp: true,
+          createdAt: true,
         },
       },
     },
   },
-} satisfies Prisma.VehicleBrandSelect
+} satisfies Prisma.VehicleMakeSelect
 
 export type VehicleCompatibilityTree = Array<{
   id: string
   name: string
   slug: string
+  createdAt: Date
   models: Array<{
     id: string
     name: string
     slug: string
-    description: string | null
-    generations: Array<{
+    createdAt: Date
+    specs: Array<{
       id: string
-      name: string
-      platform: string | null
-      description: string | null
-      configurations: Array<{
-        id: string
-        name: string
-        engineCode: string | null
-        engineType: string | null
-        displacementCc: number | null
-        powerKw: number | null
-        bodyType: string | null
-        yearFrom: number | null
-        yearTo: number | null
-      }>
+      engine: string
+      engineCode: string | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
+      createdAt: Date
     }>
   }>
 }>
 
 export type VehicleCompatibilityTreeClient =
-  Pick<PrismaClient, 'vehicleBrand'>
+  Pick<PrismaClient, 'vehicleMake'>
 
 function getClient(
   client?: VehicleCompatibilityTreeClient,
@@ -87,52 +76,13 @@ function getClient(
   return client ?? prisma
 }
 
-function normalizePowerKw(
-  value:
-    | number
-    | string
-    | { toString(): string }
-    | null,
-) {
-  if (value === null) {
-    return null
-  }
-
-  return Number(value.toString())
-}
-
 export async function listVehicleCompatibilityTree(
   client?: VehicleCompatibilityTreeClient,
 ): Promise<VehicleCompatibilityTree> {
   const db = getClient(client)
-  const brands =
-    await db.vehicleBrand.findMany({
-      orderBy: { name: 'asc' },
-      select:
-        vehicleCompatibilityTreeSelect,
-    })
 
-  return brands.map((brand) => ({
-    ...brand,
-    models: brand.models.map(
-      (model) => ({
-        ...model,
-        generations:
-          model.generations.map(
-            (generation) => ({
-              ...generation,
-              configurations:
-                generation.configurations.map(
-                  (configuration) => ({
-                    ...configuration,
-                    powerKw: normalizePowerKw(
-                      configuration.powerKw,
-                    ),
-                  }),
-                ),
-            }),
-          ),
-      }),
-    ),
-  }))
+  return db.vehicleMake.findMany({
+    orderBy: { name: 'asc' },
+    select: vehicleCompatibilityTreeSelect,
+  })
 }

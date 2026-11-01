@@ -251,20 +251,6 @@ function toSlug(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-function numberOrNull(value: string) {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return null
-  }
-
-  const parsed = Number(
-    trimmed.replace(',', '.'),
-  )
-  return Number.isFinite(parsed)
-    ? parsed
-    : null
-}
-
 function productToVariantDrafts(
   product: AdminProduct,
 ): AdminVariantDraft[] {
@@ -302,28 +288,14 @@ function productToCompatibilityDrafts(
   return product.compatibilities.map(
     (compatibility) =>
       createDraft({
-        vehicleBrandId:
-          compatibility.vehicleBrandId,
+        vehicleMakeId:
+          compatibility.vehicleSpec.model.make
+            .id,
         vehicleModelId:
-          compatibility.vehicleModelId,
-        vehicleGenerationId:
-          compatibility.vehicleGenerationId ??
-          '',
-        vehicleConfigurationId:
-          compatibility.vehicleConfigurationId ??
-          '',
-        yearMin:
-          compatibility.yearMin === null
-            ? ''
-            : String(
-                compatibility.yearMin,
-              ),
-        yearMax:
-          compatibility.yearMax === null
-            ? ''
-            : String(
-                compatibility.yearMax,
-              ),
+          compatibility.vehicleSpec.model.id,
+        vehicleSpecId:
+          compatibility.vehicleSpecId,
+        notes: compatibility.notes ?? '',
       }),
   )
 }
@@ -980,30 +952,10 @@ export default function ProductEditorClient({
       index,
       compatibility,
     ] of compatibilities.entries()) {
-      if (
-        !compatibility.vehicleBrandId ||
-        !compatibility.vehicleModelId
-      ) {
+      if (!compatibility.vehicleSpecId) {
         addError(
           `compatibilities.${index}`,
-          'Completa a marca e o modelo da aplicação.',
-        )
-      }
-
-      const yearMin = numberOrNull(
-        compatibility.yearMin,
-      )
-      const yearMax = numberOrNull(
-        compatibility.yearMax,
-      )
-      if (
-        yearMin !== null &&
-        yearMax !== null &&
-        yearMax < yearMin
-      ) {
-        addError(
-          `compatibilities.${index}.yearMax`,
-          'O ano final tem de ser posterior ao inicial.',
+          'Escolhe a especificação de veículo da aplicação.',
         )
       }
     }
@@ -1117,22 +1069,12 @@ export default function ProductEditorClient({
       })),
       compatibilities:
         compatibilities.map((compatibility) => ({
-          vehicleBrandId:
-            compatibility.vehicleBrandId,
-          vehicleModelId:
-            compatibility.vehicleModelId,
-          vehicleGenerationId:
-            compatibility.vehicleGenerationId ||
-            null,
-          vehicleConfigurationId:
-            compatibility.vehicleConfigurationId ||
-            null,
-          yearMin: numberOrNull(
-            compatibility.yearMin,
-          ),
-          yearMax: numberOrNull(
-            compatibility.yearMax,
-          ),
+          vehicleSpecId:
+            compatibility.vehicleSpecId,
+          notes:
+            compatibility.notes.trim() === ''
+              ? null
+              : compatibility.notes,
         })),
     }
 

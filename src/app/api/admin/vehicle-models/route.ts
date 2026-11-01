@@ -64,11 +64,11 @@ export async function GET(request: NextRequest) {
   try {
     await requireAdmin()
 
-    const brandId =
-      request.nextUrl.searchParams.get('brandId') ?? ''
+    const makeId =
+      request.nextUrl.searchParams.get('makeId') ?? ''
 
     const vehicleModels =
-      await listVehicleModels(brandId)
+      await listVehicleModels(makeId)
 
     return Response.json(vehicleModels, {
       status: 200,

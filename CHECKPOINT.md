@@ -2620,6 +2620,161 @@ Próximos passos (pós-etapa):
 - Continuar o Épico 7 (etapa 3) com o
   utilizador.
 
+---
+
+# Checkpoint - 28/10/2026 — Épico 8: Vehicle Fitment & Compatibility Engine
+
+Épico: Vehicle Fitment & Compatibility Engine
+Etapa 1 — Modelo de dados (novo), serviços, rotas e vitrine:
+**COMPLETA** (sem commit — trabalho novo em `master`).
+
+Substituição TOTAL do sistema de veículos do Épico 2
+(destrutiva, dados re-seedados).
+
+## Modelo de dados (substitui Épico 2)
+
+- REMOVIDOS: `VehicleBrand`, `VehicleGeneration`,
+  `VehicleConfiguration` e `ProductVehicleCompatibility`
+  (M2M ao nível da VARIANTE, duplicava a hierarquia na linha).
+- NOVO (`prisma/schema.prisma`):
+  - `VehicleMake` — `name` @unique, `slug` @unique, `createdAt`.
+  - `VehicleModel` — `makeId` FK (Cascade), `name`, `slug`,
+    `@@unique([makeId, slug])`.
+  - `VehicleSpec` — unidade atómica do fitment: `modelId` FK,
+    `engine`, `engineCode` (nullável), `yearStart`, `yearEnd`
+    (nullável), `fuelType`, `powerHp` (nullável), `createdAt`;
+    chave natural `@@unique([modelId, engine, yearStart])`.
+    Generation + Configuration do Épico 2 fundem-se AQUI: a
+    especificação é um motor com anos/combustível/potência (cv).
+  - `ProductCompatibility` — compatibilidade ao nível do
+    PRODUTO: `productId` FK, `vehicleSpecId` FK, `notes`
+    (nullável), `createdAt`, `@@unique([productId, vehicleSpecId])`,
+    `@@index([vehicleSpecId])`.
+- Migração
+  `20261028191432_refactor_vehicle_fitment_model` aplicada
+  (tabelas veiculares zeradas e re-seedadas: 7
+  compatibilidades; makes dev-volkswagen/dev-audi/dev-bmw;
+  Opel slug `opel`; BMW reutilizada com slug `dev-bmw`
+  porque `VehicleMake.name` é @unique).
+
+## Serviços
+
+- `src/server/vehicles.ts` — leitura pública:
+  `getVehicleMakes()`, `getVehicleModels(makeId)`,
+  `getVehicleSpecs(modelId)` (arg direto),
+  `checkProductCompatibility(...)`,
+  `getCompatibleProductIds({vehicleSpecId}, client?)`
+  (objeto; usado pelo catálogo para filtrar a vitrine).
+- CRUD admin: `src/server/vehicle-makes.ts`,
+  `vehicle-models.ts`, `vehicle-specs.ts`
+  (YEAR_MIN=1900/YEAR_MAX=2100; `fuelType` string livre
+  uppercase), `product-compatibilities.ts`
+  (POST `{vehicleSpecId, notes?}`; DELETE `{vehicleSpecId}`).
+- CONVENÇÃO: `createdAt` é serializado para ISO string na
+  fronteira dos 4 serviços (types `createdAt: string`;
+  os mocks e fixtures dos testes usam strings). No runtime
+  real o `Response.json` serializa o Date do Prisma para
+  string — a UI já assume string.
+
+## Rotas admin (guardas `requireAdmin()`)
+
+- `GET/POST /api/admin/vehicle-makes`,
+  `GET/PATCH/DELETE /api/admin/vehicle-makes/[id]` (DELETE
+  bloqueado com conflito quando tem modelos — cascade evitado).
+- `GET/POST /api/admin/vehicle-models?makeId=…
+  `GET/PATCH/DELETE /api/admin/vehicle-models/[id]`.
+- `GET/POST /api/admin/vehicle-specs?modelId=…
+  `GET/PATCH/DELETE /api/admin/vehicle-specs/[id]`
+  (DELETE bloqueado com conflito quando tem compatibilidades).
+- `GET/POST/DELETE
+  /api/admin/products/[id]/compatibilities` — gestão manual
+  de compatibilidades por produto.
+
+## Rotas públicas (vitrine)
+
+- `GET /api/vehicles/makes`
+- `GET /api/vehicles/models?makeId=`
+- `GET /api/vehicles/specs?modelId=`
+- `GET /api/vehicles/compatibility?productId=&specId=`
+- `GET /api/vehicles/compatible-products?specId=` (novo;
+  envelope `{productIds}` — chamado pelo componente de
+  compatibilidade da vitrine, cache React `cache()`).
+
+## Vitrine (storefront)
+
+- Seletor em cascata make → model → spec
+  (`vehicle-selection.tsx` + `vehicle-selector.tsx`,
+  invalidação de seleções antigas `configurationId`).
+- `categorias/[slug]/page.tsx` — filtro por `spec` hidden
+  inputs (`spec`, `requestedSpecIds`), normalizeVehicleSelections,
+  chips `{spec.modelName} {spec.engine}`; facet `SpecFacade`
+  com contagens por compatibilidade.
+- `produtos/[slug]/page.tsx` — badge de compatibilidade por
+  `productId` (`vehicle-compatibility-badge.tsx`, notes em
+  tooltip `title`); `formatCompatibility` label
+  make·model·engine, potência em cv, anos, fuelType e notas.
+- `storefront-category-profile.ts` — perfil com
+  `shouldShowVehicleFilter` (removido o
+  `shouldShowVehicleGenerations` do Épico 2).
+
+## Backoffice admin
+
+- Páginas `src/app/admin/vehicle-makes|vehicle-models|vehicle-specs/page.tsx`
+  (CRUD em cascata; spec com engine/engineCode/anos/fuel/
+  potência; efeitos de carregamento com resets DENTRO das
+  loaders async — fix `react-hooks/set-state-in-effect`).
+- `admin/products` — form de compatibilidades por
+  `vehicleSpecId` (`{vehicleSpecId, notes}`); validação
+  `compatibilities` no `admin-products.ts` (specs existentes
+  dentro da transação).
+
+## Importador CSV (Épico 4 reworked)
+
+- `src/lib/catalog-import.ts`: novos campos `vehicleFuelType`
+  (aliases `combustivel`/`fueltype`, default DIESEL) e
+  mapeamento de `vehicleEngine`/`yearFrom`/`yearTo` no perfil
+  EXTERIOR (o formato Maxton já trazia
+  MotorCodigo/AnoInicial/AnoFinal).
+- `catalog-import-engine.ts`: parse de fuelType (toUpperCase
+  || DIESEL); o CSV não traz `productTypeSpec` — geração "G22/
+  G23" continua a dividir em 2 compatibilidades.
+- `catalog-import-service.ts`: cache `{vehicleMake,
+  vehicleModel, vehicleSpec}`; `resolveVehicleSpecId` pela
+  chave natural `[modelId, engine, yearStart]`; compatibilidade
+  deduped por `[productId, vehicleSpecId]`. Sem motor no CSV:
+  engine = `generation || 'Padrão'`; yearStart =
+  `yearFrom ?? yearTo ?? 1900`.
+- 61 testes verdes (engine + service).
+
+## Seeds
+
+- `scripts/storefront-dev-data.mjs` — reescrita para a nova
+  árvore (makes/models/specs flat; compatibilities por
+  `vehicleSpecEngineCode`): CRLB 150cv 2012–19 (Golf + A3),
+  CZCA 125, CHHB 245, CJXF 265, CJXC 300, N47D20 184.
+  Run: `node --env-file=.env scripts/storefront-dev-data.mjs seed`
+  → 11 produtos, 23 variantes, 5 compatibilidades.
+- `scripts/seed-vehicle-fits.mjs` — reescrito por inteiro:
+  Opel Corsa B X15DT/4EC1-T 68cv, BMW Série 1 116d N47D20C1;
+  ligações via `variantSku` → productId. 7 compatibilidades
+  na BD.
+
+## Gate da etapa
+
+- `npx tsc --noEmit` limpo (0 erros — usar Out-File: o
+  PowerShell engole o stdout do tsc!). `.next` eliminado antes
+  do rebuild (validator.ts stale com rotas eliminadas).
+- `npx vitest run` — 2405 passed + 3 skipped (166 ficheiros).
+- `npm run lint` limpo.
+- `npm run build` limpo (mapa inclui
+  `/api/vehicles/{makes,models,specs,compatibility,
+  compatible-products}` e `/api/admin/vehicle-*`).
+
+Próximos passos (pós-etapa):
+- Etapa 2 do Épico 8 — gestão de compatibilidades em massa no
+  admin e/ou visões por veículo (a definir com o utilizador).
+
+
 
 
 

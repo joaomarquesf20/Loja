@@ -9,7 +9,6 @@ import {
   getCategoryFilterProfile,
   getVisibleVariantFacets,
   shouldShowVehicleFilter,
-  shouldShowVehicleGenerations,
 } from './storefront-category-profile'
 
 function createFacet(
@@ -188,44 +187,18 @@ describe(
       ])
     })
 
-    test('as gerações só aparecem na suspensão ou quando um modelo tem várias', () => {
-      const modelsWithOneGeneration = [
-        {
-          generations: [
-            { id: 'g1', name: 'Mk7' },
-          ],
-        },
-      ]
-
-      const modelsWithTwoGenerations = [
-        {
-          generations: [
-            { id: 'g1', name: 'Mk7' },
-            { id: 'g2', name: 'Mk8' },
-          ],
-        },
-      ]
-
+    test('o filtro de veículo aparece em suspensão e exterior, nunca em jantes', () => {
       expect(
-        shouldShowVehicleGenerations(
-          'suspension',
-          modelsWithOneGeneration,
-        ),
+        shouldShowVehicleFilter('suspension'),
       ).toBe(true)
 
       expect(
-        shouldShowVehicleGenerations(
-          'exterior',
-          modelsWithOneGeneration,
-        ),
+        shouldShowVehicleFilter('exterior'),
+      ).toBe(true)
+
+      expect(
+        shouldShowVehicleFilter('wheels'),
       ).toBe(false)
-
-      expect(
-        shouldShowVehicleGenerations(
-          'exterior',
-          modelsWithTwoGenerations,
-        ),
-      ).toBe(true)
     })
   },
 )

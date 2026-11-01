@@ -203,18 +203,3 @@ export function shouldShowVehicleFilter(
 ) {
   return profile !== 'wheels'
 }
-
-export function shouldShowVehicleGenerations(
-  profile: CatalogFilterProfile,
-  models: Array<{
-    generations: unknown[]
-  }>,
-) {
-  if (profile === 'suspension') {
-    return true
-  }
-
-  return models.some(
-    (model) => model.generations.length > 1,
-  )
-}

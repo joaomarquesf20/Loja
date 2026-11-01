@@ -7,7 +7,7 @@ describe('product compatibility validation', () => {
     expect(() =>
       productCompatibilitySchema.parse({
         productId: '',
-        vehicleConfigurationId: 'vc-1',
+        vehicleSpecId: 'spec-1',
       }),
     ).toThrow()
   })
@@ -16,25 +16,25 @@ describe('product compatibility validation', () => {
     expect(() =>
       productCompatibilitySchema.parse({
         productId: '   ',
-        vehicleConfigurationId: 'vc-1',
+        vehicleSpecId: 'spec-1',
       }),
     ).toThrow()
   })
 
-  test('rejeita vehicleConfigurationId vazio', () => {
+  test('rejeita vehicleSpecId vazio', () => {
     expect(() =>
       productCompatibilitySchema.parse({
         productId: 'p-1',
-        vehicleConfigurationId: '',
+        vehicleSpecId: '',
       }),
     ).toThrow()
   })
 
-  test('rejeita vehicleConfigurationId apenas com espaços', () => {
+  test('rejeita vehicleSpecId apenas com espaços', () => {
     expect(() =>
       productCompatibilitySchema.parse({
         productId: 'p-1',
-        vehicleConfigurationId: '   ',
+        vehicleSpecId: '   ',
       }),
     ).toThrow()
   })
@@ -42,24 +42,46 @@ describe('product compatibility validation', () => {
   test('aceita dados válidos', () => {
     const result = productCompatibilitySchema.parse({
       productId: 'p-1',
-      vehicleConfigurationId: 'vc-1',
+      vehicleSpecId: 'spec-1',
     })
 
     expect(result).toEqual({
       productId: 'p-1',
-      vehicleConfigurationId: 'vc-1',
+      vehicleSpecId: 'spec-1',
+      notes: null,
     })
   })
 
   test('remove espaços no início e fim', () => {
     const result = productCompatibilitySchema.parse({
       productId: ' p-1 ',
-      vehicleConfigurationId: ' vc-1 ',
+      vehicleSpecId: ' spec-1 ',
     })
 
     expect(result).toEqual({
       productId: 'p-1',
-      vehicleConfigurationId: 'vc-1',
+      vehicleSpecId: 'spec-1',
+      notes: null,
     })
+  })
+
+  test('aceita notas opcionais e converte vazias em null', () => {
+    const result = productCompatibilitySchema.parse({
+      productId: 'p-1',
+      vehicleSpecId: 'spec-1',
+      notes: '  ',
+    })
+
+    expect(result.notes).toBeNull()
+
+    const withNotes = productCompatibilitySchema.parse({
+      productId: 'p-1',
+      vehicleSpecId: 'spec-1',
+      notes: 'requer apoios originais',
+    })
+
+    expect(withNotes.notes).toBe(
+      'requer apoios originais',
+    )
   })
 })

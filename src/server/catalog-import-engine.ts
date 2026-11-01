@@ -141,6 +141,7 @@ export function buildRowInputs({
           'vehicleModel',
           'vehicleGeneration',
           'vehicleEngine',
+          'vehicleFuelType',
           'yearFrom',
           'yearTo',
         ]
@@ -385,6 +386,13 @@ export function buildRowInputs({
           row,
           'vehicleEngine',
         ).trim()
+        // Combustível é opcional no CSV; sem coluna ou
+        // vazio assume-se DIESEL (frota-alvo do catálogo)
+        // — corrigível depois no admin.
+        const fuelType =
+          getValue(row, 'vehicleFuelType')
+            .trim()
+            .toUpperCase() || 'DIESEL'
 
         for (const modelPart of modelParts) {
           for (const generationPart of generationParts) {
@@ -393,6 +401,7 @@ export function buildRowInputs({
               model: modelPart.text,
               generation: generationPart.text,
               engine,
+              fuelType,
               yearFrom:
                 yearFrom !== null
                   ? Math.round(yearFrom)

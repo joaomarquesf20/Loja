@@ -6,31 +6,32 @@ import {
   vi,
 } from 'vitest'
 
-vi.mock('@/server/vehicle-search', () => {
+vi.mock('@/server/vehicles', () => {
   class ValidationError extends Error {}
 
   return {
     ValidationError,
-    listVehicleMakes: vi.fn(),
+    getVehicleMakes: vi.fn(),
   }
 })
 
 import {
-  listVehicleMakes,
-} from '@/server/vehicle-search'
+  ValidationError,
+  getVehicleMakes,
+} from '@/server/vehicles'
 
 import {
   GET,
 } from './route'
 
-const vehicleMakes = [
+const makes = [
   {
-    id: 'brand-bmw',
+    id: 'make-bmw',
     name: 'BMW',
-    slug: 'dev-bmw',
+    slug: 'bmw',
   },
   {
-    id: 'brand-opel',
+    id: 'make-opel',
     name: 'Opel',
     slug: 'opel',
   },
@@ -40,14 +41,14 @@ describe(
   'GET /api/vehicles/makes',
   () => {
     beforeEach(() => {
-      vi.mocked(listVehicleMakes).mockReset()
+      vi.mocked(getVehicleMakes).mockReset()
     })
 
     test(
-      'devolve as marcas disponíveis',
+      'devolve a lista de marcas de veículos',
       async () => {
-        vi.mocked(listVehicleMakes).mockResolvedValue(
-          vehicleMakes,
+        vi.mocked(getVehicleMakes).mockResolvedValue(
+          makes,
         )
 
         const response = await GET()
@@ -55,10 +56,25 @@ describe(
         expect(response.status).toBe(200)
         await expect(
           response.json(),
-        ).resolves.toEqual(vehicleMakes)
-        expect(
-          listVehicleMakes,
-        ).toHaveBeenCalled()
+        ).resolves.toEqual({ makes })
+        expect(getVehicleMakes).toHaveBeenCalled()
+      },
+    )
+
+    test(
+      '400 com erro de validação do serviço',
+      async () => {
+        const consoleError = vi
+          .spyOn(console, 'error')
+          .mockImplementation(() => {})
+        vi.mocked(getVehicleMakes).mockRejectedValue(
+          new ValidationError('Dados inválidos'),
+        )
+
+        const response = await GET()
+
+        expect(response.status).toBe(400)
+        expect(consoleError).not.toHaveBeenCalled()
       },
     )
 
@@ -68,7 +84,7 @@ describe(
         const consoleError = vi
           .spyOn(console, 'error')
           .mockImplementation(() => {})
-        vi.mocked(listVehicleMakes).mockRejectedValue(
+        vi.mocked(getVehicleMakes).mockRejectedValue(
           new Error('liga a BD'),
         )
 
@@ -78,10 +94,9 @@ describe(
         await expect(
           response.json(),
         ).resolves.toEqual({
-          error:
-            'Erro interno do servidor',
+          error: 'Erro interno do servidor',
         })
-        consoleError.mockRestore()
+        expect(consoleError).toHaveBeenCalled()
       },
     )
   },

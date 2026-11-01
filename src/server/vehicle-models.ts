@@ -5,17 +5,17 @@ import { prisma } from './db'
 
 type VehicleModelRecord = {
   id: string
-  brandId: string
+  makeId: string
   name: string
   slug: string
-  description: string | null
+  /** ISO string — serializado na fronteira do serviço. */
+  createdAt: string
 }
 
 type VehicleModelCreateData = {
-  brandId: string
+  makeId: string
   name: string
   slug: string
-  description: string | null
 }
 
 type VehicleModelUpdateData = Partial<
@@ -27,14 +27,14 @@ type VehicleModelWhereUnique =
       id: string
     }
   | {
-      brandId_slug: {
-        brandId: string
+      makeId_slug: {
+        makeId: string
         slug: string
       }
     }
 
 const vehicleModelSchema = z.object({
-  brandId: z.string().trim().min(1),
+  makeId: z.string().trim().min(1),
   name: z.string().trim().min(1).max(120),
   slug: z
     .string()
@@ -42,16 +42,10 @@ const vehicleModelSchema = z.object({
     .min(1)
     .transform((value) => toSlug(value))
     .pipe(z.string().min(1)),
-  description: z
-    .string()
-    .trim()
-    .nullable()
-    .optional()
-    .transform((value) => value ?? null),
 })
 
 const vehicleModelUpdateSchema = z.object({
-  brandId: z.string().trim().min(1).optional(),
+  makeId: z.string().trim().min(1).optional(),
   name: z
     .string()
     .trim()
@@ -65,15 +59,10 @@ const vehicleModelUpdateSchema = z.object({
     .transform((value) => toSlug(value))
     .pipe(z.string().min(1))
     .optional(),
-  description: z
-    .string()
-    .trim()
-    .nullable()
-    .optional(),
 })
 
 export interface VehicleModelClient {
-  vehicleBrand: {
+  vehicleMake: {
     findUnique(args: {
       where: { id: string }
     }): Promise<{ id: string } | null>
@@ -81,7 +70,7 @@ export interface VehicleModelClient {
 
   vehicleModel: {
     findMany(args: {
-      where: { brandId: string }
+      where: { makeId: string }
       orderBy: { name: 'asc' }
     }): Promise<VehicleModelRecord[]>
 
@@ -103,7 +92,7 @@ export interface VehicleModelClient {
     }): Promise<VehicleModelRecord>
   }
 
-  vehicleGeneration: {
+  vehicleSpec: {
     count(args: {
       where: { modelId: string }
     }): Promise<number>
@@ -145,8 +134,8 @@ function validateModelId(id: string) {
   }
 }
 
-function validateBrandId(brandId: string) {
-  if (!brandId.trim()) {
+function validateMakeId(makeId: string) {
+  if (!makeId.trim()) {
     throw new ValidationError(
       'ID da marca de veículo é obrigatório',
     )
@@ -183,25 +172,25 @@ function parseUpdateInput(
 }
 
 export async function listVehicleModels(
-  brandId: string,
+  makeId: string,
   client?: VehicleModelClient,
 ) {
-  validateBrandId(brandId)
+  validateMakeId(makeId)
 
   const db = getClient(client)
 
-  const brand = await db.vehicleBrand.findUnique({
-    where: { id: brandId },
+  const make = await db.vehicleMake.findUnique({
+    where: { id: makeId },
   })
 
-  if (!brand) {
+  if (!make) {
     throw new NotFoundError(
       'Marca de veículo não encontrada',
     )
   }
 
   return db.vehicleModel.findMany({
-    where: { brandId },
+    where: { makeId },
     orderBy: { name: 'asc' },
   })
 }
@@ -235,11 +224,11 @@ export async function createVehicleModel(
   const db = getClient(client)
   const data = parseCreateInput(input)
 
-  const brand = await db.vehicleBrand.findUnique({
-    where: { id: data.brandId },
+  const make = await db.vehicleMake.findUnique({
+    where: { id: data.makeId },
   })
 
-  if (!brand) {
+  if (!make) {
     throw new NotFoundError(
       'Marca de veículo não encontrada',
     )
@@ -248,8 +237,8 @@ export async function createVehicleModel(
   const conflict =
     await db.vehicleModel.findUnique({
       where: {
-        brandId_slug: {
-          brandId: data.brandId,
+        makeId_slug: {
+          makeId: data.makeId,
           slug: data.slug,
         },
       },
@@ -287,21 +276,21 @@ export async function updateVehicleModel(
     )
   }
 
-  const finalBrandId =
-    data.brandId ?? existing.brandId
+  const finalMakeId =
+    data.makeId ?? existing.makeId
   const finalSlug =
     data.slug ?? existing.slug
 
   if (
-    data.brandId &&
-    data.brandId !== existing.brandId
+    data.makeId &&
+    data.makeId !== existing.makeId
   ) {
-    const brand =
-      await db.vehicleBrand.findUnique({
-        where: { id: data.brandId },
+    const make =
+      await db.vehicleMake.findUnique({
+        where: { id: data.makeId },
       })
 
-    if (!brand) {
+    if (!make) {
       throw new NotFoundError(
         'Marca de veículo não encontrada',
       )
@@ -311,8 +300,8 @@ export async function updateVehicleModel(
   const conflict =
     await db.vehicleModel.findUnique({
       where: {
-        brandId_slug: {
-          brandId: finalBrandId,
+        makeId_slug: {
+          makeId: finalMakeId,
           slug: finalSlug,
         },
       },
@@ -349,14 +338,14 @@ export async function deleteVehicleModel(
     )
   }
 
-  const generationsCount =
-    await db.vehicleGeneration.count({
+  const specsCount =
+    await db.vehicleSpec.count({
       where: { modelId: id },
     })
 
-  if (generationsCount > 0) {
+  if (specsCount > 0) {
     throw new ConflictError(
-      'Não é possível apagar um modelo de veículo com gerações associadas',
+      'Não é possível apagar um modelo de veículo com especificações associadas',
     )
   }
 

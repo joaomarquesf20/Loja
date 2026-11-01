@@ -14,7 +14,7 @@ export type CategoryFilterState = {
   priceMax?: number
   vehicleMakeIds: string[]
   vehicleModelIds: string[]
-  vehicleGenerationIds: string[]
+  vehicleSpecIds: string[]
   variantSelections: CatalogVariantSelection[]
   sort?: CatalogSort
 }
@@ -118,7 +118,7 @@ export function buildCategoryHref(
     priceMax,
     vehicleMakeIds,
     vehicleModelIds,
-    vehicleGenerationIds,
+    vehicleSpecIds,
     variantSelections,
     sort,
   } = {
@@ -158,11 +158,8 @@ export function buildCategoryHref(
     params.append('model', modelId)
   }
 
-  for (const generationId of vehicleGenerationIds) {
-    params.append(
-      'generation',
-      generationId,
-    )
+  for (const specId of vehicleSpecIds) {
+    params.append('spec', specId)
   }
 
   for (const selection of variantSelections) {
@@ -349,26 +346,26 @@ export function normalizeBrandSlugs(
 export type NormalizedVehicleSelections = {
   vehicleMakeIds: string[]
   vehicleModelIds: string[]
-  vehicleGenerationIds: string[]
+  vehicleSpecIds: string[]
   hasInvalid: boolean
 }
 
 /**
  * Valida a seleção de veículo contra a árvore real da
- * categoria e mantém a hierarquia coerente: um modelo
- * só fica selecionado se pertence a uma marca
- * selecionada e uma geração só se pertence a um modelo
+ * categoria e mantém a hierarquia coerente: um modelo só
+ * fica selecionado se pertencer a uma marca selecionada e
+ * uma especificação só se pertencer a um modelo
  * selecionado.
  */
 export function normalizeVehicleSelections({
   makeIds,
   modelIds,
-  generationIds,
+  specIds,
   makes,
 }: {
   makeIds: string[]
   modelIds: string[]
-  generationIds: string[]
+  specIds: string[]
   makes: CatalogVehicleMakeFacet[]
 }): NormalizedVehicleSelections {
   let hasInvalid = makeIds.some(
@@ -415,16 +412,16 @@ export function normalizeVehicleSelections({
 
   const modelIdSet = new Set(validModelIds)
 
-  const validGenerationIds =
-    generationIds.filter(
-      (generationId) => {
+  const validSpecIds =
+    specIds.filter(
+      (specId) => {
         const isValid =
           makes.some((make) =>
             make.models.some((model) =>
-              model.generations.some(
-                (generation) =>
-                  generation.id ===
-                  generationId,
+              model.specs.some(
+                (spec) =>
+                  spec.id ===
+                  specId,
               ),
             ),
           )
@@ -439,10 +436,10 @@ export function normalizeVehicleSelections({
             make.models.some(
               (model) =>
                 modelIdSet.has(model.id) &&
-                model.generations.some(
-                  (generation) =>
-                    generation.id ===
-                    generationId,
+                model.specs.some(
+                  (spec) =>
+                    spec.id ===
+                    specId,
                 ),
             ),
           )
@@ -458,7 +455,7 @@ export function normalizeVehicleSelections({
   return {
     vehicleMakeIds: validMakeIds,
     vehicleModelIds: validModelIds,
-    vehicleGenerationIds: validGenerationIds,
+    vehicleSpecIds: validSpecIds,
     hasInvalid,
   }
 }
@@ -467,12 +464,12 @@ export function hasSameVehicleSelections(
   first: {
     vehicleMakeIds: string[]
     vehicleModelIds: string[]
-    vehicleGenerationIds: string[]
+    vehicleSpecIds: string[]
   },
   second: {
     vehicleMakeIds: string[]
     vehicleModelIds: string[]
-    vehicleGenerationIds: string[]
+    vehicleSpecIds: string[]
   },
 ) {
   return (
@@ -485,8 +482,8 @@ export function hasSameVehicleSelections(
       second.vehicleModelIds,
     ) &&
     sameValues(
-      first.vehicleGenerationIds,
-      second.vehicleGenerationIds,
+      first.vehicleSpecIds,
+      second.vehicleSpecIds,
     )
   )
 }
@@ -518,14 +515,19 @@ export function getVisibleVehicleModels(
   )
 }
 
-export function getVisibleVehicleGenerations(
+export function getVisibleVehicleSpecs(
   models: Array<{
     id: string
     name: string
     makeName: string
-    generations: Array<{
+    specs: Array<{
       id: string
-      name: string
+      engine: string
+      engineCode: string | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
       productCount: number
     }>
   }>,
@@ -542,9 +544,9 @@ export function getVisibleVehicleGenerations(
 
   return modelsToShow.flatMap(
     (model) =>
-      model.generations.map(
-        (generation) => ({
-          ...generation,
+      model.specs.map(
+        (spec) => ({
+          ...spec,
           modelId: model.id,
           modelName: model.name,
           makeName: model.makeName,

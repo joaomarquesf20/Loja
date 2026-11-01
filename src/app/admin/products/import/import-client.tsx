@@ -79,6 +79,7 @@ const FIELD_LABELS: Record<
   vehicleGeneration:
     'Geração / chassis',
   vehicleEngine: 'Motor (código)',
+  vehicleFuelType: 'Combustível',
   yearFrom: 'Ano inicial',
   yearTo: 'Ano final',
   frontDropMm: 'Rebaixo dianteiro',

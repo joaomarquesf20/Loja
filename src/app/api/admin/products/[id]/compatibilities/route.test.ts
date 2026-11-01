@@ -58,33 +58,31 @@ const mockRemoveProductCompatibility =
 const compatibility = {
   id: 'compatibility-test',
   productId: 'product-test',
-  vehicleConfigurationId: 'vehicle-configuration-test',
+  vehicleSpecId: 'vehicle-spec-test',
+  notes: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 const compatibilityListRecord = {
   ...compatibility,
-  vehicleBrand: {
-    id: 'brand-test',
-    name: 'Volkswagen',
-  },
-  vehicleModel: {
-    id: 'model-test',
-    name: 'Golf',
-  },
-  vehicleGeneration: {
-    id: 'generation-test',
-    name: 'Mk7',
-  },
-  vehicleConfiguration: {
-    id: 'vehicle-configuration-test',
-    name: '2.0 TDI 150',
+  vehicleSpec: {
+    id: 'vehicle-spec-test',
+    engine: '2.0 TDI 150',
     engineCode: 'EA288',
-    engineType: 'Diesel',
-    displacementCc: 1968,
-    powerKw: 110.5,
-    bodyType: 'Hatchback',
-    yearFrom: 2013,
-    yearTo: 2020,
+    yearStart: 2013,
+    yearEnd: 2020,
+    fuelType: 'DIESEL',
+    powerHp: 150,
+    model: {
+      id: 'model-test',
+      name: 'Golf',
+      slug: 'golf',
+      make: {
+        id: 'make-test',
+        name: 'Volkswagen',
+        slug: 'volkswagen',
+      },
+    },
   },
 }
 
@@ -221,8 +219,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await POST(
         requestWithBody('POST', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -233,13 +231,37 @@ describe('Admin Product Compatibilities API', () => {
       )
       expect(
         mockAddProductCompatibility,
-      ).toHaveBeenCalledWith(
-        'product-test',
-        'vehicle-configuration-test',
-      )
+      ).toHaveBeenCalledWith({
+        productId: 'product-test',
+        vehicleSpecId: 'vehicle-spec-test',
+      })
     })
 
-    test('devolve 400 sem vehicleConfigurationId', async () => {
+    test('cria compatibilidade com notas', async () => {
+      mockAddProductCompatibility.mockResolvedValue({
+        ...compatibility,
+        notes: 'requer apoios originais',
+      })
+
+      const response = await POST(
+        requestWithBody('POST', {
+          vehicleSpecId: 'vehicle-spec-test',
+          notes: 'requer apoios originais',
+        }),
+        context(),
+      )
+
+      expect(response.status).toBe(201)
+      expect(
+        mockAddProductCompatibility,
+      ).toHaveBeenCalledWith({
+        productId: 'product-test',
+        vehicleSpecId: 'vehicle-spec-test',
+        notes: 'requer apoios originais',
+      })
+    })
+
+    test('devolve 400 sem vehicleSpecId', async () => {
       const response = await POST(
         requestWithBody('POST', {}),
         context(),
@@ -258,8 +280,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await POST(
         requestWithBody('POST', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -270,14 +292,14 @@ describe('Admin Product Compatibilities API', () => {
     test('devolve 404 para NotFoundError', async () => {
       mockAddProductCompatibility.mockRejectedValue(
         new NotFoundError(
-          'Configuração do veículo não encontrada',
+          'Especificação de veículo não encontrada',
         ),
       )
 
       const response = await POST(
         requestWithBody('POST', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -288,14 +310,14 @@ describe('Admin Product Compatibilities API', () => {
     test('devolve 409 para associação duplicada', async () => {
       mockAddProductCompatibility.mockRejectedValue(
         new ConflictError(
-          'Este produto já está associado a esta configuração de veículo',
+          'Este produto já está associado a esta especificação de veículo',
         ),
       )
 
       const response = await POST(
         requestWithBody('POST', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -310,8 +332,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await POST(
         requestWithBody('POST', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -328,8 +350,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await DELETE(
         requestWithBody('DELETE', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -342,11 +364,11 @@ describe('Admin Product Compatibilities API', () => {
         mockRemoveProductCompatibility,
       ).toHaveBeenCalledWith(
         'product-test',
-        'vehicle-configuration-test',
+        'vehicle-spec-test',
       )
     })
 
-    test('devolve 400 sem vehicleConfigurationId', async () => {
+    test('devolve 400 sem vehicleSpecId', async () => {
       const response = await DELETE(
         requestWithBody('DELETE', {}),
         context(),
@@ -362,8 +384,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await DELETE(
         requestWithBody('DELETE', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )
@@ -380,8 +402,8 @@ describe('Admin Product Compatibilities API', () => {
 
       const response = await DELETE(
         requestWithBody('DELETE', {
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId:
+            'vehicle-spec-test',
         }),
         context(),
       )

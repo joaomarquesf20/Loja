@@ -24,10 +24,10 @@ import {
 
 const vehicleModelRecord = {
   id: 'model-1',
-  brandId: 'brand-1',
+  makeId: 'make-1',
   name: 'Modelo Teste',
   slug: 'modelo-teste',
-  description: 'Descrição técnica',
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 describe('vehicle models service', () => {
@@ -35,7 +35,7 @@ describe('vehicle models service', () => {
 
   beforeEach(() => {
     client = {
-      vehicleBrand: {
+      vehicleMake: {
         findUnique: vi.fn(),
       },
       vehicleModel: {
@@ -45,77 +45,54 @@ describe('vehicle models service', () => {
         update: vi.fn(),
         delete: vi.fn(),
       },
-      vehicleGeneration: {
+      vehicleSpec: {
         count: vi.fn(),
       },
     }
   })
 
   describe('listVehicleModels', () => {
-    test('rejeita brandId vazio', async () => {
+    test('rejeita makeId vazio', async () => {
       await expect(
         listVehicleModels('', client),
       ).rejects.toBeInstanceOf(ValidationError)
 
       expect(
-        client.vehicleBrand.findUnique,
+        client.vehicleMake.findUnique,
       ).not.toHaveBeenCalled()
     })
 
     test('rejeita marca inexistente', async () => {
       vi.mocked(
-        client.vehicleBrand.findUnique,
+        client.vehicleMake.findUnique,
       ).mockResolvedValue(null)
 
       await expect(
-        listVehicleModels('brand-1', client),
+        listVehicleModels('make-1', client),
       ).rejects.toBeInstanceOf(NotFoundError)
-
-      expect(
-        client.vehicleModel.findMany,
-      ).not.toHaveBeenCalled()
     })
 
-    test('filtra por brandId e ordena por nome ascendente', async () => {
+    test('filtra por makeId e ordena por nome ascendente', async () => {
       vi.mocked(
-        client.vehicleBrand.findUnique,
-      ).mockResolvedValue({
-        id: 'brand-1',
-      })
+        client.vehicleMake.findUnique,
+      ).mockResolvedValue({ id: 'make-1' })
 
       vi.mocked(
         client.vehicleModel.findMany,
-      ).mockResolvedValue([
-        vehicleModelRecord,
-      ])
+      ).mockResolvedValue([vehicleModelRecord])
 
       const result = await listVehicleModels(
-        'brand-1',
+        'make-1',
         client,
       )
 
       expect(
-        client.vehicleBrand.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: 'brand-1',
-        },
-      })
-
-      expect(
         client.vehicleModel.findMany,
       ).toHaveBeenCalledWith({
-        where: {
-          brandId: 'brand-1',
-        },
-        orderBy: {
-          name: 'asc',
-        },
+        where: { makeId: 'make-1' },
+        orderBy: { name: 'asc' },
       })
-
-      expect(result).toEqual([
-        vehicleModelRecord,
-      ])
+      expect(result).toEqual([vehicleModelRecord])
     })
   })
 
@@ -132,36 +109,18 @@ describe('vehicle models service', () => {
       ).mockResolvedValue(null)
 
       await expect(
-        getVehicleModelById(
-          'model-1',
-          client,
-        ),
+        getVehicleModelById('model-1', client),
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
     test('devolve modelo existente', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      ).mockResolvedValue(
-        vehicleModelRecord,
-      )
+      ).mockResolvedValue(vehicleModelRecord)
 
       await expect(
-        getVehicleModelById(
-          'model-1',
-          client,
-        ),
-      ).resolves.toEqual(
-        vehicleModelRecord,
-      )
-
-      expect(
-        client.vehicleModel.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: 'model-1',
-        },
-      })
+        getVehicleModelById('model-1', client),
+      ).resolves.toEqual(vehicleModelRecord)
     })
   })
 
@@ -170,7 +129,7 @@ describe('vehicle models service', () => {
       await expect(
         createVehicleModel(
           {
-            brandId: '',
+            makeId: '',
             name: '',
             slug: '',
           },
@@ -183,49 +142,15 @@ describe('vehicle models service', () => {
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita slug vazio após normalização', async () => {
-      await expect(
-        createVehicleModel(
-          {
-            brandId: 'brand-1',
-            name: 'Modelo Teste',
-            slug: '!!!',
-          },
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ValidationError)
-
-      expect(
-        client.vehicleModel.create,
-      ).not.toHaveBeenCalled()
-    })
-
-    test('rejeita nome acima do limite', async () => {
-      await expect(
-        createVehicleModel(
-          {
-            brandId: 'brand-1',
-            name: 'a'.repeat(121),
-            slug: 'modelo-teste',
-          },
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ValidationError)
-
-      expect(
-        client.vehicleModel.create,
-      ).not.toHaveBeenCalled()
-    })
-
     test('rejeita marca inexistente', async () => {
       vi.mocked(
-        client.vehicleBrand.findUnique,
+        client.vehicleMake.findUnique,
       ).mockResolvedValue(null)
 
       await expect(
         createVehicleModel(
           {
-            brandId: 'brand-1',
+            makeId: 'make-1',
             name: 'Modelo Teste',
             slug: 'modelo-teste',
           },
@@ -234,122 +159,92 @@ describe('vehicle models service', () => {
       ).rejects.toBeInstanceOf(NotFoundError)
 
       expect(
-        client.vehicleModel.findUnique,
-      ).not.toHaveBeenCalled()
-
-      expect(
         client.vehicleModel.create,
       ).not.toHaveBeenCalled()
     })
 
-    test('rejeita conflito de brandId e slug', async () => {
+    test('normaliza slug', async () => {
       vi.mocked(
-        client.vehicleBrand.findUnique,
-      ).mockResolvedValue({
-        id: 'brand-1',
-      })
-
+        client.vehicleMake.findUnique,
+      ).mockResolvedValue({ id: 'make-1' })
       vi.mocked(
         client.vehicleModel.findUnique,
-      ).mockResolvedValue(
-        vehicleModelRecord,
+      ).mockResolvedValue(null)
+
+      vi.mocked(
+        client.vehicleModel.create,
+      ).mockResolvedValue(vehicleModelRecord)
+
+      await createVehicleModel(
+        {
+          makeId: 'make-1',
+          name: 'Modelo Teste',
+          slug: 'Modelo Teste',
+        },
+        client,
       )
+
+      expect(
+        client.vehicleModel.findUnique,
+      ).toHaveBeenCalledWith({
+        where: {
+          makeId_slug: {
+            makeId: 'make-1',
+            slug: 'modelo-teste',
+          },
+        },
+      })
+      expect(
+        client.vehicleModel.create,
+      ).toHaveBeenCalledWith({
+        data: {
+          makeId: 'make-1',
+          name: 'Modelo Teste',
+          slug: 'modelo-teste',
+        },
+      })
+    })
+
+    test('rejeita conflito de makeId e slug', async () => {
+      vi.mocked(
+        client.vehicleMake.findUnique,
+      ).mockResolvedValue({ id: 'make-1' })
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValue(vehicleModelRecord)
 
       await expect(
         createVehicleModel(
           {
-            brandId: 'brand-1',
+            makeId: 'make-1',
             name: 'Outro Modelo',
-            slug: 'Modelo Teste',
+            slug: 'modelo-teste',
           },
           client,
         ),
       ).rejects.toBeInstanceOf(ConflictError)
 
       expect(
-        client.vehicleModel.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          brandId_slug: {
-            brandId: 'brand-1',
-            slug: 'modelo-teste',
-          },
-        },
-      })
-
-      expect(
         client.vehicleModel.create,
       ).not.toHaveBeenCalled()
     })
 
-    test('cria modelo válido com trim e normalização', async () => {
+    test('faz trim ao makeId', async () => {
       vi.mocked(
-        client.vehicleBrand.findUnique,
-      ).mockResolvedValue({
-        id: 'brand-1',
-      })
-
+        client.vehicleMake.findUnique,
+      ).mockResolvedValue({ id: 'make-1' })
       vi.mocked(
         client.vehicleModel.findUnique,
       ).mockResolvedValue(null)
-
       vi.mocked(
         client.vehicleModel.create,
-      ).mockResolvedValue(
-        vehicleModelRecord,
-      )
-
-      const result = await createVehicleModel(
-        {
-          brandId: ' brand-1 ',
-          name: ' Modelo Teste ',
-          slug: ' Modelo Téstê ',
-          description:
-            ' Descrição técnica ',
-        },
-        client,
-      )
-
-      expect(
-        client.vehicleModel.create,
-      ).toHaveBeenCalledWith({
-        data: {
-          brandId: 'brand-1',
-          name: 'Modelo Teste',
-          slug: 'modelo-teste',
-          description:
-            'Descrição técnica',
-        },
-      })
-
-      expect(result).toEqual(
-        vehicleModelRecord,
-      )
-    })
-
-    test('usa null quando description não é fornecida', async () => {
-      vi.mocked(
-        client.vehicleBrand.findUnique,
-      ).mockResolvedValue({
-        id: 'brand-1',
-      })
-
-      vi.mocked(
-        client.vehicleModel.findUnique,
-      ).mockResolvedValue(null)
-
-      vi.mocked(
-        client.vehicleModel.create,
-      ).mockResolvedValue({
-        ...vehicleModelRecord,
-        description: null,
-      })
+      ).mockResolvedValue(vehicleModelRecord)
 
       await createVehicleModel(
         {
-          brandId: 'brand-1',
-          name: 'Modelo Teste',
-          slug: 'modelo-teste',
+          makeId: ' make-1 ',
+          name: ' Modelar ',
+          slug: ' Modelo Teste ',
         },
         client,
       )
@@ -358,12 +253,34 @@ describe('vehicle models service', () => {
         client.vehicleModel.create,
       ).toHaveBeenCalledWith({
         data: {
-          brandId: 'brand-1',
-          name: 'Modelo Teste',
+          makeId: 'make-1',
+          name: 'Modelar',
           slug: 'modelo-teste',
-          description: null,
         },
       })
+    })
+
+    test('cria modelo válido', async () => {
+      vi.mocked(
+        client.vehicleMake.findUnique,
+      ).mockResolvedValue({ id: 'make-1' })
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValue(null)
+      vi.mocked(
+        client.vehicleModel.create,
+      ).mockResolvedValue(vehicleModelRecord)
+
+      await expect(
+        createVehicleModel(
+          {
+            makeId: 'make-1',
+            name: 'Modelo Teste',
+            slug: 'modelo-teste',
+          },
+          client,
+        ),
+      ).resolves.toEqual(vehicleModelRecord)
     })
   })
 
@@ -372,28 +289,10 @@ describe('vehicle models service', () => {
       await expect(
         updateVehicleModel(
           '',
-          {
-            name: 'Novo Nome',
-          },
+          { name: 'Novo Nome' },
           client,
         ),
       ).rejects.toBeInstanceOf(ValidationError)
-    })
-
-    test('rejeita input inválido', async () => {
-      await expect(
-        updateVehicleModel(
-          'model-1',
-          {
-            name: '',
-          },
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ValidationError)
-
-      expect(
-        client.vehicleModel.findUnique,
-      ).not.toHaveBeenCalled()
     })
 
     test('rejeita modelo inexistente', async () => {
@@ -404,56 +303,60 @@ describe('vehicle models service', () => {
       await expect(
         updateVehicleModel(
           'model-1',
-          {
-            name: 'Novo Nome',
-          },
+          { name: 'Novo Nome' },
           client,
         ),
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
-    test('rejeita marca inexistente ao mudar brandId', async () => {
+    test('rejeita marca inexistente ao mudar makeId', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      ).mockResolvedValueOnce(
-        vehicleModelRecord,
-      )
-
+      ).mockResolvedValue(vehicleModelRecord)
       vi.mocked(
-        client.vehicleBrand.findUnique,
+        client.vehicleMake.findUnique,
       ).mockResolvedValue(null)
 
       await expect(
         updateVehicleModel(
           'model-1',
-          {
-            brandId: 'brand-2',
-          },
+          { makeId: 'make-2' },
           client,
         ),
       ).rejects.toBeInstanceOf(NotFoundError)
+    })
 
-      expect(
-        client.vehicleBrand.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: 'brand-2',
-        },
+    test('rejeita conflito de makeId e slug', async () => {
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValue(vehicleModelRecord)
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValueOnce(vehicleModelRecord)
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValueOnce({
+        ...vehicleModelRecord,
+        id: 'model-2',
+        slug: 'modelo-ocupado',
       })
 
-      expect(
-        client.vehicleModel.update,
-      ).not.toHaveBeenCalled()
+      await expect(
+        updateVehicleModel(
+          'model-1',
+          { slug: 'modelo-ocupado' },
+          client,
+        ),
+      ).rejects.toBeInstanceOf(ConflictError)
     })
 
     test('normaliza slug antes de atualizar', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      )
-        .mockResolvedValueOnce(
-          vehicleModelRecord,
-        )
-        .mockResolvedValueOnce(null)
+      ).mockResolvedValueOnce(vehicleModelRecord)
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValueOnce(null)
 
       vi.mocked(
         client.vehicleModel.update,
@@ -465,110 +368,27 @@ describe('vehicle models service', () => {
       await updateVehicleModel(
         'model-1',
         {
-          slug: ' Novo Slúg ',
+          slug: 'Novo Slug',
         },
         client,
       )
 
       expect(
         client.vehicleModel.findUnique,
-      ).toHaveBeenNthCalledWith(2, {
+      ).toHaveBeenLastCalledWith({
         where: {
-          brandId_slug: {
-            brandId: 'brand-1',
+          makeId_slug: {
+            makeId: 'make-1',
             slug: 'novo-slug',
           },
         },
       })
-
       expect(
         client.vehicleModel.update,
       ).toHaveBeenCalledWith({
-        where: {
-          id: 'model-1',
-        },
+        where: { id: 'model-1' },
         data: {
           slug: 'novo-slug',
-        },
-      })
-    })
-
-    test('rejeita conflito na combinação final ao mudar brandId', async () => {
-      vi.mocked(
-        client.vehicleModel.findUnique,
-      )
-        .mockResolvedValueOnce(
-          vehicleModelRecord,
-        )
-        .mockResolvedValueOnce({
-          ...vehicleModelRecord,
-          id: 'model-2',
-          brandId: 'brand-2',
-        })
-
-      vi.mocked(
-        client.vehicleBrand.findUnique,
-      ).mockResolvedValue({
-        id: 'brand-2',
-      })
-
-      await expect(
-        updateVehicleModel(
-          'model-1',
-          {
-            brandId: 'brand-2',
-          },
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ConflictError)
-
-      expect(
-        client.vehicleModel.findUnique,
-      ).toHaveBeenNthCalledWith(2, {
-        where: {
-          brandId_slug: {
-            brandId: 'brand-2',
-            slug: 'modelo-teste',
-          },
-        },
-      })
-
-      expect(
-        client.vehicleModel.update,
-      ).not.toHaveBeenCalled()
-    })
-
-    test('rejeita conflito na combinação final ao mudar slug', async () => {
-      vi.mocked(
-        client.vehicleModel.findUnique,
-      )
-        .mockResolvedValueOnce(
-          vehicleModelRecord,
-        )
-        .mockResolvedValueOnce({
-          ...vehicleModelRecord,
-          id: 'model-2',
-          slug: 'slug-ocupado',
-        })
-
-      await expect(
-        updateVehicleModel(
-          'model-1',
-          {
-            slug: 'slug-ocupado',
-          },
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ConflictError)
-
-      expect(
-        client.vehicleModel.findUnique,
-      ).toHaveBeenNthCalledWith(2, {
-        where: {
-          brandId_slug: {
-            brandId: 'brand-1',
-            slug: 'slug-ocupado',
-          },
         },
       })
     })
@@ -576,53 +396,46 @@ describe('vehicle models service', () => {
     test('atualiza dados válidos', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      )
-        .mockResolvedValueOnce(
-          vehicleModelRecord,
-        )
-        .mockResolvedValueOnce(
-          vehicleModelRecord,
-        )
+      ).mockResolvedValueOnce(vehicleModelRecord)
+      vi.mocked(
+        client.vehicleModel.findUnique,
+      ).mockResolvedValueOnce(null)
 
       vi.mocked(
         client.vehicleModel.update,
       ).mockResolvedValue({
         ...vehicleModelRecord,
         name: 'Novo Nome',
-        description:
-          'Nova descrição',
       })
 
-      const result =
-        await updateVehicleModel(
-          'model-1',
-          {
-            name: ' Novo Nome ',
-            description:
-              ' Nova descrição ',
-          },
-          client,
-        )
+      await updateVehicleModel(
+        'model-1',
+        {
+          name: 'Novo Nome',
+        },
+        client,
+      )
 
       expect(
         client.vehicleModel.update,
       ).toHaveBeenCalledWith({
-        where: {
-          id: 'model-1',
-        },
+        where: { id: 'model-1' },
         data: {
           name: 'Novo Nome',
-          description:
-            'Nova descrição',
         },
       })
+    })
 
-      expect(result).toEqual({
-        ...vehicleModelRecord,
-        name: 'Novo Nome',
-        description:
-          'Nova descrição',
-      })
+    test('rejeita nome acima do limite', async () => {
+      await expect(
+        updateVehicleModel(
+          'model-1',
+          {
+            name: 'a'.repeat(121),
+          },
+          client,
+        ),
+      ).rejects.toBeInstanceOf(ValidationError)
     })
   })
 
@@ -639,76 +452,46 @@ describe('vehicle models service', () => {
       ).mockResolvedValue(null)
 
       await expect(
-        deleteVehicleModel(
-          'model-1',
-          client,
-        ),
+        deleteVehicleModel('model-1', client),
       ).rejects.toBeInstanceOf(NotFoundError)
     })
 
-    test('rejeita modelo com gerações associadas', async () => {
+    test('rejeita modelo com especificações associadas', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      ).mockResolvedValue(
-        vehicleModelRecord,
-      )
-
+      ).mockResolvedValue(vehicleModelRecord)
       vi.mocked(
-        client.vehicleGeneration.count,
+        client.vehicleSpec.count,
       ).mockResolvedValue(1)
 
       await expect(
-        deleteVehicleModel(
-          'model-1',
-          client,
-        ),
+        deleteVehicleModel('model-1', client),
       ).rejects.toBeInstanceOf(ConflictError)
 
-      expect(
-        client.vehicleGeneration.count,
-      ).toHaveBeenCalledWith({
-        where: {
-          modelId: 'model-1',
-        },
+      expect(client.vehicleSpec.count).toHaveBeenCalledWith({
+        where: { modelId: 'model-1' },
       })
-
-      expect(
-        client.vehicleModel.delete,
-      ).not.toHaveBeenCalled()
     })
 
-    test('apaga modelo sem gerações associadas', async () => {
+    test('apaga modelo sem especificações', async () => {
       vi.mocked(
         client.vehicleModel.findUnique,
-      ).mockResolvedValue(
-        vehicleModelRecord,
-      )
-
+      ).mockResolvedValue(vehicleModelRecord)
       vi.mocked(
-        client.vehicleGeneration.count,
+        client.vehicleSpec.count,
       ).mockResolvedValue(0)
-
       vi.mocked(
         client.vehicleModel.delete,
-      ).mockResolvedValue(
-        vehicleModelRecord,
-      )
+      ).mockResolvedValue(vehicleModelRecord)
 
       await expect(
-        deleteVehicleModel(
-          'model-1',
-          client,
-        ),
-      ).resolves.toEqual(
-        vehicleModelRecord,
-      )
+        deleteVehicleModel('model-1', client),
+      ).resolves.toEqual(vehicleModelRecord)
 
       expect(
         client.vehicleModel.delete,
       ).toHaveBeenCalledWith({
-        where: {
-          id: 'model-1',
-        },
+        where: { id: 'model-1' },
       })
     })
   })

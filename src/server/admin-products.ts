@@ -124,20 +124,11 @@ const adminVariantSchema = z.object({
 })
 
 const adminCompatibilitySchema = z.object({
-  vehicleBrandId: z.string().trim().min(1),
-  vehicleModelId: z.string().trim().min(1),
-  vehicleGenerationId: nullableIdSchema,
-  vehicleConfigurationId: nullableIdSchema,
-  yearMin: z
-    .number()
-    .int()
-    .positive()
-    .nullable()
-    .optional(),
-  yearMax: z
-    .number()
-    .int()
-    .positive()
+  vehicleSpecId: z.string().trim().min(1),
+  notes: z
+    .string()
+    .trim()
+    .max(500)
     .nullable()
     .optional(),
 })
@@ -313,40 +304,11 @@ const adminProductWorkspaceSchema = z
 
     data.compatibilities.forEach(
       (compatibility, index) => {
-        const yearMin =
-          compatibility.yearMin ?? null
-        const yearMax =
-          compatibility.yearMax ?? null
-
         if (
-          yearMin !== null &&
-          yearMax !== null &&
-          yearMax < yearMin
+          compatibilitySignatures.has(
+            compatibility.vehicleSpecId,
+          )
         ) {
-          context.addIssue({
-            code: 'custom',
-            path: [
-              'compatibilities',
-              index,
-              'yearMax',
-            ],
-            message:
-              'O ano final tem de ser igual ou posterior ao inicial',
-          })
-        }
-
-        const signature = [
-          compatibility.vehicleBrandId,
-          compatibility.vehicleModelId,
-          compatibility.vehicleGenerationId ??
-            '',
-          compatibility.vehicleConfigurationId ??
-            '',
-          yearMin,
-          yearMax,
-        ].join(':')
-
-        if (compatibilitySignatures.has(signature)) {
           context.addIssue({
             code: 'custom',
             path: ['compatibilities', index],
@@ -355,7 +317,9 @@ const adminProductWorkspaceSchema = z
           })
         }
 
-        compatibilitySignatures.add(signature)
+        compatibilitySignatures.add(
+          compatibility.vehicleSpecId,
+        )
       },
     )
   })
@@ -427,29 +391,25 @@ export type AdminProduct = {
   }>
   compatibilities: Array<{
     id: string
-    vehicleBrandId: string
-    vehicleModelId: string
-    vehicleGenerationId: string | null
-    vehicleConfigurationId: string | null
-    yearMin: number | null
-    yearMax: number | null
-    vehicleBrand: {
+    vehicleSpecId: string
+    notes: string | null
+    vehicleSpec: {
       id: string
-      name: string
-    }
-    vehicleModel: {
-      id: string
-      name: string
-    }
-    vehicleGeneration: {
-      id: string
-      name: string
-    } | null
-    vehicleConfiguration: {
-      id: string
-      name: string
+      engine: string
       engineCode: string | null
-    } | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
+      model: {
+        id: string
+        name: string
+        make: {
+          id: string
+          name: string
+        }
+      }
+    }
   }>
 }
 
@@ -462,11 +422,11 @@ export type AdminProductClient = Pick<
   | 'productOptionValue'
   | 'productVariantOptionSelection'
   | 'productVariantSpecification'
-  | 'productVehicleCompatibility'
+  | 'productCompatibility'
   | 'productImage'
   | 'productBrand'
   | 'category'
-  | 'vehicleModel'
+  | 'vehicleSpec'
   | 'cartItem'
   | 'orderItem'
 >
@@ -618,39 +578,33 @@ const adminProductSelect = {
   },
   compatibilities: {
     orderBy: {
-      id: 'asc' as const,
+      createdAt: 'asc' as const,
     },
     select: {
       id: true,
-      vehicleBrandId: true,
-      vehicleModelId: true,
-      vehicleGenerationId: true,
-      vehicleConfigurationId: true,
-      yearMin: true,
-      yearMax: true,
-      vehicleBrand: {
+      vehicleSpecId: true,
+      notes: true,
+      vehicleSpec: {
         select: {
           id: true,
-          name: true,
-        },
-      },
-      vehicleModel: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      vehicleGeneration: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-      vehicleConfiguration: {
-        select: {
-          id: true,
-          name: true,
+          engine: true,
           engineCode: true,
+          yearStart: true,
+          yearEnd: true,
+          fuelType: true,
+          powerHp: true,
+          model: {
+            select: {
+              id: true,
+              name: true,
+              make: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -2139,102 +2093,37 @@ async function replaceCompatibilities(
     )
   }
 
-  await transaction.productVehicleCompatibility.deleteMany(
+  await transaction.productCompatibility.deleteMany(
     {
       where: { productId },
     },
   )
 
   for (const compatibility of requestedCompatibilities) {
-    const vehicleModel =
-      await transaction.vehicleModel.findUnique(
+    const vehicleSpec =
+      await transaction.vehicleSpec.findUnique(
         {
           where: {
-            id: compatibility.vehicleModelId,
+            id: compatibility.vehicleSpecId,
           },
-          select: {
-            brandId: true,
-            generations: {
-              select: {
-                id: true,
-                configurations: {
-                  select: { id: true },
-                },
-              },
-            },
-          },
+          select: { id: true },
         },
       )
 
-    if (!vehicleModel) {
+    if (!vehicleSpec) {
       throw new AdminProductValidationError(
-        'Um dos modelos de veículos selecionados já não existe.',
+        'Uma das especificações de veículo selecionadas já não existe.',
       )
     }
 
-    if (
-      vehicleModel.brandId !==
-      compatibility.vehicleBrandId
-    ) {
-      throw new AdminProductValidationError(
-        'A marca e o modelo de veículo não pertencem à mesma hierarquia.',
-      )
-    }
-
-    const generation =
-      compatibility.vehicleGenerationId
-        ? vehicleModel.generations.find(
-            (item) =>
-              item.id ===
-              compatibility.vehicleGenerationId,
-          )
-        : null
-
-    if (
-      compatibility.vehicleGenerationId &&
-      !generation
-    ) {
-      throw new AdminProductValidationError(
-        'A geração selecionada não pertence ao modelo de veículo escolhido.',
-      )
-    }
-
-    const configuration =
-      compatibility.vehicleConfigurationId
-        ? generation?.configurations.find(
-            (item) =>
-              item.id ===
-              compatibility.vehicleConfigurationId,
-          )
-        : null
-
-    if (
-      compatibility.vehicleConfigurationId &&
-      !configuration
-    ) {
-      throw new AdminProductValidationError(
-        'O motor selecionado não pertence à geração escolhida.',
-      )
-    }
-
-    await transaction.productVehicleCompatibility.create(
+    await transaction.productCompatibility.create(
       {
         data: {
           productId,
-          vehicleBrandId:
-            compatibility.vehicleBrandId,
-          vehicleModelId:
-            compatibility.vehicleModelId,
-          vehicleGenerationId:
-            compatibility.vehicleGenerationId ??
-            null,
-          vehicleConfigurationId:
-            compatibility.vehicleConfigurationId ??
-            null,
-          yearMin:
-            compatibility.yearMin ?? null,
-          yearMax:
-            compatibility.yearMax ?? null,
+          vehicleSpecId:
+            compatibility.vehicleSpecId,
+          notes:
+            compatibility.notes ?? null,
         },
       },
     )
@@ -2647,7 +2536,7 @@ export async function updateAdminProduct(
         profile === 'wheels'
       ) {
         const compatibilityCount =
-          await transaction.productVehicleCompatibility.count(
+          await transaction.productCompatibility.count(
             {
               where: { productId: id },
             },
@@ -3263,18 +3152,9 @@ export async function duplicateAdminProduct(
         profile,
         source.compatibilities.map(
           (compatibility) => ({
-            vehicleBrandId:
-              compatibility.vehicleBrandId,
-            vehicleModelId:
-              compatibility.vehicleModelId,
-            vehicleGenerationId:
-              compatibility.vehicleGenerationId,
-            vehicleConfigurationId:
-              compatibility.vehicleConfigurationId,
-            yearMin:
-              compatibility.yearMin,
-            yearMax:
-              compatibility.yearMax,
+            vehicleSpecId:
+              compatibility.vehicleSpecId,
+            notes: compatibility.notes,
           }),
         ),
       )

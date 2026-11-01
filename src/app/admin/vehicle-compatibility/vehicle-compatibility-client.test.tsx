@@ -22,31 +22,23 @@ const tree = [
     id: 'make-vw',
     name: 'Volkswagen',
     slug: 'volkswagen',
+    createdAt: '2026-01-01T00:00:00.000Z',
     models: [
       {
         id: 'model-golf',
         name: 'Golf',
         slug: 'golf',
-        description: null,
-        generations: [
+        createdAt: '2026-01-01T00:00:00.000Z',
+        specs: [
           {
-            id: 'generation-mk7',
-            name: 'Mk7',
-            platform: 'MQB',
-            description: null,
-            configurations: [
-              {
-                id: 'configuration-tdi',
-                name: '2.0 TDI 150',
-                engineCode: 'CRLB',
-                engineType: 'Diesel',
-                displacementCc: 1968,
-                powerKw: 110,
-                bodyType: 'Hatchback',
-                yearFrom: 2012,
-                yearTo: 2019,
-              },
-            ],
+            id: 'spec-tdi',
+            engine: '2.0 TDI 150',
+            engineCode: 'CRLB',
+            yearStart: 2013,
+            yearEnd: 2020,
+            fuelType: 'DIESEL',
+            powerHp: 150,
+            createdAt: '2026-01-01T00:00:00.000Z',
           },
         ],
       },
@@ -87,7 +79,7 @@ describe('VehicleCompatibilityClient', () => {
 
         if (
           init?.method === 'POST' &&
-          url === '/api/admin/vehicle-brands'
+          url === '/api/admin/vehicle-makes'
         ) {
           return jsonResponse(
             {
@@ -101,12 +93,11 @@ describe('VehicleCompatibilityClient', () => {
 
         if (
           init?.method === 'POST' &&
-          url ===
-            '/api/admin/vehicle-configurations'
+          url === '/api/admin/vehicle-specs'
         ) {
           return jsonResponse(
             {
-              id: 'configuration-new',
+              id: 'spec-new',
             },
             201,
           )
@@ -130,7 +121,7 @@ describe('VehicleCompatibilityClient', () => {
     vi.unstubAllGlobals()
   })
 
-  test('mostra a hierarquia sem expor entidades separadas', async () => {
+  test('mostra a hierarquia Make → Model → Spec', async () => {
     render(<VehicleCompatibilityClient />)
 
     expect(
@@ -140,29 +131,26 @@ describe('VehicleCompatibilityClient', () => {
       screen.getByText('Golf'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Mk7'),
-    ).toBeInTheDocument()
-    expect(
       screen.getByText('2.0 TDI 150'),
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        'Motor CRLB · Diesel · 1968 cc · 110 kW · 2012–2019',
+        'Código CRLB · DIESEL · 2013–2020 · 150 cv',
       ),
     ).toBeInTheDocument()
   })
 
-  test('cria um motor inline na geração selecionada', async () => {
+  test('cria uma especificação inline no modelo selecionado', async () => {
     render(<VehicleCompatibilityClient />)
     await screen.findByText('Volkswagen')
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: '+ Motor',
+        name: '+ Especificação',
       }),
     )
     fireEvent.change(
-      screen.getByLabelText('Motor de Mk7'),
+      screen.getByLabelText('Motor de Golf'),
       {
         target: { value: '2.0 TSI' },
       },
@@ -171,6 +159,12 @@ describe('VehicleCompatibilityClient', () => {
       screen.getByLabelText('Código de motor'),
       {
         target: { value: 'DNPA' },
+      },
+    )
+    fireEvent.change(
+      screen.getByLabelText('Ano inicial'),
+      {
+        target: { value: '2013' },
       },
     )
     fireEvent.click(
@@ -182,7 +176,10 @@ describe('VehicleCompatibilityClient', () => {
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(
         ([, init]) =>
-          init?.method === 'POST',
+          init?.method === 'POST' &&
+          (init?.headers as Record<string, string>)
+            ?.['Content-Type'] ===
+            'application/json',
       )
       expect(post).toBeDefined()
       expect(
@@ -191,9 +188,10 @@ describe('VehicleCompatibilityClient', () => {
             .body as string,
         ),
       ).toMatchObject({
-        generationId: 'generation-mk7',
-        name: '2.0 TSI',
+        modelId: 'model-golf',
+        engine: '2.0 TSI',
         engineCode: 'DNPA',
+        fuelType: 'DIESEL',
       })
     })
   })

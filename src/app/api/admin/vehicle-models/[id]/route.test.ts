@@ -54,10 +54,10 @@ import {
 
 const vehicleModel = {
   id: 'model-1',
-  brandId: 'brand-1',
+  makeId: 'brand-1',
   name: 'Modelo Técnico',
   slug: 'modelo-tecnico',
-  description: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 function createContext(id = 'model-1') {
@@ -401,7 +401,7 @@ describe('/api/admin/vehicle-models/[id]', () => {
 
       const response = await PATCH(
         createPatchRequest({
-          brandId: 'brand-inexistente',
+          makeId: 'brand-inexistente',
         }),
         createContext(),
       )

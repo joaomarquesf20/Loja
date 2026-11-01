@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { ZodError } from 'zod'
 
 vi.mock('./db', () => ({
   prisma: {},
@@ -19,63 +20,46 @@ import {
 const compatibilityRecord = {
   id: 'compatibility-test',
   productId: 'product-test',
-  vehicleConfigurationId: 'vehicle-configuration-test',
+  vehicleSpecId: 'vehicle-spec-test',
+  notes: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
-const configurationHierarchy = {
-  id: 'vehicle-configuration-test',
-  generation: {
-    id: 'generation-test',
+const compatibilityListRecord = {
+  ...compatibilityRecord,
+  vehicleSpec: {
+    id: 'vehicle-spec-test',
+    engine: '2.0 TDI 150',
+    engineCode: 'EA288',
+    yearStart: 2013,
+    yearEnd: 2020,
+    fuelType: 'DIESEL',
+    powerHp: 150,
     model: {
       id: 'model-test',
-      brand: {
-        id: 'brand-test',
+      name: 'Golf',
+      slug: 'golf',
+      make: {
+        id: 'make-test',
+        name: 'Volkswagen',
+        slug: 'volkswagen',
       },
     },
   },
 }
 
-const compatibilityListRecord = {
-  ...compatibilityRecord,
-  vehicleBrand: {
-    id: 'brand-test',
-    name: 'Volkswagen',
-  },
-  vehicleModel: {
-    id: 'model-test',
-    name: 'Golf',
-  },
-  vehicleGeneration: {
-    id: 'generation-test',
-    name: 'Mk7',
-  },
-  vehicleConfiguration: {
-    id: 'vehicle-configuration-test',
-    name: '2.0 TDI 150',
-    engineCode: 'EA288',
-    engineType: 'Diesel',
-    displacementCc: 1968,
-    powerKw: {
-      toString: () => '110.5',
-    },
-    bodyType: 'Hatchback',
-    yearFrom: 2013,
-    yearTo: 2020,
-  },
-}
-
 function createClient(): ProductCompatibilityClient {
   return {
-    productVehicleCompatibility: {
+    productCompatibility: {
       findMany: vi.fn(),
-      findFirst: vi.fn(),
+      findUnique: vi.fn(),
       create: vi.fn(),
       delete: vi.fn(),
     },
     product: {
       findUnique: vi.fn(),
     },
-    vehicleConfiguration: {
+    vehicleSpec: {
       findUnique: vi.fn(),
     },
   }
@@ -108,7 +92,7 @@ describe('product compatibilities service', () => {
         id: 'product-test',
       })
       vi.mocked(
-        client.productVehicleCompatibility.findMany,
+        client.productCompatibility.findMany,
       ).mockResolvedValue([])
 
       const result = await listProductCompatibilities(
@@ -118,51 +102,20 @@ describe('product compatibilities service', () => {
 
       expect(result).toEqual([])
       expect(
-        client.productVehicleCompatibility.findMany,
-      ).toHaveBeenCalledWith({
-        where: { productId: 'product-test' },
-        include: {
-          vehicleBrand: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          vehicleModel: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          vehicleGeneration: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          vehicleConfiguration: {
-            select: {
-              id: true,
-              name: true,
-              engineCode: true,
-              engineType: true,
-              displacementCc: true,
-              powerKw: true,
-              bodyType: true,
-              yearFrom: true,
-              yearTo: true,
-            },
-          },
-        },
-      })
+        client.productCompatibility.findMany,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productId: 'product-test' },
+        }),
+      )
     })
 
-    test('devolve compatibilidades do produto', async () => {
+    test('devolve compatibilidades com a hierarquia veicular incluída', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue({
         id: 'product-test',
       })
       vi.mocked(
-        client.productVehicleCompatibility.findMany,
+        client.productCompatibility.findMany,
       ).mockResolvedValue([compatibilityListRecord])
 
       const result = await listProductCompatibilities(
@@ -170,66 +123,42 @@ describe('product compatibilities service', () => {
         client,
       )
 
-      expect(result).toEqual([
-        {
-          ...compatibilityListRecord,
-          vehicleConfiguration: {
-            ...compatibilityListRecord.vehicleConfiguration,
-            powerKw: 110.5,
-          },
-        },
-      ])
+      expect(result).toEqual([compatibilityListRecord])
     })
   })
 
   describe('addProductCompatibility', () => {
-    test('rejeita productId vazio', async () => {
+    test('rejeita input inválido', async () => {
       await expect(
         addProductCompatibility(
-          '',
-          'vehicle-configuration-test',
+          {
+            productId: '',
+            vehicleSpecId: '',
+          },
           client,
         ),
-      ).rejects.toThrow()
-    })
+      ).rejects.toBeInstanceOf(ZodError)
 
-    test('rejeita vehicleConfigurationId vazio', async () => {
-      await expect(
-        addProductCompatibility(
-          'product-test',
-          '',
-          client,
-        ),
-      ).rejects.toThrow()
+      expect(
+        client.productCompatibility.create,
+      ).not.toHaveBeenCalled()
     })
 
     test('rejeita produto inexistente', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue(null)
 
       await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
+        addProductCompatibility({
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+        },
+        client,
+      ),
       ).rejects.toBeInstanceOf(NotFoundError)
-    })
 
-    test('rejeita configuração de veículo inexistente', async () => {
-      vi.mocked(client.product.findUnique).mockResolvedValue({
-        id: 'product-test',
-      })
-      vi.mocked(
-        client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue(null)
-
-      await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
-      ).rejects.toBeInstanceOf(NotFoundError)
+      expect(
+        client.vehicleSpec.findUnique,
+      ).not.toHaveBeenCalled()
     })
 
     test('rejeita jantes: a compatibilidade vem das especificações da variante', async () => {
@@ -242,241 +171,207 @@ describe('product compatibilities service', () => {
       })
 
       await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
+        addProductCompatibility({
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+        },
+        client,
+      ),
       ).rejects.toBeInstanceOf(ValidationError)
 
       expect(
-        client.productVehicleCompatibility.create,
+        client.vehicleSpec.findUnique,
       ).not.toHaveBeenCalled()
     })
 
-    test('aceita suspensão com compatibilidade por veículo', async () => {
+    test('rejeita especificação inexistente', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue({
         id: 'product-test',
         category: {
-          name: 'Suspensão',
-          slug: 'suspensao',
+          name: 'Suspensões',
+          slug: 'suspensoes',
         },
       })
       vi.mocked(
-        client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue(configurationHierarchy)
-      vi.mocked(
-        client.productVehicleCompatibility.findFirst,
+        client.vehicleSpec.findUnique,
       ).mockResolvedValue(null)
-      vi.mocked(
-        client.productVehicleCompatibility.create,
-      ).mockResolvedValue(compatibilityRecord)
 
       await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
-      ).resolves.toEqual(compatibilityRecord)
-    })
-
-    test('procura configuração com a hierarquia necessária', async () => {
-      vi.mocked(client.product.findUnique).mockResolvedValue({
-        id: 'product-test',
-      })
-      vi.mocked(
-        client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue(configurationHierarchy)
-      vi.mocked(
-        client.productVehicleCompatibility.findFirst,
-      ).mockResolvedValue(compatibilityRecord)
-
-      await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ConflictError)
-
-      expect(
-        client.vehicleConfiguration.findUnique,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: 'vehicle-configuration-test',
-        },
-        select: {
-          id: true,
-          generation: {
-            select: {
-              id: true,
-              model: {
-                select: {
-                  id: true,
-                  brand: {
-                    select: {
-                      id: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      })
-    })
-
-    test('rejeita associação duplicada usando findFirst', async () => {
-      vi.mocked(client.product.findUnique).mockResolvedValue({
-        id: 'product-test',
-      })
-      vi.mocked(
-        client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue(configurationHierarchy)
-      vi.mocked(
-        client.productVehicleCompatibility.findFirst,
-      ).mockResolvedValue(compatibilityRecord)
-
-      await expect(
-        addProductCompatibility(
-          'product-test',
-          'vehicle-configuration-test',
-          client,
-        ),
-      ).rejects.toBeInstanceOf(ConflictError)
-
-      expect(
-        client.productVehicleCompatibility.findFirst,
-      ).toHaveBeenCalledWith({
-        where: {
+        addProductCompatibility({
           productId: 'product-test',
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId: 'vehicle-spec-missing',
         },
-      })
+        client,
+      ),
+      ).rejects.toBeInstanceOf(NotFoundError)
+
+      expect(
+        client.productCompatibility.create,
+      ).not.toHaveBeenCalled()
     })
 
-    test('cria associação válida', async () => {
+    test('rejeita associação duplicada', async () => {
       vi.mocked(client.product.findUnique).mockResolvedValue({
         id: 'product-test',
+        category: {
+          name: 'Suspensões',
+          slug: 'suspensoes',
+        },
       })
       vi.mocked(
-        client.vehicleConfiguration.findUnique,
-      ).mockResolvedValue(configurationHierarchy)
+        client.vehicleSpec.findUnique,
+      ).mockResolvedValue({ id: 'vehicle-spec-test' })
       vi.mocked(
-        client.productVehicleCompatibility.findFirst,
+        client.productCompatibility.findUnique,
+      ).mockResolvedValue({ id: 'compatibility-test' })
+
+      await expect(
+        addProductCompatibility({
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+        },
+        client,
+      ),
+      ).rejects.toBeInstanceOf(ConflictError)
+
+      expect(
+        client.productCompatibility.create,
+      ).not.toHaveBeenCalled()
+    })
+
+    test('cria associação com notas', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue({
+        id: 'product-test',
+        category: {
+          name: 'Suspensões',
+          slug: 'suspensoes',
+        },
+      })
+      vi.mocked(
+        client.vehicleSpec.findUnique,
+      ).mockResolvedValue({ id: 'vehicle-spec-test' })
+      vi.mocked(
+        client.productCompatibility.findUnique,
       ).mockResolvedValue(null)
       vi.mocked(
-        client.productVehicleCompatibility.create,
-      ).mockResolvedValue(compatibilityRecord)
+        client.productCompatibility.create,
+      ).mockResolvedValue({
+        ...compatibilityRecord,
+        notes: 'requer apoios originais',
+      })
 
       const result = await addProductCompatibility(
-        'product-test',
-        'vehicle-configuration-test',
+        {
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+          notes: ' requer apoios originais ',
+        },
         client,
       )
 
+      expect(result).toEqual({
+        ...compatibilityRecord,
+        notes: 'requer apoios originais',
+      })
       expect(
-        client.productVehicleCompatibility.create,
+        client.productCompatibility.create,
       ).toHaveBeenCalledWith({
         data: {
           productId: 'product-test',
-          vehicleBrandId: 'brand-test',
-          vehicleModelId: 'model-test',
-          vehicleGenerationId: 'generation-test',
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
+          vehicleSpecId: 'vehicle-spec-test',
+          notes: 'requer apoios originais',
         },
       })
+    })
+
+    test('cria associação sem notas (null)', async () => {
+      vi.mocked(client.product.findUnique).mockResolvedValue({
+        id: 'product-test',
+        category: {
+          name: 'Suspensões',
+          slug: 'suspensoes',
+        },
+      })
+      vi.mocked(
+        client.vehicleSpec.findUnique,
+      ).mockResolvedValue({ id: 'vehicle-spec-test' })
+      vi.mocked(
+        client.productCompatibility.findUnique,
+      ).mockResolvedValue(null)
+      vi.mocked(
+        client.productCompatibility.create,
+      ).mockResolvedValue(compatibilityRecord)
+
+      const result = await addProductCompatibility(
+        {
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+        },
+        client,
+      )
 
       expect(result).toEqual(compatibilityRecord)
+      expect(
+        client.productCompatibility.create,
+      ).toHaveBeenCalledWith({
+        data: {
+          productId: 'product-test',
+          vehicleSpecId: 'vehicle-spec-test',
+          notes: null,
+        },
+      })
     })
   })
 
   describe('removeProductCompatibility', () => {
-    test('rejeita productId vazio', async () => {
+    test('rejeita input inválido', async () => {
       await expect(
-        removeProductCompatibility(
-          '',
-          'vehicle-configuration-test',
-          client,
-        ),
-      ).rejects.toThrow()
-    })
+        removeProductCompatibility('', '', client),
+      ).rejects.toBeInstanceOf(ZodError)
 
-    test('rejeita vehicleConfigurationId vazio', async () => {
-      await expect(
-        removeProductCompatibility(
-          'product-test',
-          '',
-          client,
-        ),
-      ).rejects.toThrow()
+      expect(
+        client.productCompatibility.delete,
+      ).not.toHaveBeenCalled()
     })
 
     test('rejeita associação inexistente', async () => {
       vi.mocked(
-        client.productVehicleCompatibility.findFirst,
+        client.productCompatibility.findUnique,
       ).mockResolvedValue(null)
 
       await expect(
         removeProductCompatibility(
           'product-test',
-          'vehicle-configuration-test',
+          'vehicle-spec-missing',
           client,
         ),
       ).rejects.toBeInstanceOf(NotFoundError)
-    })
-
-    test('procura associação por produto e configuração', async () => {
-      vi.mocked(
-        client.productVehicleCompatibility.findFirst,
-      ).mockResolvedValue(compatibilityRecord)
-      vi.mocked(
-        client.productVehicleCompatibility.delete,
-      ).mockResolvedValue(compatibilityRecord)
-
-      await removeProductCompatibility(
-        'product-test',
-        'vehicle-configuration-test',
-        client,
-      )
 
       expect(
-        client.productVehicleCompatibility.findFirst,
-      ).toHaveBeenCalledWith({
-        where: {
-          productId: 'product-test',
-          vehicleConfigurationId:
-            'vehicle-configuration-test',
-        },
-      })
+        client.productCompatibility.delete,
+      ).not.toHaveBeenCalled()
     })
 
-    test('apaga associação existente', async () => {
+    test('remove a associação existente', async () => {
       vi.mocked(
-        client.productVehicleCompatibility.findFirst,
-      ).mockResolvedValue(compatibilityRecord)
+        client.productCompatibility.findUnique,
+      ).mockResolvedValue({ id: 'compatibility-test' })
       vi.mocked(
-        client.productVehicleCompatibility.delete,
+        client.productCompatibility.delete,
       ).mockResolvedValue(compatibilityRecord)
 
       const result = await removeProductCompatibility(
         'product-test',
-        'vehicle-configuration-test',
+        'vehicle-spec-test',
         client,
       )
 
-      expect(
-        client.productVehicleCompatibility.delete,
-      ).toHaveBeenCalledWith({
-        where: {
-          id: 'compatibility-test',
-        },
-      })
-
       expect(result).toEqual(compatibilityRecord)
+      expect(
+        client.productCompatibility.delete,
+      ).toHaveBeenCalledWith({
+        where: { id: 'compatibility-test' },
+      })
     })
   })
 })

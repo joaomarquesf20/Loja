@@ -20,14 +20,12 @@ const crumbLabels: Record<string, string> =
       'Definições da loja',
     'vehicle-compatibility':
       'Compatibilidade de veículos',
-    'vehicle-brands':
+    'vehicle-makes':
       'Marcas de veículos',
     'vehicle-models':
       'Modelos de veículos',
-    'vehicle-generations':
-      'Gerações de veículos',
-    'vehicle-configurations':
-      'Configurações de veículos',
+    'vehicle-specs':
+      'Especificações de veículos',
     new: 'Novo produto',
     import: 'Importação',
   }

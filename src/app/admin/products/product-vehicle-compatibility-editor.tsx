@@ -11,14 +11,18 @@ import type {
   VehicleCompatibilityTree,
 } from '@/server/vehicle-compatibility-tree'
 
+/**
+ * Épico 8 — a compatibilidade é definida ao nível da
+ * especificação de veículo (motor + anos), com cascata
+ * Make → Model → Spec e criação inline dos 3 níveis.
+ */
+
 export type ProductCompatibilityDraft = {
   key: string
-  vehicleBrandId: string
+  vehicleMakeId: string
   vehicleModelId: string
-  vehicleGenerationId: string
-  vehicleConfigurationId: string
-  yearMin: string
-  yearMax: string
+  vehicleSpecId: string
+  notes: string
 }
 
 type Props = {
@@ -29,11 +33,10 @@ type Props = {
   required?: boolean
 }
 
-type CreateLevel =
-  | 'make'
-  | 'model'
-  | 'generation'
-  | 'configuration'
+type CreateLevel = 'make' | 'model' | 'spec'
+
+type SpecOption =
+  VehicleCompatibilityTree[number]['models'][number]['specs'][number]
 
 let draftSequence = 0
 
@@ -44,12 +47,10 @@ function createDraft(
 
   return {
     key: `compatibility-${Date.now()}-${draftSequence}`,
-    vehicleBrandId: '',
+    vehicleMakeId: '',
     vehicleModelId: '',
-    vehicleGenerationId: '',
-    vehicleConfigurationId: '',
-    yearMin: '',
-    yearMax: '',
+    vehicleSpecId: '',
+    notes: '',
     ...values,
   }
 }
@@ -80,27 +81,20 @@ function toSlug(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-function optionalNumber(
-  value: string,
-) {
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return null
-  }
+function specOptionLabel(spec: SpecOption) {
+  const years =
+    spec.yearEnd !== null
+      ? `${spec.yearStart}–${spec.yearEnd}`
+      : `desde ${spec.yearStart}`
 
-  const parsed = Number(
-    trimmed.replace(',', '.'),
-  )
-  return Number.isFinite(parsed)
-    ? parsed
-    : null
+  return `${spec.engine} · ${years}`
 }
 
 function InlineCreateForm({
   level,
+  draft,
   onCreated,
   onCancel,
-  draft,
 }: {
   level: CreateLevel
   draft: ProductCompatibilityDraft
@@ -111,17 +105,14 @@ function InlineCreateForm({
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const [platform, setPlatform] = useState('')
   const [engineCode, setEngineCode] =
     useState('')
-  const [engineType, setEngineType] =
-    useState('Gasolina')
-  const [displacementCc, setDisplacementCc] =
-    useState('')
-  const [powerKw, setPowerKw] = useState('')
-  const [bodyType, setBodyType] = useState('')
-  const [yearFrom, setYearFrom] = useState('')
-  const [yearTo, setYearTo] = useState('')
+  const [fuelType, setFuelType] = useState(
+    'DIESEL',
+  )
+  const [yearStart, setYearStart] = useState('')
+  const [yearEnd, setYearEnd] = useState('')
+  const [powerHp, setPowerHp] = useState('')
   const [submitting, setSubmitting] =
     useState(false)
   const [error, setError] = useState<string | null>(
@@ -131,8 +122,7 @@ function InlineCreateForm({
   const titles: Record<CreateLevel, string> = {
     make: 'Criar marca de veículo',
     model: 'Criar modelo de veículo',
-    generation: 'Criar geração / chassis',
-    configuration: 'Criar motor / configuração',
+    spec: 'Criar especificação / motor',
   }
 
   async function handleSubmit(
@@ -143,63 +133,49 @@ function InlineCreateForm({
     setError(null)
 
     try {
-      const response = await fetch(
-        `/api/admin/vehicle-${level === 'make' ? 'brands' : level === 'model' ? 'models' : level === 'generation' ? 'generations' : 'configurations'}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type':
-              'application/json',
-          },
-          body: JSON.stringify(
-            level === 'configuration'
-              ? {
-                  generationId:
-                    draft.vehicleGenerationId,
-                  name,
-                  engineCode:
-                    engineCode || null,
-                  engineType:
-                    engineType || null,
-                  displacementCc:
-                    optionalNumber(
-                      displacementCc,
-                    ),
-                  powerKw: optionalNumber(
-                    powerKw,
-                  ),
-                  bodyType:
-                    bodyType || null,
-                  yearFrom:
-                    optionalNumber(yearFrom),
-                  yearTo: optionalNumber(
-                    yearTo,
-                  ),
-                }
-              : level === 'generation'
-                ? {
-                    modelId:
-                      draft.vehicleModelId,
-                    name,
-                    platform:
-                      platform || null,
-                    description: null,
-                  }
-                : level === 'model'
-                  ? {
-                      brandId:
-                        draft.vehicleBrandId,
-                      name,
-                      slug: toSlug(name),
-                      description: null,
-                    }
-                  : {
-                      name,
-                      slug: toSlug(name),
-                    },
-          ),
+      const endpoint =
+        level === 'make'
+          ? '/api/admin/vehicle-makes'
+          : level === 'model'
+            ? '/api/admin/vehicle-models'
+            : '/api/admin/vehicle-specs'
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json',
         },
-      )
+        body: JSON.stringify(
+          level === 'spec'
+            ? {
+                modelId:
+                  draft.vehicleModelId,
+                engine: name,
+                engineCode:
+                  engineCode || null,
+                yearStart: Number(yearStart),
+                yearEnd: yearEnd
+                  ? Number(yearEnd)
+                  : null,
+                fuelType,
+                powerHp: powerHp
+                  ? Number(powerHp)
+                  : null,
+              }
+            : level === 'model'
+              ? {
+                  makeId:
+                    draft.vehicleMakeId,
+                  name,
+                  slug: toSlug(name),
+                }
+              : {
+                  name,
+                  slug: toSlug(name),
+                },
+        ),
+      })
 
       if (!response.ok) {
         throw new Error(
@@ -231,7 +207,9 @@ function InlineCreateForm({
       </h4>
 
       <label className="grid gap-1 text-xs font-bold">
-        Nome
+        {level === 'spec'
+          ? 'Designação do motor'
+          : 'Nome'}
         <input
           required
           value={name}
@@ -242,20 +220,7 @@ function InlineCreateForm({
         />
       </label>
 
-      {level === 'generation' && (
-        <label className="grid gap-1 text-xs font-bold">
-          Plataforma / chassis
-          <input
-            value={platform}
-            onChange={(event) =>
-              setPlatform(event.target.value)
-            }
-            className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-          />
-        </label>
-      )}
-
-      {level === 'configuration' && (
+      {level === 'spec' && (
         <>
           <label className="grid gap-1 text-xs font-bold">
             Código de motor
@@ -272,56 +237,19 @@ function InlineCreateForm({
           <label className="grid gap-1 text-xs font-bold">
             Combustível
             <select
-              value={engineType}
+              value={fuelType}
               onChange={(event) =>
-                setEngineType(
+                setFuelType(
                   event.target.value,
                 )
               }
               className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
             >
-              <option>Gasolina</option>
-              <option>Diesel</option>
-              <option>Híbrido</option>
-              <option>Elétrico</option>
+              <option>DIESEL</option>
+              <option>GASOLINA</option>
+              <option>HÍBRIDO</option>
+              <option>ELÉTRICO</option>
             </select>
-          </label>
-          <label className="grid gap-1 text-xs font-bold">
-            Cilindrada (cc)
-            <input
-              type="number"
-              min="1"
-              value={displacementCc}
-              onChange={(event) =>
-                setDisplacementCc(
-                  event.target.value,
-                )
-              }
-              className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-bold">
-            Potência (kW)
-            <input
-              type="number"
-              min="0"
-              step="0.1"
-              value={powerKw}
-              onChange={(event) =>
-                setPowerKw(event.target.value)
-              }
-              className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-bold">
-            Carroçaria
-            <input
-              value={bodyType}
-              onChange={(event) =>
-                setBodyType(event.target.value)
-              }
-              className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-            />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="grid gap-1 text-xs font-bold">
@@ -330,9 +258,12 @@ function InlineCreateForm({
                 type="number"
                 min="1900"
                 max="2100"
-                value={yearFrom}
+                required
+                value={yearStart}
                 onChange={(event) =>
-                  setYearFrom(event.target.value)
+                  setYearStart(
+                    event.target.value,
+                  )
                 }
                 className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
               />
@@ -343,14 +274,29 @@ function InlineCreateForm({
                 type="number"
                 min="1900"
                 max="2100"
-                value={yearTo}
+                value={yearEnd}
                 onChange={(event) =>
-                  setYearTo(event.target.value)
+                  setYearEnd(
+                    event.target.value,
+                  )
                 }
                 className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
               />
             </label>
           </div>
+          <label className="grid gap-1 text-xs font-bold">
+            Potência (cv)
+            <input
+              type="number"
+              min="1"
+              max="2000"
+              value={powerHp}
+              onChange={(event) =>
+                setPowerHp(event.target.value)
+              }
+              className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
+            />
+          </label>
         </>
       )}
 
@@ -458,28 +404,20 @@ export default function ProductVehicleCompatibilityEditor({
 
     if (level === 'make') {
       updateDraft(draftKey, {
-        vehicleBrandId: id,
+        vehicleMakeId: id,
         vehicleModelId: '',
-        vehicleGenerationId: '',
-        vehicleConfigurationId: '',
+        vehicleSpecId: '',
       })
     }
     if (level === 'model') {
       updateDraft(draftKey, {
         vehicleModelId: id,
-        vehicleGenerationId: '',
-        vehicleConfigurationId: '',
+        vehicleSpecId: '',
       })
     }
-    if (level === 'generation') {
+    if (level === 'spec') {
       updateDraft(draftKey, {
-        vehicleGenerationId: id,
-        vehicleConfigurationId: '',
-      })
-    }
-    if (level === 'configuration') {
-      updateDraft(draftKey, {
-        vehicleConfigurationId: id,
+        vehicleSpecId: id,
       })
     }
   }
@@ -492,8 +430,8 @@ export default function ProductVehicleCompatibilityEditor({
             Aplicações de veículo
           </h3>
           <p className="mt-1 text-sm text-[#687078]">
-            Define make, modelo, geração e motor
-            sem sair do produto.
+            Define marca, modelo e especificação
+            (motor e anos) sem sair do produto.
           </p>
         </div>
         <button
@@ -536,19 +474,13 @@ export default function ProductVehicleCompatibilityEditor({
             const make = tree.find(
               (item) =>
                 item.id ===
-                draft.vehicleBrandId,
+                draft.vehicleMakeId,
             )
             const model = make?.models.find(
               (item) =>
                 item.id ===
                 draft.vehicleModelId,
             )
-            const generation =
-              model?.generations.find(
-                (item) =>
-                  item.id ===
-                  draft.vehicleGenerationId,
-              )
 
             return (
               <article
@@ -599,14 +531,13 @@ export default function ProductVehicleCompatibilityEditor({
                     Marca
                     <select
                       required
-                      value={draft.vehicleBrandId}
+                      value={draft.vehicleMakeId}
                       onChange={(event) =>
                         updateDraft(draft.key, {
-                          vehicleBrandId:
+                          vehicleMakeId:
                             event.target.value,
                           vehicleModelId: '',
-                          vehicleGenerationId: '',
-                          vehicleConfigurationId: '',
+                          vehicleSpecId: '',
                         })
                       }
                       className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
@@ -647,8 +578,7 @@ export default function ProductVehicleCompatibilityEditor({
                         updateDraft(draft.key, {
                           vehicleModelId:
                             event.target.value,
-                          vehicleGenerationId: '',
-                          vehicleConfigurationId: '',
+                          vehicleSpecId: '',
                         })
                       }
                       className="rounded-md border bg-white px-3 py-2 text-sm font-normal disabled:opacity-50"
@@ -681,119 +611,58 @@ export default function ProductVehicleCompatibilityEditor({
                   </label>
 
                   <label className="grid gap-1 text-xs font-bold">
-                    Geração / chassis
+                    Especificação
                     <select
+                      required
                       disabled={!model}
-                      value={draft.vehicleGenerationId}
+                      value={draft.vehicleSpecId}
                       onChange={(event) =>
                         updateDraft(draft.key, {
-                          vehicleGenerationId:
-                            event.target.value,
-                          vehicleConfigurationId: '',
-                        })
-                      }
-                      className="rounded-md border bg-white px-3 py-2 text-sm font-normal disabled:opacity-50"
-                    >
-                      <option value="">
-                        Toda a geração
-                      </option>
-                      {model?.generations.map(
-                        (item) => (
-                          <option
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={!model}
-                      onClick={() =>
-                        setCreateTarget({
-                          level: 'generation',
-                          draftKey: draft.key,
-                        })
-                      }
-                      className="justify-self-start text-xs font-bold text-[#ef5b2a] disabled:opacity-40"
-                    >
-                      + Criar geração
-                    </button>
-                  </label>
-
-                  <label className="grid gap-1 text-xs font-bold">
-                    Motor / configuração
-                    <select
-                      disabled={!generation}
-                      value={
-                        draft.vehicleConfigurationId
-                      }
-                      onChange={(event) =>
-                        updateDraft(draft.key, {
-                          vehicleConfigurationId:
+                          vehicleSpecId:
                             event.target.value,
                         })
                       }
                       className="rounded-md border bg-white px-3 py-2 text-sm font-normal disabled:opacity-50"
                     >
                       <option value="">
-                        Toda a geração
+                        Selecionar
                       </option>
-                      {generation?.configurations.map(
-                        (item) => (
-                          <option
-                            key={item.id}
-                            value={item.id}
-                          >
-                            {item.name}
-                          </option>
-                        ),
-                      )}
+                      {model?.specs.map((item) => (
+                        <option
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {specOptionLabel(
+                            item,
+                          )}
+                        </option>
+                      ))}
                     </select>
                     <button
                       type="button"
-                      disabled={!generation}
+                      disabled={!model}
                       onClick={() =>
                         setCreateTarget({
-                          level: 'configuration',
+                          level: 'spec',
                           draftKey: draft.key,
                         })
                       }
                       className="justify-self-start text-xs font-bold text-[#ef5b2a] disabled:opacity-40"
                     >
-                      + Criar motor
+                      + Criar especificação
                     </button>
                   </label>
 
                   <label className="grid gap-1 text-xs font-bold">
-                    Ano inicial
+                    Notas (opcional)
                     <input
-                      type="number"
-                      min="1900"
-                      max="2100"
-                      value={draft.yearMin}
+                      type="text"
+                      value={draft.notes}
+                      maxLength={500}
+                      placeholder="Ex.: requer apoios originais"
                       onChange={(event) =>
                         updateDraft(draft.key, {
-                          yearMin:
-                            event.target.value,
-                        })
-                      }
-                      className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-                    />
-                  </label>
-
-                  <label className="grid gap-1 text-xs font-bold">
-                    Ano final
-                    <input
-                      type="number"
-                      min="1900"
-                      max="2100"
-                      value={draft.yearMax}
-                      onChange={(event) =>
-                        updateDraft(draft.key, {
-                          yearMax:
+                          notes:
                             event.target.value,
                         })
                       }

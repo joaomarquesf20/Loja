@@ -125,7 +125,7 @@ function createClient() {
       create: vi.fn(async () => ({})),
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
-    productVehicleCompatibility: {
+    productCompatibility: {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async () => ({})),
     },
@@ -147,7 +147,7 @@ function createClient() {
     // Delegates de veículo: os testes de compatibilidade
     // substituem-nos sempre (setupVehicleTree/árvore
     // case-insensitive), pelo que mocks soltos chegam.
-    vehicleBrand: {
+    vehicleMake: {
       findFirst: vi.fn(),
       create: vi.fn(),
     },
@@ -155,12 +155,9 @@ function createClient() {
       findFirst: vi.fn(),
       create: vi.fn(),
     },
-    vehicleGeneration: {
+    vehicleSpec: {
       findFirst: vi.fn(),
       create: vi.fn(),
-    },
-    vehicleConfiguration: {
-      findFirst: vi.fn(),
     },
   }
 
@@ -1674,10 +1671,10 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
     const { client, transaction } = createClient()
 
     // Árvore de veículos vazia: TUDO é criado pelo importador.
-    transaction.vehicleBrand = {
+    transaction.vehicleMake = {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }) => ({
-        id: `vbrand-${data.slug}`,
+        id: `vmake-${data.slug}`,
       })),
     }
     transaction.vehicleModel = {
@@ -1686,14 +1683,11 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
         id: `vmodel-${toSlugKey(data.name)}`,
       })),
     }
-    transaction.vehicleGeneration = {
+    transaction.vehicleSpec = {
       findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }) => ({
-        id: `vgen-${toSlugKey(data.name)}`,
+        id: `vspec-${toSlugKey(data.engine)}-${data.yearStart}`,
       })),
-    }
-    transaction.vehicleConfiguration = {
-      findFirst: vi.fn(async () => null),
     }
 
     return { client, transaction }
@@ -1708,7 +1702,7 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
       .replace(/^-+|-+$/g, '')
   }
 
-  test('cria VehicleBrand/Model/Generation quando não existem e grava uma compatibilidade por geração', async () => {
+  test('cria VehicleMake/Model/Spec quando não existem e grava uma compatibilidade por designação de geração', async () => {
     const { client, transaction } =
       setupVehicleTree()
 
@@ -1724,36 +1718,61 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
       )
     }
 
-    // "G22/G23" → DUAS gerações, nunca uma string falsa.
+    // "G22/G23" → DUAS especificações, nunca uma string falsa.
+    // Sem coluna de motor, a designação da geração distingue;
+    // sem anos, 1900 marca "desconhecido"; sem combustível,
+    // DIESEL por omissão.
     expect(
-      transaction.vehicleGeneration.create,
+      transaction.vehicleSpec.create,
     ).toHaveBeenCalledTimes(2)
     expect(
-      transaction.vehicleGeneration.create,
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ name: 'G22' }),
-      }),
-    )
-    expect(
-      transaction.vehicleGeneration.create,
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ name: 'G23' }),
-      }),
-    )
-
-    // Uma compatibilidade por geração.
-    expect(
-      transaction.productVehicleCompatibility.create,
-    ).toHaveBeenCalledTimes(2)
-    expect(
-      transaction.productVehicleCompatibility.create,
+      transaction.vehicleSpec.create,
     ).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          vehicleBrandId: 'vbrand-bmw',
-          vehicleGenerationId: 'vgen-g22',
+          modelId: 'vmodel-serie-4',
+          engine: 'G22',
+          yearStart: 1900,
+          yearEnd: null,
+          fuelType: 'DIESEL',
+        }),
+      }),
+    )
+    expect(
+      transaction.vehicleSpec.create,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          modelId: 'vmodel-serie-4',
+          engine: 'G23',
+          yearStart: 1900,
+          yearEnd: null,
+          fuelType: 'DIESEL',
+        }),
+      }),
+    )
+
+    // Uma compatibilidade por especificação.
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledTimes(2)
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          productId: 'product-created',
+          vehicleSpecId: 'vspec-g22-1900',
+        }),
+      }),
+    )
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          productId: 'product-created',
+          vehicleSpecId: 'vspec-g23-1900',
         }),
       }),
     )
@@ -1773,39 +1792,60 @@ describe('commitCatalogImport — compatibilidades de veículo e resumo de stock
   test('reutiliza entidades existentes (case-insensitive) sem duplicar', async () => {
     const { client, transaction } = createClient()
 
-    transaction.vehicleBrand = {
-      findFirst: vi.fn(async () => ({ id: 'brand-bmw' })),
+    transaction.vehicleMake = {
+      findFirst: vi.fn(async () => ({ id: 'make-bmw' })),
       create: vi.fn(),
     }
     transaction.vehicleModel = {
       findFirst: vi.fn(async () => ({ id: 'model-s4' })),
       create: vi.fn(),
     }
-    transaction.vehicleGeneration = {
+    transaction.vehicleSpec = {
       findFirst: vi.fn(async ({ where }) =>
-        where.name.equals === 'G22'
-          ? { id: 'gen-g22' }
+        where.engine === 'G22'
+          ? { id: 'spec-g22' }
           : null,
       ),
       create: vi.fn(async ({ data }) => ({
-        id: `gen-${toSlugKey(data.name)}`,
+        id: `vspec-${toSlugKey(data.engine)}-${data.yearStart}`,
       })),
-    }
-    transaction.vehicleConfiguration = {
-      findFirst: vi.fn(async () => null),
     }
 
     await commit(client, EXTERIOR_CSV, {
       profile: 'exterior',
     })
 
-    expect(transaction.vehicleBrand.create).not
+    expect(transaction.vehicleMake.create).not
       .toHaveBeenCalled()
     expect(transaction.vehicleModel.create).not
       .toHaveBeenCalled()
     // Só G23 é nova.
     expect(
-      transaction.vehicleGeneration.create,
+      transaction.vehicleSpec.create,
     ).toHaveBeenCalledTimes(1)
+
+    // As duas compatibilidades apontam às especificações
+    // existente (G22) e recém-criada (G23).
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledTimes(2)
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          vehicleSpecId: 'spec-g22',
+        }),
+      }),
+    )
+    expect(
+      transaction.productCompatibility.create,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          vehicleSpecId: 'vspec-g23-1900',
+        }),
+      }),
+    )
   })
 })

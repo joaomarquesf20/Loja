@@ -69,27 +69,26 @@ function handleError(error: unknown) {
   )
 }
 
-function getVehicleConfigurationId(body: unknown) {
+function getVehicleSpecId(body: unknown) {
   if (
     typeof body !== 'object' ||
     body === null ||
-    !('vehicleConfigurationId' in body)
+    !('vehicleSpecId' in body)
   ) {
     throw new ValidationError(
-      'vehicleConfigurationId é obrigatório',
+      'vehicleSpecId é obrigatório',
     )
   }
 
-  const vehicleConfigurationId =
-    body.vehicleConfigurationId
+  const vehicleSpecId = body.vehicleSpecId
 
-  if (typeof vehicleConfigurationId !== 'string') {
+  if (typeof vehicleSpecId !== 'string') {
     throw new ValidationError(
-      'vehicleConfigurationId é obrigatório',
+      'vehicleSpecId é obrigatório',
     )
   }
 
-  return vehicleConfigurationId
+  return vehicleSpecId
 }
 
 export async function GET(
@@ -121,14 +120,21 @@ export async function POST(
 
     const { id } = await params
     const body: unknown = await request.json()
-    const vehicleConfigurationId =
-      getVehicleConfigurationId(body)
+    const vehicleSpecId =
+      getVehicleSpecId(body)
+    const notes =
+      typeof body === 'object' &&
+      body !== null &&
+      'notes' in body
+        ? (body as { notes: unknown }).notes
+        : undefined
 
     const compatibility =
-      await addProductCompatibility(
-        id,
-        vehicleConfigurationId,
-      )
+      await addProductCompatibility({
+        productId: id,
+        vehicleSpecId,
+        notes,
+      })
 
     return Response.json(
       compatibility,
@@ -148,13 +154,13 @@ export async function DELETE(
 
     const { id } = await params
     const body: unknown = await request.json()
-    const vehicleConfigurationId =
-      getVehicleConfigurationId(body)
+    const vehicleSpecId =
+      getVehicleSpecId(body)
 
     const compatibility =
       await removeProductCompatibility(
         id,
-        vehicleConfigurationId,
+        vehicleSpecId,
       )
 
     return Response.json(

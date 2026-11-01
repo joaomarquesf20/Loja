@@ -49,14 +49,14 @@ import { GET, POST } from './route'
 
 const vehicleModel = {
   id: 'model-1',
-  brandId: 'brand-1',
+  makeId: 'make-1',
   name: 'Modelo Técnico',
   slug: 'modelo-tecnico',
-  description: null,
+  createdAt: '2026-01-01T00:00:00.000Z',
 }
 
 function createGetRequest(
-  query = '?brandId=brand-1',
+  query = '?makeId=brand-1',
 ) {
   return new NextRequest(
     `http://localhost/api/admin/vehicle-models${query}`,
@@ -108,25 +108,25 @@ describe('Admin Vehicle Models API', () => {
       ])
     })
 
-    test('passa o brandId correto para listVehicleModels', async () => {
+    test('passa o makeId correto para listVehicleModels', async () => {
       vi.mocked(
         listVehicleModels,
       ).mockResolvedValue([])
 
       await GET(
         createGetRequest(
-          '?brandId=brand-technical',
+          '?makeId=make-technical',
         ),
       )
 
       expect(
         listVehicleModels,
       ).toHaveBeenCalledWith(
-        'brand-technical',
+        'make-technical',
       )
     })
 
-    test('devolve 400 quando brandId está ausente', async () => {
+    test('devolve 400 quando makeId está ausente', async () => {
       vi.mocked(
         listVehicleModels,
       ).mockRejectedValue(
@@ -152,7 +152,7 @@ describe('Admin Vehicle Models API', () => {
       })
     })
 
-    test('devolve 400 quando brandId está vazio', async () => {
+    test('devolve 400 quando makeId está vazio', async () => {
       vi.mocked(
         listVehicleModels,
       ).mockRejectedValue(
@@ -162,7 +162,7 @@ describe('Admin Vehicle Models API', () => {
       )
 
       const response = await GET(
-        createGetRequest('?brandId='),
+        createGetRequest('?makeId='),
       )
 
       expect(
@@ -291,7 +291,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-1',
+          makeId: 'make-1',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),
@@ -314,11 +314,9 @@ describe('Admin Vehicle Models API', () => {
       )
 
       const body = {
-        brandId: 'brand-1',
+        makeId: 'make-1',
         name: 'Modelo Técnico',
         slug: 'modelo-tecnico',
-        description:
-          'Descrição técnica',
       }
 
       await POST(
@@ -369,7 +367,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: '',
+          makeId: '',
           name: '',
           slug: '',
         }),
@@ -395,7 +393,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-inexistente',
+          makeId: 'make-inexistente',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),
@@ -422,7 +420,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-1',
+          makeId: 'make-1',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),
@@ -447,7 +445,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-1',
+          makeId: 'make-1',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),
@@ -475,7 +473,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-1',
+          makeId: 'make-1',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),
@@ -507,7 +505,7 @@ describe('Admin Vehicle Models API', () => {
 
       const response = await POST(
         createPostRequest({
-          brandId: 'brand-1',
+          makeId: 'make-1',
           name: 'Modelo Técnico',
           slug: 'modelo-tecnico',
         }),

@@ -25,15 +25,14 @@ import {
   getCategoryFilterProfile,
   getVisibleVariantFacets,
   shouldShowVehicleFilter,
-  shouldShowVehicleGenerations,
 } from '@/lib/storefront-category-profile'
 import {
   buildCategoryHref,
   getSearchParamValue,
   getSearchParamValues,
   getSelectedVariantValues,
-  getVisibleVehicleGenerations,
   getVisibleVehicleModels,
+  getVisibleVehicleSpecs,
   hasSameVehicleSelections,
   normalizeBrandSlugs,
   normalizeVehicleSelections,
@@ -106,7 +105,7 @@ type CategoryPageProps = {
     priceMax?: string | string[]
     make?: string | string[]
     model?: string | string[]
-    generation?: string | string[]
+    spec?: string | string[]
     sort?: string | string[]
     [key: string]: string | string[] | undefined
   }>
@@ -220,11 +219,10 @@ function buildBrandOptions({
 function buildVehicleOptions({
   makes,
   models,
-  generations,
+  specs,
   filters,
   categorySlug,
   showModels,
-  showGenerations,
 }: {
   makes: CatalogVehicleMakeFacet[]
   models: Array<{
@@ -233,14 +231,19 @@ function buildVehicleOptions({
     makeId: string
     makeName: string
     productCount: number
-    generations: Array<{
+    specs: Array<{
       id: string
-      name: string
+      engine: string
+      engineCode: string | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
     }>
   }>
-  generations: Array<{
+  specs: Array<{
     id: string
-    name: string
+    engine: string
     modelId: string
     modelName: string
     makeName: string
@@ -249,16 +252,13 @@ function buildVehicleOptions({
   filters: CategoryFilterState
   categorySlug: string
   showModels: boolean
-  showGenerations: boolean
 }) {
   const visibleMakeNames = new Set(
     models.map((model) => model.makeName),
   )
 
   const visibleModelNames = new Set(
-    generations.map(
-      (generation) => generation.modelName,
-    ),
+    specs.map((spec) => spec.modelName),
   )
 
   const makeOptions: FilterGroupOption[] =
@@ -308,37 +308,35 @@ function buildVehicleOptions({
         }))
       : []
 
-  const generationOptions: FilterGroupOption[] =
-    showGenerations
-      ? generations.map((generation) => ({
-          key: generation.id,
-          label:
-            visibleModelNames.size > 1
-              ? `${generation.modelName} ${generation.name}`
-              : generation.name,
-          productCount:
-            generation.productCount,
-          selected:
-            filters.vehicleGenerationIds.includes(
-              generation.id,
-            ),
-          href: buildCategoryHref(
-            categorySlug,
-            filters,
-            {
-              vehicleGenerationIds: toggleId(
-                filters.vehicleGenerationIds,
-                generation.id,
-              ),
-            },
+  const specOptions: FilterGroupOption[] =
+    specs.map((spec) => ({
+      key: spec.id,
+      label:
+        visibleModelNames.size > 1
+          ? `${spec.modelName} ${spec.engine}`
+          : spec.engine,
+      productCount:
+        spec.productCount,
+      selected:
+        filters.vehicleSpecIds.includes(
+          spec.id,
+        ),
+      href: buildCategoryHref(
+        categorySlug,
+        filters,
+        {
+          vehicleSpecIds: toggleId(
+            filters.vehicleSpecIds,
+            spec.id,
           ),
-        }))
-      : []
+        },
+      ),
+    }))
 
   return {
     makeOptions,
     modelOptions,
-    generationOptions,
+    specOptions,
   }
 }
 
@@ -438,14 +436,8 @@ function FilterPanel({
       filters.vehicleMakeIds,
     )
 
-  const showGenerations =
-    shouldShowVehicleGenerations(
-      profile,
-      visibleModels,
-    )
-
-  const visibleGenerations =
-    getVisibleVehicleGenerations(
+  const visibleSpecs =
+    getVisibleVehicleSpecs(
       visibleModels,
       filters.vehicleModelIds,
     )
@@ -453,12 +445,10 @@ function FilterPanel({
   const vehicleOptions = buildVehicleOptions({
     makes: facets.vehicleMakes,
     models: visibleModels,
-    generations: visibleGenerations,
+    specs: visibleSpecs,
     filters,
     categorySlug,
     showModels: showVehicle,
-    showGenerations:
-      showVehicle && showGenerations,
   })
 
   const variantGroups =
@@ -546,7 +536,7 @@ function FilterPanel({
                     filters,
                     {
                       vehicleModelIds: [],
-                      vehicleGenerationIds: [],
+                      vehicleSpecIds: [],
                     },
                   )
                 : undefined
@@ -554,18 +544,18 @@ function FilterPanel({
           />
 
           <FilterGroup
-            title="Geração"
+            title="Especificação"
             options={
-              vehicleOptions.generationOptions
+              vehicleOptions.specOptions
             }
             clearHref={
-              filters.vehicleGenerationIds
+              filters.vehicleSpecIds
                 .length > 0
                 ? buildCategoryHref(
                     categorySlug,
                     filters,
                     {
-                      vehicleGenerationIds: [],
+                      vehicleSpecIds: [],
                     },
                   )
                 : undefined
@@ -669,13 +659,13 @@ function FilterPanel({
             ),
           )}
 
-          {filters.vehicleGenerationIds.map(
-            (generationId) => (
+          {filters.vehicleSpecIds.map(
+            (specId) => (
               <input
-                key={generationId}
+                key={specId}
                 type="hidden"
-                name="generation"
-                value={generationId}
+                name="spec"
+                value={specId}
               />
             ),
           )}
@@ -794,8 +784,8 @@ export default async function CategoryPage({
   const requestedModelIds =
     getSearchParamValues(query.model)
 
-  const requestedGenerationIds =
-    getSearchParamValues(query.generation)
+  const requestedSpecIds =
+    getSearchParamValues(query.spec)
 
   const requestedSort =
     parseSortParam(query.sort)
@@ -834,8 +824,7 @@ export default async function CategoryPage({
   const requestedVehicle = {
     vehicleMakeIds: requestedMakeIds,
     vehicleModelIds: requestedModelIds,
-    vehicleGenerationIds:
-      requestedGenerationIds,
+    vehicleSpecIds: requestedSpecIds,
   }
 
   const rawFilters: CategoryFilterState = {
@@ -845,13 +834,12 @@ export default async function CategoryPage({
     priceMax,
     vehicleMakeIds: requestedMakeIds,
     vehicleModelIds: requestedModelIds,
-    vehicleGenerationIds:
-      requestedGenerationIds,
+    vehicleSpecIds: requestedSpecIds,
     variantSelections: [],
     sort: requestedSort ?? 'newest',
   }
 
-  // A marca, o modelo e a geração são níveis
+  // A marca, o modelo e a especificação são níveis
   // alternativos da mesma seleção de veículo: qualquer
   // compatibilidade de um deles devolve o produto.
   const requestedCatalogFilters = {
@@ -861,8 +849,7 @@ export default async function CategoryPage({
     priceMax,
     vehicleMakeIds: requestedMakeIds,
     vehicleModelIds: requestedModelIds,
-    vehicleGenerationIds:
-      requestedGenerationIds,
+    vehicleSpecIds: requestedSpecIds,
     variantSelections: rawVariantSelections,
     sort: requestedSort ?? 'newest',
   } as const
@@ -904,7 +891,7 @@ export default async function CategoryPage({
     normalizeVehicleSelections({
       makeIds: requestedMakeIds,
       modelIds: requestedModelIds,
-      generationIds: requestedGenerationIds,
+      specIds: requestedSpecIds,
       makes: vehicles,
     })
 
@@ -921,8 +908,8 @@ export default async function CategoryPage({
       normalizedVehicle.vehicleMakeIds,
     vehicleModelIds:
       normalizedVehicle.vehicleModelIds,
-    vehicleGenerationIds:
-      normalizedVehicle.vehicleGenerationIds,
+    vehicleSpecIds:
+      normalizedVehicle.vehicleSpecIds,
     variantSelections:
       parsedVariantSelections.selections,
   }
@@ -966,7 +953,7 @@ export default async function CategoryPage({
   const hasVehicleFilter =
     filters.vehicleMakeIds.length > 0 ||
     filters.vehicleModelIds.length > 0 ||
-    filters.vehicleGenerationIds.length > 0
+    filters.vehicleSpecIds.length > 0
 
   const hasActiveFilters =
     filters.inStockOnly ||
@@ -981,7 +968,7 @@ export default async function CategoryPage({
     Number(hasPriceFilter) +
     filters.vehicleMakeIds.length +
     filters.vehicleModelIds.length +
-    filters.vehicleGenerationIds.length +
+    filters.vehicleSpecIds.length +
     selectedVariantValueCount
 
   const clearFiltersHref =
@@ -995,7 +982,7 @@ export default async function CategoryPage({
         priceMax: undefined,
         vehicleMakeIds: [],
         vehicleModelIds: [],
-        vehicleGenerationIds: [],
+        vehicleSpecIds: [],
         variantSelections: [],
       },
     )
@@ -1016,8 +1003,8 @@ export default async function CategoryPage({
       filters.vehicleMakeIds,
     )
 
-  const visibleGenerations =
-    getVisibleVehicleGenerations(
+  const visibleSpecs =
+    getVisibleVehicleSpecs(
       visibleModels,
       filters.vehicleModelIds,
     )
@@ -1222,36 +1209,37 @@ export default async function CategoryPage({
               },
             )}
 
-            {filters.vehicleGenerationIds.map(
-              (generationId) => {
-                const generation =
-                  visibleGenerations.find(
+            {filters.vehicleSpecIds.map(
+              (specId) => {
+                const spec =
+                  visibleSpecs.find(
                     (item) =>
                       item.id ===
-                      generationId,
+                      specId,
                   )
 
-                if (!generation) {
+                if (!spec) {
                   return null
                 }
 
                 return (
                   <Link
-                    key={generation.id}
+                    key={spec.id}
                     href={buildCategoryHref(
                       category.slug,
                       filters,
                       {
-                        vehicleGenerationIds:
+                        vehicleSpecIds:
                           toggleId(
-                            filters.vehicleGenerationIds,
-                            generationId,
+                            filters.vehicleSpecIds,
+                            specId,
                           ),
                       },
                     )}
                     className="inline-flex items-center gap-2 rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:border-gray-400 hover:text-gray-900"
                   >
-                    {generation.name}
+                    {spec.modelName}{' '}
+                    {spec.engine}
                     <span aria-hidden="true">
                       ×
                     </span>

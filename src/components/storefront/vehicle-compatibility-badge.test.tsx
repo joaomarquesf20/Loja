@@ -27,11 +27,10 @@ function jsonResponse(
 }
 
 const storedSelection = {
-  configurationId:
-    'configuration-15td-sport',
+  specId: 'spec-15td-sport',
   label: 'Opel Corsa B 1.5 TD Sport',
-  makeSlug: 'opel',
-  modelSlug: 'corsa-b',
+  makeId: 'make-opel',
+  modelId: 'model-corsa-b',
 }
 
 const STORAGE_KEY = 'pfa-veiculo'
@@ -56,7 +55,7 @@ describe(
       'sem veículo guardado não renderiza',
       () => {
         render(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         expect(
@@ -77,14 +76,14 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            configurationId:
-              'configuration-15td-sport',
+            specId: 'spec-15td-sport',
             compatible: true,
+            notes: null,
           }),
         )
 
         render(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         const badge =
@@ -101,7 +100,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/vehicles/products/difusores-bm/compatibility?configurationId=configuration-15td-sport',
+          '/api/vehicles/compatibility?productId=product-1&specId=spec-15td-sport',
         )
       },
     )
@@ -116,14 +115,14 @@ describe(
 
         fetchMock.mockResolvedValue(
           jsonResponse({
-            configurationId:
-              'configuration-15td-sport',
+            specId: 'spec-15td-sport',
             compatible: false,
+            notes: null,
           }),
         )
 
         render(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         const badge =
@@ -161,7 +160,7 @@ describe(
         )
 
         render(
-          <VehicleCompatibilityBadge productSlug="missing" />,
+          <VehicleCompatibilityBadge productId="missing" />,
         )
 
         await waitFor(() => {
@@ -187,7 +186,7 @@ describe(
         )
 
         render(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         await waitFor(() => {
@@ -211,11 +210,12 @@ describe(
         fetchMock.mockResolvedValue(
           jsonResponse({
             compatible: true,
+            notes: null,
           }),
         )
 
         const { rerender } = render(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         expect(
@@ -234,7 +234,7 @@ describe(
         )
 
         rerender(
-          <VehicleCompatibilityBadge productSlug="difusores-bm" />,
+          <VehicleCompatibilityBadge productId="product-1" />,
         )
 
         await waitFor(() => {

@@ -18,27 +18,32 @@ import {
   listCatalogProducts,
 } from './catalog'
 
-/** Forma das linhas devolvidas por vehicleBrand.findMany. */
-type TestVehicleBrandRecord = {
+/** Forma das linhas devolvidas por vehicleMake.findMany. */
+type TestVehicleMakeRecord = {
   id: string
   name: string
   models: Array<{
     id: string
     name: string
-    generations: Array<{
+    specs: Array<{
       id: string
-      name: string
+      engine: string
+      engineCode: string | null
+      yearStart: number
+      yearEnd: number | null
+      fuelType: string
+      powerHp: number | null
     }>
   }>
 }
 
 type TestCatalogClient =
   CatalogClient & {
-    productVehicleCompatibility: NonNullable<
-      CatalogClient['productVehicleCompatibility']
+    productCompatibility: NonNullable<
+      CatalogClient['productCompatibility']
     >
-    vehicleBrand: NonNullable<
-      CatalogClient['vehicleBrand']
+    vehicleMake: NonNullable<
+      CatalogClient['vehicleMake']
     >
   }
 
@@ -61,14 +66,14 @@ function createClient(): TestCatalogClient {
         async () => [],
       ),
     },
-    productVehicleCompatibility: {
+    productCompatibility: {
       findMany: vi.fn(
         async () => [],
       ),
     },
-    vehicleBrand: {
+    vehicleMake: {
       findMany: vi.fn(
-        async () => [] as TestVehicleBrandRecord[],
+        async () => [] as TestVehicleMakeRecord[],
       ),
     },
   }
@@ -869,7 +874,7 @@ describe('Catalog', () => {
       ).not.toHaveBeenCalled()
 
       expect(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).not.toHaveBeenCalled()
     })
@@ -898,7 +903,7 @@ describe('Catalog', () => {
       ).not.toHaveBeenCalled()
 
       expect(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).not.toHaveBeenCalled()
     })
@@ -1004,7 +1009,7 @@ describe('Catalog', () => {
           description: 'Categoria principal',
         },
         brands: [],
-        vehicleConfigurations: [],
+        vehicleSpecs: [],
         products: [
           {
             id: 'product-1',
@@ -1119,7 +1124,7 @@ describe('Catalog', () => {
       ])
     })
 
-    test('lista configurações compatíveis com produtos ativos da árvore da categoria', async () => {
+    test('lista especificações compatíveis com produtos ativos da árvore da categoria', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -1148,30 +1153,24 @@ describe('Catalog', () => {
       ])
 
       vi.mocked(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).mockResolvedValue([
         {
-          vehicleConfiguration: {
-            id: 'configuration-1',
-            name: '2.0 TDI',
+          vehicleSpec: {
+            id: 'spec-1',
+            engine: '2.0 TDI',
             engineCode: 'CFFB',
-            engineType: 'Diesel',
-            displacementCc: 1968,
-            powerKw: '103.5',
-            bodyType: 'Hatchback',
-            yearFrom: 2010,
-            yearTo: 2014,
-            generation: {
-              id: 'generation-1',
-              name: 'Mk6',
-              model: {
-                id: 'model-1',
-                name: 'Golf',
-                brand: {
-                  id: 'vehicle-brand-1',
-                  name: 'Volkswagen',
-                },
+            yearStart: 2010,
+            yearEnd: 2014,
+            fuelType: 'DIESEL',
+            powerHp: '103.5',
+            model: {
+              id: 'model-1',
+              name: 'Golf',
+              make: {
+                id: 'vehicle-make-1',
+                name: 'Volkswagen',
               },
             },
           },
@@ -1189,7 +1188,7 @@ describe('Catalog', () => {
         )
 
       expect(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).toHaveBeenCalledWith({
         where: {
@@ -1202,36 +1201,25 @@ describe('Catalog', () => {
               ],
             },
           },
-          vehicleConfigurationId: {
-            not: null,
-          },
         },
         select: {
-          vehicleConfiguration: {
+          vehicleSpec: {
             select: {
               id: true,
-              name: true,
+              engine: true,
               engineCode: true,
-              engineType: true,
-              displacementCc: true,
-              powerKw: true,
-              bodyType: true,
-              yearFrom: true,
-              yearTo: true,
-              generation: {
+              yearStart: true,
+              yearEnd: true,
+              fuelType: true,
+              powerHp: true,
+              model: {
                 select: {
                   id: true,
                   name: true,
-                  model: {
+                  make: {
                     select: {
                       id: true,
                       name: true,
-                      brand: {
-                        select: {
-                          id: true,
-                          name: true,
-                        },
-                      },
                     },
                   },
                 },
@@ -1242,35 +1230,29 @@ describe('Catalog', () => {
       })
 
       expect(
-        result?.vehicleConfigurations,
+        result?.vehicleSpecs,
       ).toEqual([
         {
-          id: 'configuration-1',
-          name: '2.0 TDI',
+          id: 'spec-1',
+          engine: '2.0 TDI',
           engineCode: 'CFFB',
-          engineType: 'Diesel',
-          displacementCc: 1968,
-          powerKw: 103.5,
-          bodyType: 'Hatchback',
-          yearFrom: 2010,
-          yearTo: 2014,
-          generation: {
-            id: 'generation-1',
-            name: 'Mk6',
-            model: {
-              id: 'model-1',
-              name: 'Golf',
-              brand: {
-                id: 'vehicle-brand-1',
-                name: 'Volkswagen',
-              },
+          yearStart: 2010,
+          yearEnd: 2014,
+          fuelType: 'DIESEL',
+          powerHp: 103.5,
+          model: {
+            id: 'model-1',
+            name: 'Golf',
+            make: {
+              id: 'vehicle-make-1',
+              name: 'Volkswagen',
             },
           },
         },
       ])
     })
 
-    test('remove configurações de veículo duplicadas', async () => {
+    test('remove especificações de veículo duplicadas', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -1288,41 +1270,33 @@ describe('Catalog', () => {
         },
       ])
 
-      const duplicatedConfiguration = {
-        id: 'configuration-1',
-        name: '1.9 TDI',
+      const duplicatedSpec = {
+        id: 'spec-1',
+        engine: '1.9 TDI',
         engineCode: 'BKC',
-        engineType: 'Diesel',
-        displacementCc: 1896,
-        powerKw: 77,
-        bodyType: null,
-        yearFrom: 2004,
-        yearTo: 2008,
-        generation: {
-          id: 'generation-1',
-          name: 'Mk5',
-          model: {
-            id: 'model-1',
-            name: 'Golf',
-            brand: {
-              id: 'vehicle-brand-1',
-              name: 'Volkswagen',
-            },
+        yearStart: 2004,
+        yearEnd: 2008,
+        fuelType: 'DIESEL',
+        powerHp: 105,
+        model: {
+          id: 'model-1',
+          name: 'Golf',
+          make: {
+            id: 'vehicle-make-1',
+            name: 'Volkswagen',
           },
         },
       }
 
       vi.mocked(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).mockResolvedValue([
         {
-          vehicleConfiguration:
-            duplicatedConfiguration,
+          vehicleSpec: duplicatedSpec,
         },
         {
-          vehicleConfiguration:
-            duplicatedConfiguration,
+          vehicleSpec: duplicatedSpec,
         },
       ])
 
@@ -1337,57 +1311,15 @@ describe('Catalog', () => {
         )
 
       expect(
-        result?.vehicleConfigurations,
+        result?.vehicleSpecs,
       ).toHaveLength(1)
 
       expect(
-        result?.vehicleConfigurations[0]?.id,
-      ).toBe('configuration-1')
+        result?.vehicleSpecs[0]?.id,
+      ).toBe('spec-1')
     })
 
-    test('ignora compatibilidades sem configuração de veículo', async () => {
-      const client = createClient()
-
-      vi.mocked(
-        client.category.findMany,
-      ).mockResolvedValue([
-        {
-          id: 'category-1',
-          parentId: null,
-          name: 'Categoria 1',
-          slug: 'categoria-1',
-          description: null,
-          _count: {
-            products: 1,
-          },
-        },
-      ])
-
-      vi.mocked(
-        client.productVehicleCompatibility
-          .findMany,
-      ).mockResolvedValue([
-        {
-          vehicleConfiguration: null,
-        },
-      ])
-
-      vi.mocked(
-        client.product.findMany,
-      ).mockResolvedValue([])
-
-      const result =
-        await getCatalogCategoryPageBySlug(
-          'categoria-1',
-          client,
-        )
-
-      expect(
-        result?.vehicleConfigurations,
-      ).toEqual([])
-    })
-
-    test('ordena configurações por marca, modelo, geração e configuração', async () => {
+    test('ordena especificações por marca, modelo, motor e ano', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -1406,80 +1338,62 @@ describe('Catalog', () => {
       ])
 
       vi.mocked(
-        client.productVehicleCompatibility
+        client.productCompatibility
           .findMany,
       ).mockResolvedValue([
         {
-          vehicleConfiguration: {
-            id: 'configuration-z',
-            name: '2.0',
+          vehicleSpec: {
+            id: 'spec-z',
+            engine: '2.0',
             engineCode: null,
-            engineType: null,
-            displacementCc: null,
-            powerKw: null,
-            bodyType: null,
-            yearFrom: null,
-            yearTo: null,
-            generation: {
-              id: 'generation-z',
-              name: 'Zeta',
-              model: {
-                id: 'model-z',
-                name: 'Modelo Z',
-                brand: {
-                  id: 'brand-z',
-                  name: 'Volkswagen',
-                },
+            yearStart: 2000,
+            yearEnd: null,
+            fuelType: 'GASOLINA',
+            powerHp: null,
+            model: {
+              id: 'model-z',
+              name: 'Modelo Z',
+              make: {
+                id: 'make-z',
+                name: 'Volkswagen',
               },
             },
           },
         },
         {
-          vehicleConfiguration: {
-            id: 'configuration-a',
-            name: '1.0',
+          vehicleSpec: {
+            id: 'spec-a',
+            engine: '1.0',
             engineCode: null,
-            engineType: null,
-            displacementCc: null,
-            powerKw: null,
-            bodyType: null,
-            yearFrom: null,
-            yearTo: null,
-            generation: {
-              id: 'generation-a',
-              name: 'Alpha',
-              model: {
-                id: 'model-a',
-                name: 'A3',
-                brand: {
-                  id: 'brand-a',
-                  name: 'Audi',
-                },
+            yearStart: 2000,
+            yearEnd: null,
+            fuelType: 'GASOLINA',
+            powerHp: null,
+            model: {
+              id: 'model-a',
+              name: 'A3',
+              make: {
+                id: 'make-a',
+                name: 'Audi',
               },
             },
           },
         },
         {
-          vehicleConfiguration: {
-            id: 'configuration-b',
-            name: '1.5',
+          vehicleSpec: {
+            id: 'spec-b',
+            engine: '1.5',
             engineCode: null,
-            engineType: null,
-            displacementCc: null,
-            powerKw: null,
-            bodyType: null,
-            yearFrom: null,
-            yearTo: null,
-            generation: {
-              id: 'generation-b',
-              name: 'Beta',
-              model: {
-                id: 'model-b',
-                name: 'Golf',
-                brand: {
-                  id: 'brand-b',
-                  name: 'Volkswagen',
-                },
+            yearStart: 2000,
+            yearEnd: null,
+            fuelType: 'GASOLINA',
+            powerHp: null,
+            model: {
+              id: 'model-b',
+              name: 'Golf',
+              make: {
+                id: 'make-b',
+                name: 'Volkswagen',
               },
             },
           },
@@ -1497,14 +1411,13 @@ describe('Catalog', () => {
         )
 
       expect(
-        result?.vehicleConfigurations.map(
-          (configuration) =>
-            configuration.id,
+        result?.vehicleSpecs.map(
+          (spec) => spec.id,
         ),
       ).toEqual([
-        'configuration-a',
-        'configuration-b',
-        'configuration-z',
+        'spec-a',
+        'spec-b',
+        'spec-z',
       ])
     })
 
@@ -2219,7 +2132,7 @@ describe('Catalog', () => {
       )
     })
 
-    test('filtra produtos pela configuração de veículo selecionada', async () => {
+    test('filtra produtos pela especificação de veículo selecionada', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -2277,8 +2190,10 @@ describe('Catalog', () => {
               some: {
                 OR: [
                   {
-                    vehicleModelId: {
-                      in: ['model-1'],
+                    vehicleSpec: {
+                      modelId: {
+                        in: ['model-1'],
+                      },
                     },
                   },
                 ],
@@ -2367,8 +2282,10 @@ describe('Catalog', () => {
               some: {
                 OR: [
                   {
-                    vehicleModelId: {
-                      in: ['model-1'],
+                    vehicleSpec: {
+                      modelId: {
+                        in: ['model-1'],
+                      },
                     },
                   },
                 ],
@@ -2449,7 +2366,7 @@ describe('Catalog', () => {
         await getCatalogCategoryPageBySlug(
           'categoria-1',
           {
-            vehicleGenerationIds: ['g1'],
+            vehicleSpecIds: ['g1'],
           },
           client,
         )
@@ -2463,7 +2380,7 @@ describe('Catalog', () => {
           description: null,
         },
         brands: [],
-        vehicleConfigurations: [],
+        vehicleSpecs: [],
         products: [],
       })
     })
@@ -2590,7 +2507,7 @@ describe('Catalog', () => {
           description: null,
         },
         brands: [],
-        vehicleConfigurations: [],
+        vehicleSpecs: [],
         products: [],
       })
     })
@@ -2653,7 +2570,7 @@ describe('Catalog', () => {
             slug: 'marca-a',
           },
         ],
-        vehicleConfigurations: [],
+        vehicleSpecs: [],
         products: [],
       })
 
@@ -3177,25 +3094,28 @@ describe('Catalog', () => {
     function createCompatibility(
       productId: string,
       overrides?: {
-        vehicleBrandId?: string
-        vehicleModelId?: string
-        vehicleGenerationId?:
-          | string
-          | null
+        makeId?: string
+        modelId?: string
+        vehicleSpecId?: string
       },
     ) {
       return {
         productId,
-        vehicleBrandId:
-          overrides?.vehicleBrandId ??
-          'make-vw',
-        vehicleModelId:
-          overrides?.vehicleModelId ??
-          'model-golf',
-        vehicleGenerationId:
-          overrides
-            ?.vehicleGenerationId ??
-          'gen-mk7',
+        vehicleSpec: {
+          id:
+            overrides?.vehicleSpecId ??
+            'spec-mk7-tdi',
+          model: {
+            id:
+              overrides?.modelId ??
+              'model-golf',
+            make: {
+              id:
+                overrides?.makeId ??
+                'make-vw',
+            },
+          },
+        },
       }
     }
 
@@ -3228,18 +3148,18 @@ describe('Catalog', () => {
       ])
 
       vi.mocked(
-        client.productVehicleCompatibility.findMany,
+        client.productCompatibility.findMany,
       ).mockResolvedValue([
         createCompatibility('product-1'),
         createCompatibility('product-2', {
-          vehicleBrandId: 'make-audi',
-          vehicleModelId: 'model-a3',
-          vehicleGenerationId: 'gen-8v',
+          makeId: 'make-audi',
+          modelId: 'model-a3',
+          vehicleSpecId: 'spec-8v-tdi',
         }),
       ])
 
       vi.mocked(
-        client.vehicleBrand.findMany,
+        client.vehicleMake.findMany,
       ).mockResolvedValue([
         {
           id: 'make-vw',
@@ -3248,10 +3168,15 @@ describe('Catalog', () => {
             {
               id: 'model-golf',
               name: 'Golf',
-              generations: [
+              specs: [
                 {
-                  id: 'gen-mk7',
-                  name: 'Mk7',
+                  id: 'spec-mk7-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CFFB',
+                  yearStart: 2010,
+                  yearEnd: 2014,
+                  fuelType: 'DIESEL',
+                  powerHp: 140,
                 },
               ],
             },
@@ -3264,16 +3189,21 @@ describe('Catalog', () => {
             {
               id: 'model-a3',
               name: 'A3',
-              generations: [
+              specs: [
                 {
-                  id: 'gen-8v',
-                  name: '8V',
+                  id: 'spec-8v-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CRMB',
+                  yearStart: 2013,
+                  yearEnd: 2018,
+                  fuelType: 'DIESEL',
+                  powerHp: 150,
                 },
               ],
             },
           ],
         },
-      ])
+      ] as never)
 
       const facets =
         await getCatalogCategoryFacetsBySlug(
@@ -3310,12 +3240,17 @@ describe('Catalog', () => {
             {
               id: 'model-a3',
               name: 'A3',
-              brandId: 'make-audi',
+              makeId: 'make-audi',
               productCount: 1,
-              generations: [
+              specs: [
                 {
-                  id: 'gen-8v',
-                  name: '8V',
+                  id: 'spec-8v-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CRMB',
+                  yearStart: 2013,
+                  yearEnd: 2018,
+                  fuelType: 'DIESEL',
+                  powerHp: 150,
                   modelId: 'model-a3',
                   productCount: 1,
                 },
@@ -3331,12 +3266,17 @@ describe('Catalog', () => {
             {
               id: 'model-golf',
               name: 'Golf',
-              brandId: 'make-vw',
+              makeId: 'make-vw',
               productCount: 1,
-              generations: [
+              specs: [
                 {
-                  id: 'gen-mk7',
-                  name: 'Mk7',
+                  id: 'spec-mk7-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CFFB',
+                  yearStart: 2010,
+                  yearEnd: 2014,
+                  fuelType: 'DIESEL',
+                  powerHp: 140,
                   modelId: 'model-golf',
                   productCount: 1,
                 },
@@ -3377,23 +3317,23 @@ describe('Catalog', () => {
       ])
 
       vi.mocked(
-        client.productVehicleCompatibility.findMany,
+        client.productCompatibility.findMany,
       ).mockResolvedValue([
         createCompatibility('product-1'),
         createCompatibility('product-2', {
-          vehicleBrandId: 'make-audi',
-          vehicleModelId: 'model-a3',
-          vehicleGenerationId: 'gen-8v',
+          makeId: 'make-audi',
+          modelId: 'model-a3',
+          vehicleSpecId: 'spec-8v-tdi',
         }),
         createCompatibility('product-3', {
-          vehicleBrandId: 'make-audi',
-          vehicleModelId: 'model-a3',
-          vehicleGenerationId: 'gen-8v',
+          makeId: 'make-audi',
+          modelId: 'model-a3',
+          vehicleSpecId: 'spec-8v-tdi',
         }),
       ])
 
       vi.mocked(
-        client.vehicleBrand.findMany,
+        client.vehicleMake.findMany,
       ).mockResolvedValue([
         {
           id: 'make-vw',
@@ -3402,10 +3342,15 @@ describe('Catalog', () => {
             {
               id: 'model-golf',
               name: 'Golf',
-              generations: [
+              specs: [
                 {
-                  id: 'gen-mk7',
-                  name: 'Mk7',
+                  id: 'spec-mk7-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CFFB',
+                  yearStart: 2010,
+                  yearEnd: 2014,
+                  fuelType: 'DIESEL',
+                  powerHp: 140,
                 },
               ],
             },
@@ -3418,16 +3363,21 @@ describe('Catalog', () => {
             {
               id: 'model-a3',
               name: 'A3',
-              generations: [
+              specs: [
                 {
-                  id: 'gen-8v',
-                  name: '8V',
+                  id: 'spec-8v-tdi',
+                  engine: '2.0 TDI',
+                  engineCode: 'CRMB',
+                  yearStart: 2013,
+                  yearEnd: 2018,
+                  fuelType: 'DIESEL',
+                  powerHp: 150,
                 },
               ],
             },
           ],
         },
-      ])
+      ] as never)
 
       const facets =
         await getCatalogCategoryFacetsBySlug(
@@ -3703,7 +3653,7 @@ describe('Catalog', () => {
   })
 
   describe('regressão — facetas de veículo em categorias não-wheel', () => {
-    test('vehicleBrand.findMany recebe select e buildCategoryFacets nunca lê models undefined', async () => {
+    test('vehicleMake.findMany recebe select e buildCategoryFacets nunca lê models undefined', async () => {
       const client = createClient()
 
       vi.mocked(
@@ -3731,7 +3681,7 @@ describe('Catalog', () => {
       // o Prisma devolveria modelos inteiros; com select, o
       // formato tem de ser exatamente este (aninhado).
       vi.mocked(
-        client.vehicleBrand.findMany,
+        client.vehicleMake.findMany,
       ).mockImplementation(async (args?: {
         select?: Record<string, unknown>
       }) => {
@@ -3752,24 +3702,37 @@ describe('Catalog', () => {
               {
                 id: 'model-serie4',
                 name: 'Série 4',
-                generations: [
-                  { id: 'gen-g22', name: 'G22' },
-                  { id: 'gen-g23', name: 'G23' },
+                specs: [
+                  {
+                    id: 'spec-g22-20i',
+                    engine: '2.0 i',
+                    engineCode: 'B48',
+                    yearStart: 2017,
+                    yearEnd: 2020,
+                    fuelType: 'GASOLINA',
+                    powerHp: 184,
+                  },
                 ],
               },
             ],
           },
-        ]
+        ] as never
       })
 
       vi.mocked(
-        client.productVehicleCompatibility.findMany,
+        client.productCompatibility.findMany,
       ).mockResolvedValue([
         {
           productId: 'product-1',
-          vehicleBrandId: 'make-bmw',
-          vehicleModelId: 'model-serie4',
-          vehicleGenerationId: 'gen-g22',
+          vehicleSpec: {
+            id: 'spec-g22-20i',
+            model: {
+              id: 'model-serie4',
+              make: {
+                id: 'make-bmw',
+              },
+            },
+          },
         },
       ])
 
@@ -3788,7 +3751,7 @@ describe('Catalog', () => {
           models: [
             expect.objectContaining({
               name: 'Série 4',
-              generations: expect.any(Array),
+              specs: expect.any(Array),
             }),
           ],
         }),

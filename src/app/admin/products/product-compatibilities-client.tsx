@@ -2,63 +2,49 @@
 
 import { FormEvent, useEffect, useState } from 'react'
 
-type VehicleBrand = {
+/**
+ * Épico 8 — gestão de compatibilidades do produto:
+ * cascata Make → Model → Spec (compatibilidade por especificação).
+ */
+
+type VehicleMake = {
   id: string
   name: string
 }
 
 type VehicleModel = {
   id: string
-  brandId: string
   name: string
 }
 
-type VehicleGeneration = {
+type VehicleSpec = {
   id: string
-  modelId: string
-  name: string
-}
-
-type VehicleConfiguration = {
-  id: string
-  generationId: string
-  name: string
+  engine: string
   engineCode: string | null
-  engineType: string | null
-  displacementCc: number | null
-  powerKw: number | string | null
-  bodyType: string | null
-  yearFrom: number | null
-  yearTo: number | null
+  yearStart: number
+  yearEnd: number | null
+  fuelType: string
+  powerHp: number | null
 }
 
 type ProductCompatibility = {
   id: string
-  productId: string
-  vehicleConfigurationId: string | null
-  vehicleBrand: {
-    id: string
-    name: string
-  }
-  vehicleModel: {
-    id: string
-    name: string
-  }
-  vehicleGeneration: {
-    id: string
-    name: string
-  } | null
-  vehicleConfiguration: {
-    id: string
-    name: string
+  vehicleSpecId: string
+  notes: string | null
+  vehicleSpec: {
+    engine: string
     engineCode: string | null
-    engineType: string | null
-    displacementCc: number | null
-    powerKw: number | null
-    bodyType: string | null
-    yearFrom: number | null
-    yearTo: number | null
-  } | null
+    yearStart: number
+    yearEnd: number | null
+    fuelType: string
+    powerHp: number | null
+    model: {
+      name: string
+      make: {
+        name: string
+      }
+    }
+  }
 }
 
 type Props = {
@@ -79,56 +65,35 @@ async function getErrorMessage(response: Response) {
   }
 }
 
-function configurationDetails(
-  configuration: ProductCompatibility['vehicleConfiguration'],
-) {
-  if (!configuration) {
-    return null
-  }
+function specOptionLabel(spec: VehicleSpec) {
+  const years =
+    spec.yearEnd !== null
+      ? `${spec.yearStart}–${spec.yearEnd}`
+      : `desde ${spec.yearStart}`
 
+  return `${spec.engine} · ${years}`
+}
+
+function specDetails(spec: ProductCompatibility['vehicleSpec']) {
   const details: string[] = []
 
-  if (configuration.engineCode) {
-    details.push(`Motor ${configuration.engineCode}`)
+  if (spec.engineCode) {
+    details.push(`Código ${spec.engineCode}`)
   }
 
-  if (configuration.engineType) {
-    details.push(configuration.engineType)
+  details.push(spec.fuelType)
+
+  if (spec.yearEnd !== null) {
+    details.push(`${spec.yearStart}–${spec.yearEnd}`)
+  } else {
+    details.push(`Desde ${spec.yearStart}`)
   }
 
-  if (configuration.displacementCc !== null) {
-    details.push(`${configuration.displacementCc} cc`)
+  if (spec.powerHp !== null) {
+    details.push(`${spec.powerHp} cv`)
   }
 
-  if (configuration.powerKw !== null) {
-    details.push(`${configuration.powerKw} kW`)
-  }
-
-  if (configuration.bodyType) {
-    details.push(configuration.bodyType)
-  }
-
-  if (
-    configuration.yearFrom !== null ||
-    configuration.yearTo !== null
-  ) {
-    if (
-      configuration.yearFrom !== null &&
-      configuration.yearTo !== null
-    ) {
-      details.push(
-        `${configuration.yearFrom}–${configuration.yearTo}`,
-      )
-    } else if (configuration.yearFrom !== null) {
-      details.push(`Desde ${configuration.yearFrom}`)
-    } else if (configuration.yearTo !== null) {
-      details.push(`Até ${configuration.yearTo}`)
-    }
-  }
-
-  return details.length > 0
-    ? details.join(' · ')
-    : null
+  return details.join(' · ')
 }
 
 export default function ProductCompatibilitiesClient({
@@ -136,29 +101,21 @@ export default function ProductCompatibilitiesClient({
   productName,
   onClose,
 }: Props) {
-  const [brands, setBrands] = useState<VehicleBrand[]>([])
+  const [makes, setMakes] = useState<VehicleMake[]>([])
   const [models, setModels] = useState<VehicleModel[]>([])
-  const [generations, setGenerations] = useState<
-    VehicleGeneration[]
-  >([])
-  const [configurations, setConfigurations] = useState<
-    VehicleConfiguration[]
-  >([])
+  const [specs, setSpecs] = useState<VehicleSpec[]>([])
   const [compatibilities, setCompatibilities] = useState<
     ProductCompatibility[]
   >([])
 
-  const [brandId, setBrandId] = useState('')
+  const [makeId, setMakeId] = useState('')
   const [modelId, setModelId] = useState('')
-  const [generationId, setGenerationId] = useState('')
-  const [configurationId, setConfigurationId] = useState('')
+  const [specId, setSpecId] = useState('')
+  const [notes, setNotes] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [loadingModels, setLoadingModels] = useState(false)
-  const [loadingGenerations, setLoadingGenerations] =
-    useState(false)
-  const [loadingConfigurations, setLoadingConfigurations] =
-    useState(false)
+  const [loadingSpecs, setLoadingSpecs] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -185,17 +142,17 @@ export default function ProductCompatibilitiesClient({
         setLoading(true)
         setError(null)
 
-        const [brandsResponse, compatibilitiesResponse] =
+        const [makesResponse, compatibilitiesResponse] =
           await Promise.all([
-            fetch('/api/admin/vehicle-brands'),
+            fetch('/api/admin/vehicle-makes'),
             fetch(
               `/api/admin/products/${productId}/compatibilities`,
             ),
           ])
 
-        if (!brandsResponse.ok) {
+        if (!makesResponse.ok) {
           throw new Error(
-            await getErrorMessage(brandsResponse),
+            await getErrorMessage(makesResponse),
           )
         }
 
@@ -205,8 +162,8 @@ export default function ProductCompatibilitiesClient({
           )
         }
 
-        const brandsData =
-          (await brandsResponse.json()) as VehicleBrand[]
+        const makesData =
+          (await makesResponse.json()) as VehicleMake[]
         const compatibilitiesData =
           (await compatibilitiesResponse.json()) as ProductCompatibility[]
 
@@ -214,7 +171,7 @@ export default function ProductCompatibilitiesClient({
           return
         }
 
-        setBrands(brandsData)
+        setMakes(makesData)
         setCompatibilities(compatibilitiesData)
       } catch (loadError) {
         if (cancelled) {
@@ -233,24 +190,22 @@ export default function ProductCompatibilitiesClient({
       }
     }
 
-void loadInitialData()
+    void loadInitialData()
 
     return () => {
       cancelled = true
     }
   }, [productId])
 
-  async function handleBrandChange(nextBrandId: string) {
-    setBrandId(nextBrandId)
+  async function handleMakeChange(nextMakeId: string) {
+    setMakeId(nextMakeId)
     setModelId('')
-    setGenerationId('')
-    setConfigurationId('')
+    setSpecId('')
     setModels([])
-    setGenerations([])
-    setConfigurations([])
+    setSpecs([])
     setError(null)
 
-    if (!nextBrandId) {
+    if (!nextMakeId) {
       return
     }
 
@@ -258,8 +213,8 @@ void loadInitialData()
       setLoadingModels(true)
 
       const response = await fetch(
-        `/api/admin/vehicle-models?brandId=${encodeURIComponent(
-          nextBrandId,
+        `/api/admin/vehicle-models?makeId=${encodeURIComponent(
+          nextMakeId,
         )}`,
       )
 
@@ -282,10 +237,8 @@ void loadInitialData()
 
   async function handleModelChange(nextModelId: string) {
     setModelId(nextModelId)
-    setGenerationId('')
-    setConfigurationId('')
-    setGenerations([])
-    setConfigurations([])
+    setSpecId('')
+    setSpecs([])
     setError(null)
 
     if (!nextModelId) {
@@ -293,10 +246,10 @@ void loadInitialData()
     }
 
     try {
-      setLoadingGenerations(true)
+      setLoadingSpecs(true)
 
       const response = await fetch(
-        `/api/admin/vehicle-generations?modelId=${encodeURIComponent(
+        `/api/admin/vehicle-specs?modelId=${encodeURIComponent(
           nextModelId,
         )}`,
       )
@@ -306,57 +259,17 @@ void loadInitialData()
       }
 
       const data =
-        (await response.json()) as VehicleGeneration[]
+        (await response.json()) as VehicleSpec[]
 
-      setGenerations(data)
+      setSpecs(data)
     } catch (loadError) {
       setError(
         loadError instanceof Error
           ? loadError.message
-          : 'Não foi possível carregar as gerações',
+          : 'Não foi possível carregar as especificações',
       )
     } finally {
-      setLoadingGenerations(false)
-    }
-  }
-
-  async function handleGenerationChange(
-    nextGenerationId: string,
-  ) {
-    setGenerationId(nextGenerationId)
-    setConfigurationId('')
-    setConfigurations([])
-    setError(null)
-
-    if (!nextGenerationId) {
-      return
-    }
-
-    try {
-      setLoadingConfigurations(true)
-
-      const response = await fetch(
-        `/api/admin/vehicle-configurations?generationId=${encodeURIComponent(
-          nextGenerationId,
-        )}`,
-      )
-
-      if (!response.ok) {
-        throw new Error(await getErrorMessage(response))
-      }
-
-      const data =
-        (await response.json()) as VehicleConfiguration[]
-
-      setConfigurations(data)
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : 'Não foi possível carregar as configurações',
-      )
-    } finally {
-      setLoadingConfigurations(false)
+      setLoadingSpecs(false)
     }
   }
 
@@ -369,8 +282,8 @@ void loadInitialData()
       return
     }
 
-    if (!configurationId) {
-      setError('Seleciona uma configuração de veículo')
+    if (!specId) {
+      setError('Seleciona uma especificação de veículo')
       return
     }
 
@@ -386,7 +299,9 @@ void loadInitialData()
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            vehicleConfigurationId: configurationId,
+            vehicleSpecId: specId,
+            notes:
+              notes.trim() === '' ? undefined : notes,
           }),
         },
       )
@@ -397,7 +312,8 @@ void loadInitialData()
 
       await reloadCompatibilities()
 
-      setConfigurationId('')
+      setSpecId('')
+      setNotes('')
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -413,13 +329,6 @@ void loadInitialData()
     compatibility: ProductCompatibility,
   ) {
     if (submitting) {
-      return
-    }
-
-    if (!compatibility.vehicleConfigurationId) {
-      setError(
-        'Esta associação não possui uma configuração de veículo removível',
-      )
       return
     }
 
@@ -443,8 +352,8 @@ void loadInitialData()
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            vehicleConfigurationId:
-              compatibility.vehicleConfigurationId,
+            vehicleSpecId:
+              compatibility.vehicleSpecId,
           }),
         },
       )
@@ -507,10 +416,10 @@ void loadInitialData()
             <label className="flex flex-col gap-1">
               <span>Marca do veículo</span>
               <select
-                value={brandId}
-                disabled={submitting || brands.length === 0}
+                value={makeId}
+                disabled={submitting || makes.length === 0}
                 onChange={(event) => {
-                  void handleBrandChange(event.target.value)
+                  void handleMakeChange(event.target.value)
                 }}
                 className="rounded border px-3 py-2"
               >
@@ -518,12 +427,12 @@ void loadInitialData()
                   Selecionar marca
                 </option>
 
-                {brands.map((brand) => (
+                {makes.map((make) => (
                   <option
-                    key={brand.id}
-                    value={brand.id}
+                    key={make.id}
+                    value={make.id}
                   >
-                    {brand.name}
+                    {make.name}
                   </option>
                 ))}
               </select>
@@ -535,7 +444,7 @@ void loadInitialData()
                 value={modelId}
                 disabled={
                   submitting ||
-                  !brandId ||
+                  !makeId ||
                   loadingModels
                 }
                 onChange={(event) => {
@@ -561,67 +470,48 @@ void loadInitialData()
             </label>
 
             <label className="flex flex-col gap-1">
-              <span>Geração</span>
+              <span>Especificação</span>
               <select
-                value={generationId}
+                value={specId}
                 disabled={
                   submitting ||
                   !modelId ||
-                  loadingGenerations
+                  loadingSpecs
                 }
-                onChange={(event) => {
-                  void handleGenerationChange(
-                    event.target.value,
-                  )
-                }}
+                onChange={(event) =>
+                  setSpecId(event.target.value)
+                }
                 className="rounded border px-3 py-2"
               >
                 <option value="">
-                  {loadingGenerations
-                    ? 'A carregar gerações...'
-                    : 'Selecionar geração'}
+                  {loadingSpecs
+                    ? 'A carregar especificações...'
+                    : 'Selecionar especificação'}
                 </option>
 
-                {generations.map((generation) => (
+                {specs.map((spec) => (
                   <option
-                    key={generation.id}
-                    value={generation.id}
+                    key={spec.id}
+                    value={spec.id}
                   >
-                    {generation.name}
+                    {specOptionLabel(spec)}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="flex flex-col gap-1">
-              <span>Configuração</span>
-              <select
-                value={configurationId}
-                disabled={
-                  submitting ||
-                  !generationId ||
-                  loadingConfigurations
-                }
+              <span>Notas (opcional)</span>
+              <input
+                type="text"
+                value={notes}
+                maxLength={500}
+                placeholder="Ex.: requer apoios originais"
                 onChange={(event) =>
-                  setConfigurationId(event.target.value)
+                  setNotes(event.target.value)
                 }
                 className="rounded border px-3 py-2"
-              >
-                <option value="">
-                  {loadingConfigurations
-                    ? 'A carregar configurações...'
-                    : 'Selecionar configuração'}
-                </option>
-
-                {configurations.map((configuration) => (
-                  <option
-                    key={configuration.id}
-                    value={configuration.id}
-                  >
-                    {configuration.name}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
 
             <div className="md:col-span-2 xl:col-span-4">
@@ -629,7 +519,7 @@ void loadInitialData()
                 type="submit"
                 disabled={
                   submitting ||
-                  !configurationId
+                  !specId
                 }
                 className="rounded bg-black px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -640,7 +530,7 @@ void loadInitialData()
             </div>
           </form>
 
-          {brands.length === 0 && (
+          {makes.length === 0 && (
             <p className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">
               Não existem marcas de veículos disponíveis.
               Cria primeiro a hierarquia automóvel no painel
@@ -661,9 +551,8 @@ void loadInitialData()
             ) : (
               <div className="space-y-3">
                 {compatibilities.map((compatibility) => {
-                  const details = configurationDetails(
-                    compatibility.vehicleConfiguration,
-                  )
+                  const spec =
+                    compatibility.vehicleSpec
 
                   return (
                     <div
@@ -672,44 +561,27 @@ void loadInitialData()
                     >
                       <div>
                         <p className="font-medium">
-                          {compatibility.vehicleBrand.name}
+                          {spec.model.make.name}
                           {' → '}
-                          {compatibility.vehicleModel.name}
+                          {spec.model.name}
+                          {' → '}
+                          {spec.engine}
+                        </p>
 
-                          {compatibility.vehicleGeneration && (
+                        <p className="mt-1 text-sm text-gray-600">
+                          {specDetails(spec)}
+                          {compatibility.notes && (
                             <>
-                              {' → '}
-                              {
-                                compatibility
-                                  .vehicleGeneration.name
-                              }
-                            </>
-                          )}
-
-                          {compatibility.vehicleConfiguration && (
-                            <>
-                              {' → '}
-                              {
-                                compatibility
-                                  .vehicleConfiguration.name
-                              }
+                              {' · '}
+                              {compatibility.notes}
                             </>
                           )}
                         </p>
-
-                        {details && (
-                          <p className="mt-1 text-sm text-gray-600">
-                            {details}
-                          </p>
-                        )}
                       </div>
 
                       <button
                         type="button"
-                        disabled={
-                          submitting ||
-                          !compatibility.vehicleConfigurationId
-                        }
+                        disabled={submitting}
                         onClick={() => {
                           void handleRemove(compatibility)
                         }}

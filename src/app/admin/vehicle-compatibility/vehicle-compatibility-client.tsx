@@ -11,15 +11,19 @@ import type {
   VehicleCompatibilityTree,
 } from '@/server/vehicle-compatibility-tree'
 
+/**
+ * Épico 8 — consola de compatibilidade: árvore Make → Model → Spec
+ * (a especificação funde o que antes eram geração + configuração).
+ */
+
 type CreateTarget = {
-  level:
-    | 'make'
-    | 'model'
-    | 'generation'
-    | 'configuration'
+  level: 'make' | 'model' | 'spec'
   parentId?: string
   parentName: string
 }
+
+type SpecNode =
+  VehicleCompatibilityTree[number]['models'][number]['specs'][number]
 
 async function getErrorMessage(
   response: Response,
@@ -47,29 +51,20 @@ function toSlug(value: string) {
     .replace(/^-+|-+$/g, '')
 }
 
-function configurationSummary(
-  configuration: VehicleCompatibilityTree[number]['models'][number]['generations'][number]['configurations'][number],
-) {
+function specSummary(spec: SpecNode) {
   const details: string[] = []
 
-  if (configuration.engineCode) {
-    details.push(`Motor ${configuration.engineCode}`)
+  if (spec.engineCode) {
+    details.push(`Código ${spec.engineCode}`)
   }
-  if (configuration.engineType) {
-    details.push(configuration.engineType)
-  }
-  if (configuration.displacementCc !== null) {
-    details.push(`${configuration.displacementCc} cc`)
-  }
-  if (configuration.powerKw !== null) {
-    details.push(`${configuration.powerKw} kW`)
-  }
-  if (configuration.yearFrom !== null) {
-    details.push(
-      configuration.yearTo !== null
-        ? `${configuration.yearFrom}–${configuration.yearTo}`
-        : `Desde ${configuration.yearFrom}`,
-    )
+  details.push(spec.fuelType)
+  details.push(
+    spec.yearEnd !== null
+      ? `${spec.yearStart}–${spec.yearEnd}`
+      : `Desde ${spec.yearStart}`,
+  )
+  if (spec.powerHp !== null) {
+    details.push(`${spec.powerHp} cv`)
   }
 
   return details.join(' · ')
@@ -87,17 +82,14 @@ export default function VehicleCompatibilityClient() {
   const [createTarget, setCreateTarget] =
     useState<CreateTarget | null>(null)
   const [name, setName] = useState('')
-  const [platform, setPlatform] = useState('')
   const [engineCode, setEngineCode] =
     useState('')
-  const [engineType, setEngineType] =
-    useState('Gasolina')
-  const [displacementCc, setDisplacementCc] =
-    useState('')
-  const [powerKw, setPowerKw] = useState('')
-  const [bodyType, setBodyType] = useState('')
-  const [yearFrom, setYearFrom] = useState('')
-  const [yearTo, setYearTo] = useState('')
+  const [fuelType, setFuelType] = useState(
+    'DIESEL',
+  )
+  const [yearStart, setYearStart] = useState('')
+  const [yearEnd, setYearEnd] = useState('')
+  const [powerHp, setPowerHp] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -136,14 +128,11 @@ export default function VehicleCompatibilityClient() {
   function openCreate(target: CreateTarget) {
     setCreateTarget(target)
     setName('')
-    setPlatform('')
     setEngineCode('')
-    setEngineType('Gasolina')
-    setDisplacementCc('')
-    setPowerKw('')
-    setBodyType('')
-    setYearFrom('')
-    setYearTo('')
+    setFuelType('DIESEL')
+    setYearStart('')
+    setYearEnd('')
+    setPowerHp('')
     setError(null)
   }
 
@@ -160,12 +149,10 @@ export default function VehicleCompatibilityClient() {
 
     const endpoint =
       createTarget.level === 'make'
-        ? '/api/admin/vehicle-brands'
+        ? '/api/admin/vehicle-makes'
         : createTarget.level === 'model'
           ? '/api/admin/vehicle-models'
-          : createTarget.level === 'generation'
-            ? '/api/admin/vehicle-generations'
-            : '/api/admin/vehicle-configurations'
+          : '/api/admin/vehicle-specs'
 
     try {
       const response = await fetch(endpoint, {
@@ -175,53 +162,33 @@ export default function VehicleCompatibilityClient() {
             'application/json',
         },
         body: JSON.stringify(
-          createTarget.level ===
-            'configuration'
+          createTarget.level === 'spec'
             ? {
-                generationId:
+                modelId:
                   createTarget.parentId,
-                name,
+                engine: name,
                 engineCode:
                   engineCode || null,
-                engineType:
-                  engineType || null,
-                displacementCc:
-                  displacementCc
-                    ? Number(displacementCc)
-                    : null,
-                powerKw: powerKw
-                  ? Number(powerKw)
+                yearStart: Number(yearStart),
+                yearEnd: yearEnd
+                  ? Number(yearEnd)
                   : null,
-                bodyType:
-                  bodyType || null,
-                yearFrom: yearFrom
-                  ? Number(yearFrom)
-                  : null,
-                yearTo: yearTo
-                  ? Number(yearTo)
+                fuelType,
+                powerHp: powerHp
+                  ? Number(powerHp)
                   : null,
               }
             : createTarget.level === 'model'
               ? {
-                  brandId:
+                  makeId:
                     createTarget.parentId,
                   name,
                   slug: toSlug(name),
-                  description: null,
                 }
-              : createTarget.level === 'generation'
-                ? {
-                    modelId:
-                      createTarget.parentId,
-                    name,
-                    platform:
-                      platform || null,
-                    description: null,
-                  }
-                : {
-                    name,
-                    slug: toSlug(name),
-                  },
+              : {
+                  name,
+                  slug: toSlug(name),
+                },
         ),
       })
 
@@ -233,13 +200,10 @@ export default function VehicleCompatibilityClient() {
 
       setCreateTarget(null)
       setName('')
-      setPlatform('')
       setEngineCode('')
-      setDisplacementCc('')
-      setPowerKw('')
-      setBodyType('')
-      setYearFrom('')
-      setYearTo('')
+      setYearStart('')
+      setYearEnd('')
+      setPowerHp('')
       await load()
     } catch (createError) {
       setError(
@@ -300,9 +264,10 @@ export default function VehicleCompatibilityClient() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-black/8 bg-white p-4 shadow-sm">
         <p className="max-w-2xl text-sm leading-6 text-[#687078]">
           A estrutura é partilhada por todos
-          os produtos. Cria primeiro a marca e
-          depois desce até ao motor quando for
-          necessário.
+          os produtos. Cria primeiro a marca,
+          depois o modelo e finalmente as
+          especificações (motor, anos,
+          combustível e potência).
         </p>
         <button
           type="button"
@@ -337,9 +302,7 @@ export default function VehicleCompatibilityClient() {
               ? 'Nome da marca'
               : createTarget.level === 'model'
                 ? `Modelo de ${createTarget.parentName}`
-                : createTarget.level === 'generation'
-                  ? `Geração de ${createTarget.parentName}`
-                  : `Motor de ${createTarget.parentName}`}
+                : `Motor de ${createTarget.parentName}`}
             <input
               autoFocus
               required
@@ -351,21 +314,7 @@ export default function VehicleCompatibilityClient() {
             />
           </label>
 
-          {createTarget.level === 'generation' && (
-            <label className="grid gap-1 text-xs font-bold">
-              Plataforma / chassis
-              <input
-                value={platform}
-                onChange={(event) =>
-                  setPlatform(event.target.value)
-                }
-                className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-              />
-            </label>
-          )}
-
-          {createTarget.level ===
-            'configuration' && (
+          {createTarget.level === 'spec' && (
             <>
               <label className="grid gap-1 text-xs font-bold">
                 Código de motor
@@ -382,60 +331,19 @@ export default function VehicleCompatibilityClient() {
               <label className="grid gap-1 text-xs font-bold">
                 Combustível
                 <select
-                  value={engineType}
+                  value={fuelType}
                   onChange={(event) =>
-                    setEngineType(
+                    setFuelType(
                       event.target.value,
                     )
                   }
                   className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
                 >
-                  <option>Gasolina</option>
-                  <option>Diesel</option>
-                  <option>Híbrido</option>
-                  <option>Elétrico</option>
+                  <option>DIESEL</option>
+                  <option>GASOLINA</option>
+                  <option>HÍBRIDO</option>
+                  <option>ELÉTRICO</option>
                 </select>
-              </label>
-              <label className="grid gap-1 text-xs font-bold">
-                Cilindrada (cc)
-                <input
-                  type="number"
-                  min="1"
-                  value={displacementCc}
-                  onChange={(event) =>
-                    setDisplacementCc(
-                      event.target.value,
-                    )
-                  }
-                  className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-bold">
-                Potência (kW)
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={powerKw}
-                  onChange={(event) =>
-                    setPowerKw(
-                      event.target.value,
-                    )
-                  }
-                  className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-bold">
-                Carroçaria
-                <input
-                  value={bodyType}
-                  onChange={(event) =>
-                    setBodyType(
-                      event.target.value,
-                    )
-                  }
-                  className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
-                />
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-1 text-xs font-bold">
@@ -444,9 +352,10 @@ export default function VehicleCompatibilityClient() {
                     type="number"
                     min="1900"
                     max="2100"
-                    value={yearFrom}
+                    required
+                    value={yearStart}
                     onChange={(event) =>
-                      setYearFrom(
+                      setYearStart(
                         event.target.value,
                       )
                     }
@@ -459,9 +368,9 @@ export default function VehicleCompatibilityClient() {
                     type="number"
                     min="1900"
                     max="2100"
-                    value={yearTo}
+                    value={yearEnd}
                     onChange={(event) =>
-                      setYearTo(
+                      setYearEnd(
                         event.target.value,
                       )
                     }
@@ -469,6 +378,21 @@ export default function VehicleCompatibilityClient() {
                   />
                 </label>
               </div>
+              <label className="grid gap-1 text-xs font-bold">
+                Potência (cv)
+                <input
+                  type="number"
+                  min="1"
+                  max="2000"
+                  value={powerHp}
+                  onChange={(event) =>
+                    setPowerHp(
+                      event.target.value,
+                    )
+                  }
+                  className="rounded-md border bg-white px-3 py-2 text-sm font-normal"
+                />
+              </label>
             </>
           )}
 
@@ -498,8 +422,8 @@ export default function VehicleCompatibilityClient() {
             Começa pela marca do veículo
           </h2>
           <p className="mt-2 text-sm text-[#687078]">
-            Depois poderás adicionar modelos,
-            gerações e motores.
+            Depois poderás adicionar modelos e
+            especificações de fitment.
           </p>
         </div>
       ) : (
@@ -537,7 +461,7 @@ export default function VehicleCompatibilityClient() {
                     onClick={(event) => {
                       event.preventDefault()
                       void removeNode(
-                        `/api/admin/vehicle-brands/${make.id}`,
+                        `/api/admin/vehicle-makes/${make.id}`,
                         make.name,
                       )
                     }}
@@ -567,14 +491,14 @@ export default function VehicleCompatibilityClient() {
                             onClick={(event) => {
                               event.preventDefault()
                               openCreate({
-                                level: 'generation',
+                                level: 'spec',
                                 parentId: model.id,
                                 parentName: model.name,
                               })
                             }}
                             className="font-bold text-[#ef5b2a]"
                           >
-                            + Geração
+                            + Especificação
                           </button>
                           <button
                             type="button"
@@ -593,102 +517,44 @@ export default function VehicleCompatibilityClient() {
                       </summary>
 
                       <div className="space-y-2 border-t border-black/6 p-3">
-                        {model.generations.length === 0 ? (
+                        {model.specs.length === 0 ? (
                           <p className="text-sm text-[#687078]">
-                            Ainda não existem gerações.
+                            Ainda não existem especificações.
                           </p>
                         ) : (
-                          model.generations.map(
-                            (generation) => (
-                              <div
-                                key={generation.id}
-                                className="rounded-lg border border-black/8 bg-[#f8f8f7] p-3"
-                              >
-                                <div className="flex items-center justify-between gap-3">
+                          <ul className="space-y-2">
+                            {model.specs.map(
+                              (spec) => (
+                                <li
+                                  key={spec.id}
+                                  className="flex items-center justify-between gap-3 rounded-md border border-black/6 bg-[#f8f8f7] px-3 py-2"
+                                >
                                   <div>
-                                    <p className="font-bold">
-                                      {generation.name}
+                                    <p className="text-sm font-semibold">
+                                      {spec.engine}
                                     </p>
-                                    {generation.platform && (
-                                      <p className="text-xs text-[#687078]">
-                                        Plataforma: {generation.platform}
-                                      </p>
-                                    )}
+                                    <p className="text-xs text-[#687078]">
+                                      {specSummary(
+                                        spec,
+                                      )}
+                                    </p>
                                   </div>
-                                  <div className="flex gap-3">
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        openCreate({
-                                          level: 'configuration',
-                                          parentId:
-                                            generation.id,
-                                          parentName:
-                                            generation.name,
-                                        })
-                                      }
-                                      className="text-xs font-bold text-[#ef5b2a]"
-                                    >
-                                      + Motor
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        void removeNode(
-                                          `/api/admin/vehicle-generations/${generation.id}`,
-                                          generation.name,
-                                        )
-                                      }
-                                      className="text-xs font-bold text-red-700"
-                                    >
-                                      Apagar geração
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <ul className="mt-3 space-y-2">
-                                  {generation.configurations.length ===
-                                  0 ? (
-                                    <li className="text-xs text-[#687078]">
-                                      Sem motores/configurações.
-                                    </li>
-                                  ) : (
-                                    generation.configurations.map(
-                                      (configuration) => (
-                                        <li
-                                          key={configuration.id}
-                                          className="flex items-center justify-between gap-3 rounded-md border border-black/6 bg-white px-3 py-2"
-                                        >
-                                          <div>
-                                            <p className="text-sm font-semibold">
-                                              {configuration.name}
-                                            </p>
-                                            <p className="text-xs text-[#687078]">
-                                              {configurationSummary(
-                                                configuration,
-                                              ) || 'Sem detalhes adicionais'}
-                                            </p>
-                                          </div>
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              void removeNode(
-                                                `/api/admin/vehicle-configurations/${configuration.id}`,
-                                                configuration.name,
-                                              )
-                                            }
-                                            className="text-xs font-bold text-red-700"
-                                          >
-                                            Apagar
-                                          </button>
-                                        </li>
-                                      ),
-                                    )
-                                  )}
-                                </ul>
-                              </div>
-                            ),
-                          )
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void removeNode(
+                                        `/api/admin/vehicle-specs/${spec.id}`,
+                                        spec.engine,
+                                      )
+                                    }
+                                    className="text-xs font-bold text-red-700"
+                                  >
+                                    Apagar
+                                  </button>
+                                </li>
+                              ),
+                            )}
+                          </ul>
                         )}
                       </div>
                     </details>
