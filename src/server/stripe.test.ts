@@ -146,7 +146,7 @@ function createOrderRecord(
 ) {
   return {
     id: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     userId: 'user-1',
     status: 'PENDING',
     paymentStatus: 'PENDING',
@@ -189,7 +189,7 @@ function createCheckoutSessionInput(
 ) {
   return {
     orderId: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     customerEmail:
       'maria@example.com',
     items: [
@@ -392,7 +392,7 @@ describe(
         expect(params.metadata).toEqual(
           {
             orderId: 'order-1',
-            orderNumber: 'PFA-ABC123',
+            orderNumber: 'STORE-ABC123',
             paymentProvider: 'STRIPE',
           },
         )
@@ -1119,8 +1119,8 @@ describe(
       {
         name: 'pagamento já iniciado',
         order: createOrderRecord({
-          paymentProvider: 'PFA_SIMULATED',
-          paymentReference: 'pfa_sim_1',
+          paymentProvider: 'SIMULATED',
+          paymentReference: 'sim_1',
         }),
         error:
           StripeCheckoutConflictError,
@@ -1241,7 +1241,7 @@ describe(
           created.metadata,
         ).toEqual({
           orderId: 'order-1',
-          orderNumber: 'PFA-ABC123',
+          orderNumber: 'STORE-ABC123',
           paymentProvider: 'STRIPE',
         })
 
@@ -1399,7 +1399,7 @@ describe(
           ),
         ).resolves.toEqual({
           orderId: 'order-1',
-          orderNumber: 'PFA-ABC123',
+          orderNumber: 'STORE-ABC123',
           sessionId: 'cs_test_retoma',
           sessionUrl:
             'https://stripe.test/retoma',
@@ -1447,14 +1447,14 @@ describe(
           client_reference_id:
             'order-1',
           success_url:
-            'http://localhost:3000/checkout/sucesso?order=PFA-ABC123&session_id={CHECKOUT_SESSION_ID}',
+            'http://localhost:3000/checkout/sucesso?order=STORE-ABC123&session_id={CHECKOUT_SESSION_ID}',
           cancel_url:
             'http://localhost:3000/checkout/cancelado',
           locale: 'pt',
           metadata: {
             orderId: 'order-1',
             orderNumber:
-              'PFA-ABC123',
+              'STORE-ABC123',
             paymentProvider:
               STRIPE_PAYMENT_PROVIDER,
           },
@@ -1672,7 +1672,7 @@ describe(
                 createOrderRecord(
                   {
                     paymentProvider:
-                      'PFA_SIMULATED',
+                      'SIMULATED',
                     paymentReference:
                       'simul_1',
                   },

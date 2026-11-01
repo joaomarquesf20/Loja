@@ -49,6 +49,8 @@ export type OrderConfirmationEmailShippingAddress =
   }
 
 export type OrderConfirmationEmailProps = {
+  /** Nome da loja (branding do backoffice; fallback: `STORE_NAME`). */
+  storeName?: string
   orderNumber: string
   customerName: string
   fulfillmentMethod:
@@ -212,6 +214,7 @@ function formatDeliveryAddress(
 
 export function OrderConfirmationEmail(
   {
+    storeName = STORE_NAME,
     orderNumber,
     customerName,
     fulfillmentMethod,
@@ -246,7 +249,7 @@ export function OrderConfirmationEmail(
           style={container}
         >
           <Heading style={heading}>
-            {STORE_NAME}
+            {storeName}
           </Heading>
 
           <Text
@@ -470,7 +473,7 @@ export function OrderConfirmationEmail(
             Pode acompanhar o
             estado da encomenda
             na sua conta em{' '}
-            {STORE_NAME}.
+            {storeName}.
           </Text>
 
           <Hr style={divider} />
@@ -480,7 +483,7 @@ export function OrderConfirmationEmail(
             porque uma encomenda
             foi criada com este
             endereço em{' '}
-            {STORE_NAME}. Não
+            {storeName}. Não
             responda a este email.
           </Text>
         </Container>

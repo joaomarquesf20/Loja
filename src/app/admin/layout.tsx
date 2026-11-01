@@ -7,6 +7,9 @@ import {
 import type { ReactNode } from 'react'
 
 import { authOptions } from '@/server/auth'
+import {
+  getPublicStoreBranding,
+} from '@/server/branding-settings'
 import AdminBreadcrumb from './admin-breadcrumb'
 import AdminNavigation from './admin-navigation'
 import LogoutButton from './logout-button'
@@ -27,6 +30,11 @@ export default async function AdminLayout({
     notFound()
   }
 
+  // Identidade da loja configurada no backoffice — o
+  // backoffice apresenta o mesmo nome que a vitrine.
+  const branding =
+    await getPublicStoreBranding()
+
   return (
     <div className="min-h-screen bg-[#f4f4f2]">
       <div className="border-b border-black/8 bg-white">
@@ -35,8 +43,8 @@ export default async function AdminLayout({
             href="/admin"
             className="text-lg font-black tracking-tight"
           >
-            PFAUTOPARTS
-            <span className="ml-2 text-xs font-bold uppercase tracking-[0.12em] text-[#ef5b2a]">
+            {branding.storeName}
+            <span className="ml-2 text-xs font-bold uppercase tracking-[0.12em] text-brand">
               Admin
             </span>
           </Link>
@@ -44,7 +52,7 @@ export default async function AdminLayout({
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/admin/products/new"
-              className="rounded-md bg-[#ef5b2a] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#d94a1b]"
+              className="rounded-md bg-brand px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-strong"
             >
               + Novo produto
             </Link>

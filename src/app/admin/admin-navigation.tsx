@@ -39,8 +39,12 @@ const navigation = [
     label: 'Compatibilidade de veículos',
   },
   {
+    href: '/admin/settings',
+    label: 'Configurações',
+  },
+  {
     href: '/admin/commercial-settings',
-    label: 'Definições da loja',
+    label: 'Definições comerciais',
   },
 ]
 

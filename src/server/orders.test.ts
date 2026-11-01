@@ -31,7 +31,7 @@ function createOrderRecord() {
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     subtotal:
       decimal('100.00'),
     shippingCost:
@@ -249,7 +249,7 @@ describe(
           {
             id: 'order-1',
             orderNumber:
-              'PFA-ABC123',
+              'STORE-ABC123',
             subtotal: '100.00',
             shippingCost:
               '5.50',

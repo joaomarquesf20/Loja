@@ -482,7 +482,7 @@ export default function ImportClient() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
             Importar catálogo
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-tight">
@@ -520,7 +520,7 @@ export default function ImportClient() {
               key={stepName}
               className={`rounded-full px-3 py-1.5 ${
                 index <= currentIndex
-                  ? 'bg-[#ef5b2a] text-white'
+                  ? 'bg-brand text-white'
                   : 'bg-white text-[#687078] ring-1 ring-black/10'
               }`}
             >
@@ -570,7 +570,7 @@ export default function ImportClient() {
             }}
             className={`rounded-xl border-2 border-dashed p-10 text-center transition ${
               dragOver
-                ? 'border-[#ef5b2a] bg-[#fff7f3]'
+                ? 'border-brand bg-brand-soft'
                 : 'border-black/15 bg-white'
             }`}
           >
@@ -764,7 +764,7 @@ export default function ImportClient() {
             </div>
 
             {skuStrategy === 'custom' && (
-              <p className="mt-3 rounded-lg border border-[#ef5b2a]/30 bg-[#fff7f3] p-3 text-xs text-[#687078]">
+              <p className="mt-3 rounded-lg border border-brand/30 bg-brand-soft p-3 text-xs text-[#687078]">
                 Modo manual: edita os SKUs na
                 tabela de pré-visualização antes de
                 importar. SKUs manuais são validados
@@ -872,7 +872,7 @@ export default function ImportClient() {
               onClick={() =>
                 void loadPreview()
               }
-              className="rounded-md bg-[#ef5b2a] px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-5 py-2 text-sm font-black text-white disabled:opacity-50"
             >
               {working
                 ? 'A validar...'
@@ -1223,7 +1223,7 @@ export default function ImportClient() {
               onClick={() =>
                 void runImport()
               }
-              className="rounded-md bg-[#ef5b2a] px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+              className="rounded-md bg-brand px-5 py-2 text-sm font-black text-white disabled:opacity-50"
             >
               {working
                 ? 'A importar...'
@@ -1303,7 +1303,7 @@ export default function ImportClient() {
             <button
               type="button"
               onClick={reset}
-              className="rounded-md bg-[#ef5b2a] px-5 py-2 text-sm font-black text-white"
+              className="rounded-md bg-brand px-5 py-2 text-sm font-black text-white"
             >
               Nova importação
             </button>

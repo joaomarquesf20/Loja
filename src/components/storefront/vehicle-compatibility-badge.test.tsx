@@ -33,7 +33,7 @@ const storedSelection = {
   modelId: 'model-corsa-b',
 }
 
-const STORAGE_KEY = 'pfa-veiculo'
+const STORAGE_KEY = 'store:veiculo'
 
 const fetchMock = vi.fn()
 
@@ -229,7 +229,7 @@ describe(
         )
         window.dispatchEvent(
           new CustomEvent(
-            'pfa-veiculo-mudou',
+            'store:veiculo-mudou',
           ),
         )
 

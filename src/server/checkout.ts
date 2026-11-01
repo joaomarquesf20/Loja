@@ -1269,7 +1269,7 @@ function createOrderNumber() {
       .slice(0, 12)
       .toUpperCase()
 
-  return `PFA-${randomPart}`
+  return `STORE-${randomPart}`
 }
 
 function isRetryableTransactionError(

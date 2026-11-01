@@ -26,7 +26,7 @@ function createOrder(
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     subtotal: '100.00',
     shippingCost: '5.50',
     tax: '23.00',
@@ -162,7 +162,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -199,7 +199,7 @@ describe(
 
         expect(
           screen.queryByText(
-            /PFA-/,
+            /STORE-/,
           ),
         ).not.toBeInTheDocument()
       },
@@ -654,7 +654,7 @@ describe(
         )
 
         await screen.findByText(
-          'Encomenda PFA-ABC123',
+          'Encomenda STORE-ABC123',
         )
 
         expect(
@@ -1064,7 +1064,7 @@ describe(
         )
 
         await screen.findByText(
-          'Encomenda PFA-ABC123',
+          'Encomenda STORE-ABC123',
         )
 
         expect(
@@ -1175,7 +1175,7 @@ describe(
         expect(
           confirmMock,
         ).toHaveBeenCalledWith(
-          'Cancelar a encomenda PFA-ABC123? O pagamento será reembolsado e o stock dos artigos será reposto.',
+          'Cancelar a encomenda STORE-ABC123? O pagamento será reembolsado e o stock dos artigos será reposto.',
         )
 
         expect(
@@ -1293,7 +1293,7 @@ describe(
         expect(
           confirmMock,
         ).toHaveBeenCalledWith(
-          'Cancelar a encomenda PFA-ABC123? O stock dos artigos será reposto.',
+          'Cancelar a encomenda STORE-ABC123? O stock dos artigos será reposto.',
         )
 
         await waitFor(() => {
@@ -1637,12 +1637,12 @@ describe(
               createOrder({
                 id: 'order-2',
                 orderNumber:
-                  'PFA-NEW',
+                  'STORE-NEW',
               }),
               createOrder({
                 id: 'order-1',
                 orderNumber:
-                  'PFA-OLD',
+                  'STORE-OLD',
               }),
             ],
           }),
@@ -1653,7 +1653,7 @@ describe(
         )
 
         await screen.findByText(
-          'Encomenda PFA-NEW',
+          'Encomenda STORE-NEW',
         )
 
         const headings =
@@ -1670,8 +1670,8 @@ describe(
               heading.textContent,
           ),
         ).toEqual([
-          'Encomenda PFA-NEW',
-          'Encomenda PFA-OLD',
+          'Encomenda STORE-NEW',
+          'Encomenda STORE-OLD',
         ])
       },
     )
@@ -1718,7 +1718,7 @@ describe(
         await waitFor(() => {
           expect(
             screen.getByText(
-              'Encomenda PFA-ABC123',
+              'Encomenda STORE-ABC123',
             ),
           ).toBeInTheDocument()
         })
@@ -1742,7 +1742,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -1793,7 +1793,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -1841,7 +1841,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeInTheDocument()
 

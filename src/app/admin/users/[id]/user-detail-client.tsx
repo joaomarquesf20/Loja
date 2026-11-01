@@ -534,7 +534,7 @@ export default function UserDetailClient({
             onClick={
               handleSaveRole
             }
-            className="rounded-lg bg-[#ef5b2a] px-4 py-2 text-sm font-black text-white transition hover:bg-[#d94a1b] disabled:opacity-50"
+            className="rounded-lg bg-brand px-4 py-2 text-sm font-black text-white transition hover:bg-brand-strong disabled:opacity-50"
           >
             {busy
               ? 'A atualizar...'

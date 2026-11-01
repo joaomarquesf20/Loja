@@ -25,6 +25,8 @@ import { STORE_NAME } from './brand'
  * conhecido — é a fonte de verdade da base de dados no momento do envio.
  */
 export type OrderStatusUpdateEmailProps = {
+  /** Nome da loja (branding do backoffice; fallback: `STORE_NAME`). */
+  storeName?: string
   orderNumber: string
   customerName: string
   status: string
@@ -128,6 +130,7 @@ const table = {
 
 export function OrderStatusUpdateEmail(
   {
+    storeName = STORE_NAME,
     orderNumber,
     customerName,
     status,
@@ -166,7 +169,7 @@ export function OrderStatusUpdateEmail(
           style={container}
         >
           <Heading style={heading}>
-            {STORE_NAME}
+            {storeName}
           </Heading>
 
           <Text
@@ -242,7 +245,7 @@ export function OrderStatusUpdateEmail(
             <Text style={muted}>
               Pode consultar todos
               os detalhes na sua
-              conta em {STORE_NAME}.
+              conta em {storeName}.
             </Text>
           )}
 
@@ -253,7 +256,7 @@ export function OrderStatusUpdateEmail(
             porque acompanhava a
             encomenda{' '}
             {orderNumber} em{' '}
-            {STORE_NAME}. Não
+            {storeName}. Não
             responda a este email.
           </Text>
         </Container>

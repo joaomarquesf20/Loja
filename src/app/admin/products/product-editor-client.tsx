@@ -1217,7 +1217,7 @@ export default function ProductEditorClient({
     return (
       <div className="space-y-6">
         <header>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
             Novo produto · Passo 1 de 2
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-tight">
@@ -1260,9 +1260,9 @@ export default function ProductEditorClient({
                 onClick={() =>
                   chooseCategory(category.id)
                 }
-                className="group min-h-44 rounded-xl border border-black/8 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#ef5b2a] hover:shadow-md"
+                className="group min-h-44 rounded-xl border border-black/8 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md"
               >
-                <span className="text-xs font-black uppercase tracking-[0.1em] text-[#ef5b2a]">
+                <span className="text-xs font-black uppercase tracking-[0.1em] text-brand">
                   {categoryProfile === 'wheels'
                     ? 'Jantes'
                     : categoryProfile === 'suspension'
@@ -1301,7 +1301,7 @@ export default function ProductEditorClient({
         {creatingCategory ? (
           <form
             onSubmit={createCategory}
-            className="flex flex-wrap items-end gap-3 rounded-xl border border-[#ef5b2a]/30 bg-[#fff7f3] p-4"
+            className="flex flex-wrap items-end gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4"
           >
             <label className="grid flex-1 gap-1 text-xs font-bold">
               Nome da categoria
@@ -1339,7 +1339,7 @@ export default function ProductEditorClient({
             onClick={() =>
               setCreatingCategory(true)
             }
-            className="rounded-lg border border-dashed border-black/20 bg-white px-5 py-3 text-sm font-black text-[#ef5b2a]"
+            className="rounded-lg border border-dashed border-black/20 bg-white px-5 py-3 text-sm font-black text-brand"
           >
             + Criar categoria
           </button>
@@ -1368,7 +1368,7 @@ export default function ProductEditorClient({
           >
             ← Voltar aos produtos
           </Link>
-          <p className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+          <p className="mt-4 text-xs font-black uppercase tracking-[0.14em] text-brand">
             {isEditing
               ? 'Editar produto'
               : 'Novo produto · Passo 2 de 2'}
@@ -1425,7 +1425,7 @@ export default function ProductEditorClient({
             type="button"
             disabled={submitting}
             onClick={() => void save(true)}
-            className="rounded-md bg-[#ef5b2a] px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+            className="rounded-md bg-brand px-5 py-2 text-sm font-black text-white disabled:opacity-50"
           >
             {submitting
               ? 'A guardar...'
@@ -1532,7 +1532,7 @@ export default function ProductEditorClient({
           {creatingManufacturer ? (
             <form
               onSubmit={createManufacturer}
-              className="flex items-end gap-2 rounded-lg border border-[#ef5b2a]/30 bg-[#fff7f3] p-3"
+              className="flex items-end gap-2 rounded-lg border border-brand/30 bg-brand-soft p-3"
             >
               <label className="grid flex-1 gap-1 text-xs font-bold">
                 Novo fabricante
@@ -1572,7 +1572,7 @@ export default function ProductEditorClient({
               onClick={() =>
                 setCreatingManufacturer(true)
               }
-              className="justify-self-start text-xs font-bold text-[#ef5b2a]"
+              className="justify-self-start text-xs font-bold text-brand"
             >
               + Criar fabricante
             </button>
@@ -1752,7 +1752,7 @@ export default function ProductEditorClient({
           type="button"
           disabled={submitting}
           onClick={() => void save(true)}
-          className="rounded-md bg-[#ef5b2a] px-5 py-2 text-sm font-black text-white disabled:opacity-50"
+          className="rounded-md bg-brand px-5 py-2 text-sm font-black text-white disabled:opacity-50"
         >
           {submitting
             ? 'A guardar...'

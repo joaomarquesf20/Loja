@@ -364,7 +364,7 @@ describe(
                 order: {
                   id: 'order-1',
                   orderNumber:
-                    'PFA-ABC123',
+                    'STORE-ABC123',
                   fulfillmentMethod:
                     'DELIVERY',
                   paymentMethod:

@@ -411,8 +411,8 @@ export default function LoginPage() {
           </h1>
 
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-            Inicia sessão na tua conta
-            PFAUTOPARTS.
+            Inicia sessão na tua conta da
+            loja.
           </p>
 
           <form

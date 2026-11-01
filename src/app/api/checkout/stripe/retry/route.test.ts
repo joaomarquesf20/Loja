@@ -178,7 +178,7 @@ function createRequest(
 function createRetryResult() {
   return {
     orderId: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     sessionId: 'cs_test_123',
     sessionUrl:
       'https://stripe.test/pagar',
@@ -365,7 +365,7 @@ describe('/api/checkout/stripe/retry', () => {
     await expect(
       response.json(),
     ).resolves.toEqual({
-      orderNumber: 'PFA-ABC123',
+      orderNumber: 'STORE-ABC123',
       checkoutSession: {
         id: 'cs_test_123',
         url: 'https://stripe.test/pagar',
@@ -392,9 +392,9 @@ describe('/api/checkout/stripe/retry', () => {
     ).toBe('function')
 
     expect(
-      urls.buildSuccessUrl('PFA-ABC123'),
+      urls.buildSuccessUrl('STORE-ABC123'),
     ).toBe(
-      'http://localhost:3000/checkout/sucesso?order=PFA-ABC123&session_id={CHECKOUT_SESSION_ID}',
+      'http://localhost:3000/checkout/sucesso?order=STORE-ABC123&session_id={CHECKOUT_SESSION_ID}',
     )
     expect(
       urls.cancelUrl,
@@ -425,9 +425,9 @@ describe('/api/checkout/stripe/retry', () => {
           .mock.calls[0]
 
       expect(
-        urls.buildSuccessUrl('PFA-ABC123'),
+        urls.buildSuccessUrl('STORE-ABC123'),
       ).toBe(
-        'https://loja.pt/checkout/sucesso?order=PFA-ABC123&session_id={CHECKOUT_SESSION_ID}',
+        'https://loja.pt/checkout/sucesso?order=STORE-ABC123&session_id={CHECKOUT_SESSION_ID}',
       )
       expect(
         urls.cancelUrl,

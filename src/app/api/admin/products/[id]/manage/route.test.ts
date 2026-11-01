@@ -117,7 +117,7 @@ describe('Admin product workspace DELETE API', () => {
       name: 'Produto Teste',
       status: 'archived' as const,
       reason: 'order_history' as const,
-      orderNumbers: ['PFA-TESTE-1'],
+      orderNumbers: ['STORE-TESTE-1'],
       references: {
         orderItems: 1,
         cartItems: 0,

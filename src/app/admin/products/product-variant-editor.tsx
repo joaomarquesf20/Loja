@@ -507,7 +507,7 @@ export default function ProductVariantEditor({
                   (open) => !open,
                 )
               }
-              className="rounded-md border border-[#ef5b2a]/40 bg-[#fff7f3] px-4 py-2 text-sm font-bold text-[#ef5b2a] hover:border-[#ef5b2a]"
+              className="rounded-md border border-brand/40 bg-brand-soft px-4 py-2 text-sm font-bold text-brand hover:border-brand"
             >
               ⚙ Gerar combinações
             </button>
@@ -540,7 +540,7 @@ export default function ProductVariantEditor({
       </div>
 
       {generatorOpen && (
-        <div className="rounded-lg border border-[#ef5b2a]/30 bg-[#fff7f3] p-4">
+        <div className="rounded-lg border border-brand/30 bg-brand-soft p-4">
           <p className="text-sm font-black">
             Gerar combinações de variantes
           </p>
@@ -612,7 +612,7 @@ export default function ProductVariantEditor({
             <button
               type="button"
               onClick={runGenerator}
-              className="rounded-md bg-[#ef5b2a] px-4 py-2 text-xs font-black text-white"
+              className="rounded-md bg-brand px-4 py-2 text-xs font-black text-white"
             >
               Gerar linhas
             </button>
@@ -641,7 +641,7 @@ export default function ProductVariantEditor({
                 createVariantDraft(),
               ])
             }
-            className="mt-2 text-sm font-bold text-[#ef5b2a] underline"
+            className="mt-2 text-sm font-bold text-brand underline"
           >
             Adicionar a primeira
           </button>

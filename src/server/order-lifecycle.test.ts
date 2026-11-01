@@ -488,9 +488,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -499,9 +499,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_failed',
+                'sim_failed',
               amount: '128.50',
               currency: 'EUR',
             },
@@ -535,9 +535,9 @@ describe(
             paymentStatus:
               'PENDING',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_original',
+              'sim_original',
           }),
         )
 
@@ -546,9 +546,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_other',
+                'sim_other',
               amount: '128.50',
               currency: 'EUR',
             },
@@ -1483,9 +1483,9 @@ describe(
         const pendingOrder =
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           })
 
         const failedOrder =
@@ -1493,9 +1493,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           })
 
         findUnique
@@ -1519,9 +1519,9 @@ describe(
             {
               orderId: ' order-1 ',
               paymentProvider:
-                ' PFA_SIMULATED ',
+                ' SIMULATED ',
               paymentReference:
-                ' pfa_sim_attempt-1 ',
+                ' sim_attempt-1 ',
             },
             client,
           ),
@@ -1537,17 +1537,17 @@ describe(
             paymentStatus:
               'PENDING',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           },
           data: {
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           },
         })
 
@@ -1582,9 +1582,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           })
 
         findUnique.mockResolvedValue(
@@ -1596,9 +1596,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_attempt-1',
+                'sim_attempt-1',
             },
             client,
           ),
@@ -1628,9 +1628,9 @@ describe(
         findUnique.mockResolvedValue(
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           }),
         )
 
@@ -1639,9 +1639,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_other',
+                'sim_other',
             },
             client,
           ),
@@ -1677,9 +1677,9 @@ describe(
           createOrder({
             paymentStatus,
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           }),
         )
 
@@ -1688,9 +1688,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_attempt-1',
+                'sim_attempt-1',
             },
             client,
           ),
@@ -1717,9 +1717,9 @@ describe(
         findUnique.mockResolvedValue(
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           }),
         )
         findFirst.mockResolvedValue(
@@ -1734,9 +1734,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_attempt-1',
+                'sim_attempt-1',
             },
             client,
           ),
@@ -1760,9 +1760,9 @@ describe(
         findUnique.mockResolvedValue(
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           }),
         )
 
@@ -1782,9 +1782,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_attempt-1',
+                'sim_attempt-1',
             },
             client,
           ),
@@ -1810,9 +1810,9 @@ describe(
         findUnique.mockResolvedValue(
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_attempt-1',
+              'sim_attempt-1',
           }),
         )
 
@@ -1834,9 +1834,9 @@ describe(
             {
               orderId: 'order-1',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_attempt-1',
+                'sim_attempt-1',
             },
             client,
           ),

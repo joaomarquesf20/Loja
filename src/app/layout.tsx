@@ -8,9 +8,11 @@ import './globals.css'
 import Providers from './providers'
 import SiteHeader from './site-header'
 import {
-  SITE_DESCRIPTION,
-  SITE_NAME,
-} from './seo'
+  DEFAULT_STORE_DESCRIPTION,
+} from '@/lib/brand-defaults'
+import {
+  getPublicStoreBranding,
+} from '@/server/branding-settings'
 import { getCatalogCategories } from '@/server/catalog-request'
 import { getCommercialSettings } from '@/server/commercial-settings'
 import {
@@ -47,31 +49,41 @@ function getMetadataBaseUrl() {
 }
 
 /**
- * SEO base: título com template ('%s | PFAUTOPARTS' nas páginas
- * filho), descrição e defaults de Open Graph/Twitter. Páginas com
- * metadados próprios substituem o openGraph — os cards do Twitter
- * herdam do Open Graph resolvido.
+ * SEO base dinâmico: o nome da loja vem do backoffice
+ * (Configurações → StoreSettings). O template de título
+ * (`%s | Loja`) aplica-se às páginas filho; descrição e defaults
+ * de Open Graph/Twitter provêm do template. Páginas com metadados
+ * próprios substituem o openGraph — os cards do Twitter herdam do
+ * Open Graph resolvido.
  */
-export const metadata: Metadata = {
-  metadataBase: getMetadataBaseUrl(),
-  title: {
-    default: SITE_NAME,
-    template: `%s | ${SITE_NAME}`,
-  },
-  description: SITE_DESCRIPTION,
-  openGraph: {
-    type: 'website',
-    locale: 'pt_PT',
-    siteName: SITE_NAME,
-    title: SITE_NAME,
-    description: SITE_DESCRIPTION,
-    url: '/',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: SITE_NAME,
-    description: SITE_DESCRIPTION,
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const branding =
+    await getPublicStoreBranding()
+
+  return {
+    metadataBase: getMetadataBaseUrl(),
+    title: {
+      default: branding.storeName,
+      template: `%s | ${branding.storeName}`,
+    },
+    description:
+      DEFAULT_STORE_DESCRIPTION,
+    openGraph: {
+      type: 'website',
+      locale: 'pt_PT',
+      siteName: branding.storeName,
+      title: branding.storeName,
+      description:
+        DEFAULT_STORE_DESCRIPTION,
+      url: '/',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: branding.storeName,
+      description:
+        DEFAULT_STORE_DESCRIPTION,
+    },
+  }
 }
 
 async function getHeaderCategories() {
@@ -173,9 +185,11 @@ export default async function RootLayout({
   children: ReactNode
 }>) {
   const [
+    branding,
     headerCategories,
     commercialMessage,
   ] = await Promise.all([
+    getPublicStoreBranding(),
     getHeaderCategories(),
     getCommercialMessage(),
   ])
@@ -186,6 +200,17 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
+        {/* Branding dinâmico: a cor definida no backoffice
+            substitui os defaults do template em toda a vitrine
+            (as classes bg-brand/text-brand leem estas vars). */}
+        {branding.brandCssVariables ? (
+          <style
+            id="store-brand-vars"
+            dangerouslySetInnerHTML={{
+              __html: `:root{${branding.brandCssVariables}}`,
+            }}
+          />
+        ) : null}
         <Providers>
           <SiteHeader
             categories={
@@ -194,6 +219,10 @@ export default async function RootLayout({
             commercialMessage={
               commercialMessage
             }
+            storeName={
+              branding.storeName
+            }
+            logoUrl={branding.logoUrl}
           />
           {children}
         </Providers>

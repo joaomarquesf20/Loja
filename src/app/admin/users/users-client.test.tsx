@@ -77,7 +77,7 @@ describe(
               createUser({
                 id: 'user-2',
                 email:
-                  'gerente@pfautoparts.pt',
+                  'gerente@exemplo.pt',
                 name: 'Gerente Global',
                 role: 'ADMIN',
                 isActive: false,
@@ -336,7 +336,7 @@ describe(
           {
             target: {
               value:
-                'ninguem@pfautoparts.pt',
+                'ninguem@exemplo.pt',
             },
           },
         )

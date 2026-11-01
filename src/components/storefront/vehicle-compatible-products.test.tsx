@@ -74,7 +74,7 @@ const storedSelection = {
   modelId: 'model-corsa-b',
 }
 
-const STORAGE_KEY = 'pfa-veiculo'
+const STORAGE_KEY = 'store:veiculo'
 
 function seedVehicleSelection() {
   window.localStorage.setItem(

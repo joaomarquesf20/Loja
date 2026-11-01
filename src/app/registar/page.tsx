@@ -325,7 +325,7 @@ export default function RegisterPage() {
 
           <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
             Cria a tua conta de cliente
-            PFAUTOPARTS.
+            nesta loja.
           </p>
 
           <form

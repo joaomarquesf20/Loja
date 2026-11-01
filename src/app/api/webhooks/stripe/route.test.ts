@@ -105,7 +105,7 @@ function createSessionObject(
     client_reference_id: 'order-1',
     metadata: {
       orderId: 'order-1',
-      orderNumber: 'PFA-ABC123',
+      orderNumber: 'STORE-ABC123',
       paymentProvider: 'STRIPE',
     },
     ...overrides,
@@ -536,7 +536,7 @@ describe(
           createSessionObject({
             metadata: {
               orderId: 'order-1',
-              orderNumber: 'PFA-ABC123',
+              orderNumber: 'STORE-ABC123',
               padding: 'x'.repeat(
                 70 * 1024,
               ),

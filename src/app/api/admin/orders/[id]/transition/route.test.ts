@@ -159,9 +159,9 @@ const confirmedOrder = {
   fulfillmentMethod:
     'DELIVERY' as const,
   paymentProvider:
-    'PFA_SIMULATED',
+    'SIMULATED',
   paymentReference:
-    'pfa_sim_123',
+    'sim_123',
 }
 
 
@@ -174,9 +174,9 @@ const cancelledOrder = {
   fulfillmentMethod:
     'DELIVERY' as const,
   paymentProvider:
-    'PFA_SIMULATED',
+    'SIMULATED',
   paymentReference:
-    'pfa_sim_123',
+    'sim_123',
 }
 
 
@@ -189,9 +189,9 @@ const refundedOrder = {
   fulfillmentMethod:
     'DELIVERY' as const,
   paymentProvider:
-    'PFA_SIMULATED',
+    'SIMULATED',
   paymentReference:
-    'pfa_sim_123',
+    'sim_123',
 }
 
 describe(

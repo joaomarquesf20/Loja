@@ -135,10 +135,10 @@ describe(
         ).toBe('order-1')
         expect(
           body.payment.paymentProvider,
-        ).toBe('PFA_SIMULATED')
+        ).toBe('SIMULATED')
         expect(
           body.payment.paymentReference,
-        ).toMatch(/^pfa_sim_/)
+        ).toMatch(/^sim_/)
         expect(
           body.payment.amount,
         ).toBe('128.50')
@@ -267,9 +267,9 @@ describe(
           createOrder({
             paymentStatus: 'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
         mocks.updateMany.mockRejectedValue(
@@ -315,9 +315,9 @@ describe(
           createOrder({
             paymentStatus: 'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
         mocks.updateMany.mockRejectedValue(

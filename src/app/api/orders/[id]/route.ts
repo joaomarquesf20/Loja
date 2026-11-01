@@ -31,7 +31,7 @@ type RouteContext = {
 
 /**
  * Detalhe de uma encomenda do utilizador autenticado, resolvido pelo
- * número de encomenda (ex.: PFA-ABC123). Serve a página de confirmação
+ * número de encomenda (ex.: STORE-ABC123). Serve a página de confirmação
  * do Stripe Checkout, que recebe esse número no retorno de sucesso.
  * Encomendas de outras contas devolvem 404, para não revelarem a sua
  * existência.

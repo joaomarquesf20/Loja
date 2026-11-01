@@ -4,7 +4,9 @@ import type { ReactElement } from 'react'
 
 import { Resend } from 'resend'
 
-import { STORE_NAME } from '@/emails/brand'
+import {
+  getPublicStoreBranding,
+} from './branding-settings'
 
 import {
   OrderConfirmationEmail,
@@ -872,14 +874,18 @@ export async function sendOrderConfirmationEmail(
       }
     }
 
+    const branding =
+      await getPublicStoreBranding()
+
     return await deliverEmail(
       {
         to: order.shippingEmail,
-        subject: `${STORE_NAME}: Encomenda ${order.orderNumber} confirmada`,
+        subject: `${branding.storeName}: Encomenda ${order.orderNumber} confirmada`,
         react:
-          OrderConfirmationEmail(
-            built.props,
-          ),
+          OrderConfirmationEmail({
+            ...built.props,
+            storeName: branding.storeName,
+          }),
         context: 'order-confirmation',
       },
       options,
@@ -944,10 +950,13 @@ export async function sendOrderStatusUpdateEmail(
       }
     }
 
+    const branding =
+      await getPublicStoreBranding()
+
     return await deliverEmail(
       {
         to: order.shippingEmail,
-        subject: `${STORE_NAME}: Atualização da encomenda ${order.orderNumber}`,
+        subject: `${branding.storeName}: Atualização da encomenda ${order.orderNumber}`,
         react:
           OrderStatusUpdateEmail({
             orderNumber:
@@ -959,6 +968,7 @@ export async function sendOrderStatusUpdateEmail(
               order.paymentStatus,
             updatedAt:
               order.updatedAt.toISOString(),
+            storeName: branding.storeName,
           }),
         context: 'order-status-update',
       },
@@ -1125,26 +1135,33 @@ export async function buildOrderEmailPreview(
         }
       }
 
+      const branding =
+        await getPublicStoreBranding()
+
       return {
         status: 'ready',
         type: input.type,
-        subject: `${STORE_NAME}: Encomenda ${order.orderNumber} confirmada`,
+        subject: `${branding.storeName}: Encomenda ${order.orderNumber} confirmada`,
         recipient:
           normalizeOptionalString(
             order.shippingEmail,
           ),
         html: await renderEmailHtml(
-          OrderConfirmationEmail(
-            built.props,
-          ),
+          OrderConfirmationEmail({
+            ...built.props,
+            storeName: branding.storeName,
+          }),
         ),
       }
     }
 
+    const branding =
+      await getPublicStoreBranding()
+
     return {
       status: 'ready',
       type: input.type,
-      subject: `${STORE_NAME}: Atualização da encomenda ${order.orderNumber}`,
+      subject: `${branding.storeName}: Atualização da encomenda ${order.orderNumber}`,
       recipient:
         normalizeOptionalString(
           order.shippingEmail,
@@ -1160,6 +1177,7 @@ export async function buildOrderEmailPreview(
             order.paymentStatus,
           updatedAt:
             order.updatedAt.toISOString(),
+          storeName: branding.storeName,
         }),
       ),
     }

@@ -693,7 +693,7 @@ describe('ProductsClient', () => {
           name: 'Molas Suspension',
           status: 'archived',
           reason: 'order_history',
-          orderNumbers: ['PFA-66BAACBA42F0'],
+          orderNumbers: ['STORE-66BAACBA42F0'],
           references: {
             orderItems: 1,
             cartItems: 0,

@@ -124,9 +124,9 @@ const initiatedPayment = {
     'CARD' as const,
   installmentCount: null,
   paymentProvider:
-    'PFA_SIMULATED' as const,
+    'SIMULATED' as const,
   paymentReference:
-    'pfa_sim_test-123',
+    'sim_test-123',
   amount: '128.50',
 }
 
@@ -150,9 +150,9 @@ describe(
           fulfillmentMethod:
             'DELIVERY',
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_test-123',
+            'sim_test-123',
         },
       )
     })
@@ -188,9 +188,9 @@ describe(
         ).toHaveBeenCalledWith({
           orderId: 'order-1',
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_test-123',
+            'sim_test-123',
           amount: '128.50',
           currency: 'EUR',
         })
@@ -226,9 +226,9 @@ describe(
         ).toHaveBeenCalledWith({
           orderId: 'order-1',
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_test-123',
+            'sim_test-123',
           amount: '128.50',
           currency: 'EUR',
         })
@@ -243,7 +243,7 @@ describe(
           'production',
         )
         vi.stubEnv(
-          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          'ENABLE_SIMULATED_PAYMENTS',
           '',
         )
 
@@ -280,7 +280,7 @@ describe(
           'production',
         )
         vi.stubEnv(
-          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          'ENABLE_SIMULATED_PAYMENTS',
           'TRUE',
         )
 
@@ -317,7 +317,7 @@ describe(
           'production',
         )
         vi.stubEnv(
-          'PFA_ENABLE_SIMULATED_PAYMENTS',
+          'ENABLE_SIMULATED_PAYMENTS',
           'true',
         )
 

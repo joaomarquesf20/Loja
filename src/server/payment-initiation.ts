@@ -8,7 +8,7 @@ import {
 } from './order-lifecycle'
 
 export const SIMULATED_PAYMENT_PROVIDER =
-  'PFA_SIMULATED'
+  'SIMULATED'
 
 export type PaymentInitiationField =
   | 'userId'
@@ -529,7 +529,7 @@ export async function initiateSimulatedPayment(
   orderIdInput: unknown,
   client?: PaymentInitiationClient,
   referenceFactory: PaymentReferenceFactory = () =>
-    `pfa_sim_${randomUUID()}`,
+    `sim_${randomUUID()}`,
 ): Promise<PaymentInitiationResult> {
   const userId =
     normalizeRequiredString(

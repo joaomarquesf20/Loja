@@ -13,6 +13,11 @@ import {
   useState,
 } from 'react'
 
+import {
+  DEFAULT_LOGO_URL_DARK,
+  DEFAULT_STORE_NAME,
+} from '@/lib/brand-defaults'
+
 type HeaderCategory = {
   name: string
   slug: string
@@ -21,6 +26,8 @@ type HeaderCategory = {
 type SiteHeaderProps = {
   categories?: HeaderCategory[]
   commercialMessage?: string | null
+  storeName?: string
+  logoUrl?: string
 }
 
 /**
@@ -122,6 +129,8 @@ function ChevronIcon() {
 export default function SiteHeader({
   categories = [],
   commercialMessage = null,
+  storeName = DEFAULT_STORE_NAME,
+  logoUrl = DEFAULT_LOGO_URL_DARK,
 }: SiteHeaderProps) {
   const pathname = usePathname()
 
@@ -258,11 +267,11 @@ export default function SiteHeader({
       <div className="mx-auto grid max-w-7xl grid-cols-[auto_auto] items-center gap-x-3 gap-y-2.5 px-4 py-2.5 sm:px-6 md:grid-cols-[210px_minmax(320px,1fr)_auto] lg:gap-x-6 lg:px-8">
         <Link
           href="/"
-          aria-label="PFAUTOPARTS"
+          aria-label={storeName}
           className="flex w-fit shrink-0 items-center rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
         >
           <Image
-            src="/brand/pfautoparts-logo-horizontal-dark.png"
+            src={logoUrl}
             alt=""
             width={256}
             height={42}

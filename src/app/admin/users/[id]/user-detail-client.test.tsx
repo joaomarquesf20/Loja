@@ -55,7 +55,7 @@ function createUser(
       {
         id: 'order-1',
         orderNumber:
-          'PFA-ABC123',
+          'STORE-ABC123',
         total: '128.00',
         status: 'PROCESSING',
         paymentStatus: 'PAID',
@@ -119,7 +119,7 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeInTheDocument()
 

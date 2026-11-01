@@ -134,7 +134,7 @@ describe('Admin bulk products API', () => {
           name: 'Produto Dois',
           status: 'archived',
           reason: 'order_history',
-          orderNumbers: ['PFA-TESTE-2'],
+          orderNumbers: ['STORE-TESTE-2'],
           references: {
             orderItems: 1,
             cartItems: 0,

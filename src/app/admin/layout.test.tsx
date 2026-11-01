@@ -52,6 +52,18 @@ vi.mock('@/server/auth', () => ({
   authOptions: {},
 }))
 
+vi.mock(
+  '@/server/branding-settings',
+  () => ({
+    getPublicStoreBranding:
+      vi.fn(async () => ({
+        storeName: 'AutoParts',
+        logoUrl:
+          '/brand/logo-horizontal-dark.png',
+      })),
+  }),
+)
+
 import AdminLayout from './layout'
 
 describe(

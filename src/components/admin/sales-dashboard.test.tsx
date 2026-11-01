@@ -80,7 +80,7 @@ function createOverview(
       {
         id: 'order-9',
         orderNumber:
-          'PFA-XYZ789',
+          'STORE-XYZ789',
         status: 'PROCESSING',
         paymentStatus:
           'PAID',
@@ -97,7 +97,7 @@ function createOverview(
       {
         id: 'order-8',
         orderNumber:
-          'PFA-XYZ000',
+          'STORE-XYZ000',
         status: 'PENDING',
         paymentStatus:
           'PENDING',
@@ -386,7 +386,7 @@ describe(
             'link',
             {
               name:
-                /PFA-XYZ789/,
+                /STORE-XYZ789/,
             },
           )
 
@@ -409,7 +409,7 @@ describe(
             'link',
             {
               name:
-                /PFA-XYZ000/,
+                /STORE-XYZ000/,
             },
           )
 

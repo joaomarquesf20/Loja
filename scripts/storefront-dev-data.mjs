@@ -18,7 +18,7 @@ const prisma = new PrismaClient({
   adapter,
 })
 
-const DEV_PREFIX = 'DEV-PFA-'
+const DEV_PREFIX = 'DEV-'
 const DEFAULT_OPTION_KEY = 'default'
 
 const categories = [
@@ -323,7 +323,7 @@ const products = [
   {
     name: 'Japan Racing JR11',
     slug: 'dev-japan-racing-jr11',
-    sku: 'DEV-PFA-WHE-001',
+    sku: 'DEV-WHE-001',
     category: 'Jantes',
     brand: 'Japan Racing',
     shippingClass: 'STANDARD',
@@ -349,7 +349,7 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-WHE-001-JR11-17-75-100-SB',
+        sku: 'DEV-WHE-001-JR11-17-75-100-SB',
         optionKey: '17-7.5J-5x100-ET35-64.1-Satin Black',
         price: '169.90',
         stockQuantity: 8,
@@ -363,7 +363,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-001-JR11-18-80-112-HS',
+        sku: 'DEV-WHE-001-JR11-18-80-112-HS',
         optionKey: '18-8J-5x112-ET40-66.6-Hyper Silver',
         price: '189.90',
         stockQuantity: 6,
@@ -377,7 +377,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-001-JR11-18-85-112-BR',
+        sku: 'DEV-WHE-001-JR11-18-85-112-BR',
         optionKey: '18-8.5J-5x112-ET40-66.6-Bronze',
         price: '199.90',
         stockQuantity: 4,
@@ -391,7 +391,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-001-JR11-19-85-120-SB',
+        sku: 'DEV-WHE-001-JR11-19-85-120-SB',
         optionKey: '19-8.5J-5x120-ET45-72.5-Satin Black',
         price: '219.90',
         stockQuantity: 3,
@@ -405,7 +405,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-001-JR11-19-95-120-BR',
+        sku: 'DEV-WHE-001-JR11-19-95-120-BR',
         optionKey: '19-9.5J-5x120-ET45-72.5-Bronze',
         price: '239.90',
         stockQuantity: 0,
@@ -423,7 +423,7 @@ const products = [
   {
     name: 'BBS CH-R II',
     slug: 'dev-bbs-ch-r-ii',
-    sku: 'DEV-PFA-WHE-002',
+    sku: 'DEV-WHE-002',
     category: 'Jantes',
     brand: 'BBS',
     shippingClass: 'STANDARD',
@@ -447,7 +447,7 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-WHE-002-CHR2-19-85-112-SB',
+        sku: 'DEV-WHE-002-CHR2-19-85-112-SB',
         optionKey: '19-8.5J-5x112-66.6-Satin Black',
         price: '649.90',
         stockQuantity: 4,
@@ -460,7 +460,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-002-CHR2-20-95-112-HS',
+        sku: 'DEV-WHE-002-CHR2-20-95-112-HS',
         optionKey: '20-9.5J-5x112-66.6-Hyper Silver',
         price: '749.90',
         stockQuantity: 2,
@@ -477,7 +477,7 @@ const products = [
   {
     name: 'OZ Racing Ultraleggera',
     slug: 'dev-oz-racing-ultraleggera',
-    sku: 'DEV-PFA-WHE-003',
+    sku: 'DEV-WHE-003',
     category: 'Jantes',
     brand: 'OZ Racing',
     shippingClass: 'STANDARD',
@@ -493,7 +493,7 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-WHE-003-ULT-17-75-100-HS',
+        sku: 'DEV-WHE-003-ULT-17-75-100-HS',
         optionKey: '17-7.5J-5x100-64.1-Hyper Silver',
         price: '479.90',
         stockQuantity: 5,
@@ -506,7 +506,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-WHE-003-ULT-18-80-112-SB',
+        sku: 'DEV-WHE-003-ULT-18-80-112-SB',
         optionKey: '18-8J-5x112-66.6-Satin Black',
         price: '519.90',
         stockQuantity: 3,
@@ -523,7 +523,7 @@ const products = [
   {
     name: 'H&R Sport Springs',
     slug: 'dev-h-r-sport-springs',
-    sku: 'DEV-PFA-SUS-001',
+    sku: 'DEV-SUS-001',
     category: 'Suspensão',
     brand: 'H&R',
     shippingClass: 'STANDARD',
@@ -537,7 +537,7 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-SUS-001-HR-30-30-1000',
+        sku: 'DEV-SUS-001-HR-30-30-1000',
         optionKey: '30/30-1000kg',
         price: '289.90',
         stockQuantity: 5,
@@ -555,7 +555,7 @@ const products = [
         ],
       },
       {
-        sku: 'DEV-PFA-SUS-001-HR-40-30-1090',
+        sku: 'DEV-SUS-001-HR-40-30-1090',
         optionKey: '40/30-1090kg',
         price: '299.90',
         stockQuantity: 4,
@@ -573,7 +573,7 @@ const products = [
         ],
       },
       {
-        sku: 'DEV-PFA-SUS-001-HR-50-40-1090',
+        sku: 'DEV-SUS-001-HR-50-40-1090',
         optionKey: '50/40-1090kg',
         price: '309.90',
         stockQuantity: 3,
@@ -591,7 +591,7 @@ const products = [
         ],
       },
       {
-        sku: 'DEV-PFA-SUS-001-HR-60-50-1150',
+        sku: 'DEV-SUS-001-HR-60-50-1150',
         optionKey: '60/50-1150kg',
         price: '319.90',
         stockQuantity: 2,
@@ -613,7 +613,7 @@ const products = [
   {
     name: 'Eibach Pro-Kit',
     slug: 'dev-eibach-pro-kit',
-    sku: 'DEV-PFA-SUS-002',
+    sku: 'DEV-SUS-002',
     category: 'Suspensão',
     brand: 'Eibach',
     shippingClass: 'STANDARD',
@@ -627,7 +627,7 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-SUS-002-EIB-30-30-1000',
+        sku: 'DEV-SUS-002-EIB-30-30-1000',
         optionKey: '30/30-1000kg',
         price: '269.90',
         stockQuantity: 4,
@@ -638,7 +638,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-SUS-002-EIB-40-40-1090',
+        sku: 'DEV-SUS-002-EIB-40-40-1090',
         optionKey: '40/40-1090kg',
         price: '279.90',
         stockQuantity: 4,
@@ -653,7 +653,7 @@ const products = [
   {
     name: 'KW Variant 3 Coilover Kit',
     slug: 'dev-kw-variant-3-coilover-kit',
-    sku: 'DEV-PFA-SUS-003',
+    sku: 'DEV-SUS-003',
     category: 'Suspensão',
     brand: 'KW',
     shippingClass: 'STANDARD',
@@ -663,7 +663,7 @@ const products = [
     variantOptions: [vehicleApplicationAxis],
     variants: [
       {
-        sku: 'DEV-PFA-SUS-003-KW-V3-MQB',
+        sku: 'DEV-SUS-003-KW-V3-MQB',
         optionKey: 'mqb',
         price: '1899.00',
         stockQuantity: 2,
@@ -673,7 +673,7 @@ const products = [
         },
       },
       {
-        sku: 'DEV-PFA-SUS-003-KW-V3-F30',
+        sku: 'DEV-SUS-003-KW-V3-F30',
         optionKey: 'bmw-f30',
         price: '1949.00',
         stockQuantity: 1,
@@ -687,7 +687,7 @@ const products = [
   {
     name: 'Bilstein B14 PSS Coilover Kit',
     slug: 'dev-bilstein-b14-pss-coilover-kit',
-    sku: 'DEV-PFA-SUS-004',
+    sku: 'DEV-SUS-004',
     category: 'Suspensão',
     brand: 'Bilstein',
     shippingClass: 'STANDARD',
@@ -696,7 +696,7 @@ const products = [
       'Kit coilover Bilstein B14 PSS com altura ajustável e amortecedores monotube gás. Aplicação por plataforma, sem seleção de opções na ficha do produto.',
     variants: [
       {
-        sku: 'DEV-PFA-SUS-004-B14-MQB',
+        sku: 'DEV-SUS-004-B14-MQB',
         optionKey: DEFAULT_OPTION_KEY,
         price: '1099.00',
         stockQuantity: 4,
@@ -707,7 +707,7 @@ const products = [
   {
     name: 'Maxton Design Front Splitter V2',
     slug: 'dev-maxton-front-splitter-v2',
-    sku: 'DEV-PFA-EXT-001',
+    sku: 'DEV-EXT-001',
     category: 'Exterior',
     brand: 'Maxton Design',
     shippingClass: 'STANDARD',
@@ -716,7 +716,7 @@ const products = [
       'Splitter dianteiro Maxton Design V2 para reforçar visualmente a frente do automóvel.',
     variants: [
       {
-        sku: 'DEV-PFA-EXT-001-SPLIT-V2',
+        sku: 'DEV-EXT-001-SPLIT-V2',
         optionKey: DEFAULT_OPTION_KEY,
         price: '219.90',
         stockQuantity: 7,
@@ -727,7 +727,7 @@ const products = [
   {
     name: 'Maxton Design Rear Diffuser Street Pro',
     slug: 'dev-maxton-rear-diffuser-street-pro',
-    sku: 'DEV-PFA-EXT-002',
+    sku: 'DEV-EXT-002',
     category: 'Exterior',
     brand: 'Maxton Design',
     shippingClass: 'STANDARD',
@@ -736,7 +736,7 @@ const products = [
       'Difusor traseiro Maxton Design Street Pro para acrescentar definição à traseira do automóvel.',
     variants: [
       {
-        sku: 'DEV-PFA-EXT-002-DIFF-SP',
+        sku: 'DEV-EXT-002-DIFF-SP',
         optionKey: DEFAULT_OPTION_KEY,
         price: '289.90',
         stockQuantity: 3,
@@ -747,7 +747,7 @@ const products = [
   {
     name: 'Sparco Aluminium Pedal Set',
     slug: 'dev-sparco-aluminium-pedal-set',
-    sku: 'DEV-PFA-ACC-001',
+    sku: 'DEV-ACC-001',
     category: 'Acessórios',
     brand: 'Sparco',
     shippingClass: 'SMALL',
@@ -756,7 +756,7 @@ const products = [
       'Conjunto de pedais em alumínio Sparco para um detalhe de personalização no interior.',
     variants: [
       {
-        sku: 'DEV-PFA-ACC-001-PED-ALU',
+        sku: 'DEV-ACC-001-PED-ALU',
         optionKey: DEFAULT_OPTION_KEY,
         price: '74.90',
         stockQuantity: 12,
@@ -767,7 +767,7 @@ const products = [
   {
     name: 'Eibach Pro-Spacer Kit',
     slug: 'dev-eibach-pro-spacer-kit',
-    sku: 'DEV-PFA-ACC-002',
+    sku: 'DEV-ACC-002',
     category: 'Acessórios',
     brand: 'Eibach',
     shippingClass: 'SMALL',
@@ -782,14 +782,14 @@ const products = [
     ],
     variants: [
       {
-        sku: 'DEV-PFA-ACC-002-SPC-15',
+        sku: 'DEV-ACC-002-SPC-15',
         optionKey: '15mm',
         price: '129.90',
         stockQuantity: 4,
         selections: { thickness_mm: '15' },
       },
       {
-        sku: 'DEV-PFA-ACC-002-SPC-30',
+        sku: 'DEV-ACC-002-SPC-30',
         optionKey: '30mm',
         price: '149.90',
         stockQuantity: 5,
@@ -811,28 +811,28 @@ const wheelCategoryNames = new Set([
 
 const compatibilities = [
   {
-    productSku: 'DEV-PFA-SUS-001',
+    productSku: 'DEV-SUS-001',
     vehicleModelSlug: 'dev-golf',
     vehicleSpecEngineCode: 'CRLB',
     note: 'Aplicação por especificação de motor',
   },
   {
-    productSku: 'DEV-PFA-SUS-001',
+    productSku: 'DEV-SUS-001',
     vehicleModelSlug: 'dev-a3',
     vehicleSpecEngineCode: 'CRLB',
   },
   {
-    productSku: 'DEV-PFA-SUS-003',
+    productSku: 'DEV-SUS-003',
     vehicleModelSlug: 'dev-golf',
     vehicleSpecEngineCode: 'CRLB',
   },
   {
-    productSku: 'DEV-PFA-SUS-003',
+    productSku: 'DEV-SUS-003',
     vehicleModelSlug: 'dev-serie-3',
     vehicleSpecEngineCode: 'N47D20',
   },
   {
-    productSku: 'DEV-PFA-SUS-004',
+    productSku: 'DEV-SUS-004',
     vehicleModelSlug: 'dev-golf',
     vehicleSpecEngineCode: 'CRLB',
   },

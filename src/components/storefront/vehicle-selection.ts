@@ -23,8 +23,8 @@ export type VehicleSelection = {
   modelId: string
 }
 
-const STORAGE_KEY = 'pfa-veiculo'
-const CHANGE_EVENT = 'pfa-veiculo-mudou'
+const STORAGE_KEY = 'store:veiculo'
+const CHANGE_EVENT = 'store:veiculo-mudou'
 
 export function isVehicleSelection(
   value: unknown,

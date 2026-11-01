@@ -88,10 +88,10 @@ describe('/api/orders/[id]', () => {
       const response =
         await GET(
           new Request(
-            'http://localhost:3000/api/orders/PFA-ABC123',
+            'http://localhost:3000/api/orders/STORE-ABC123',
           ),
           createContext(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         )
 
@@ -118,7 +118,7 @@ describe('/api/orders/[id]', () => {
       const order = {
         id: 'order-1',
         orderNumber:
-          'PFA-ABC123',
+          'STORE-ABC123',
         total: '105.90',
         paymentStatus: 'PAID',
       }
@@ -131,10 +131,10 @@ describe('/api/orders/[id]', () => {
       const response =
         await GET(
           new Request(
-            'http://localhost:3000/api/orders/PFA-ABC123',
+            'http://localhost:3000/api/orders/STORE-ABC123',
           ),
           createContext(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         )
 
@@ -158,7 +158,7 @@ describe('/api/orders/[id]', () => {
         mocks.getUserOrder,
       ).toHaveBeenCalledWith(
         'user-1',
-        'PFA-ABC123',
+        'STORE-ABC123',
       )
     },
   )
@@ -173,10 +173,10 @@ describe('/api/orders/[id]', () => {
       const response =
         await GET(
           new Request(
-            'http://localhost:3000/api/orders/PFA-OUTRO',
+            'http://localhost:3000/api/orders/STORE-OUTRO',
           ),
           createContext(
-            'PFA-OUTRO',
+            'STORE-OUTRO',
           ),
         )
 
@@ -246,10 +246,10 @@ describe('/api/orders/[id]', () => {
       const response =
         await GET(
           new Request(
-            'http://localhost:3000/api/orders/PFA-ABC123',
+            'http://localhost:3000/api/orders/STORE-ABC123',
           ),
           createContext(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         )
 

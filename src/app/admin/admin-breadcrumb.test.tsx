@@ -141,7 +141,11 @@ describe(
         {
           pathname:
             '/admin/commercial-settings',
-          label: 'Definições da loja',
+          label: 'Definições comerciais',
+        },
+        {
+          pathname: '/admin/settings',
+          label: 'Configurações',
         },
       ]
 

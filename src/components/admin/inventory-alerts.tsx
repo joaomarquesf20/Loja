@@ -401,7 +401,7 @@ export default function InventoryAlerts(
                           null
                         }
                         aria-label={`Guardar stock de ${variant.sku}`}
-                        className="rounded-lg bg-[#ef5b2a] px-3 py-1.5 text-sm font-bold text-white transition hover:bg-[#d94a1b] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg bg-brand px-3 py-1.5 text-sm font-bold text-white transition hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {savingSku ===
                         variant.sku
@@ -437,7 +437,7 @@ export default function InventoryAlerts(
       <div className="mt-4">
         <Link
           href="/admin/products"
-          className="text-sm font-bold text-[#ef5b2a]"
+          className="text-sm font-bold text-brand"
         >
           Gerir stock em produtos →
         </Link>

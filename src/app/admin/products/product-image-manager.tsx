@@ -622,7 +622,7 @@ export default function ProductImageManager({
           type="button"
           disabled={uploading}
           onClick={() => openFilePicker()}
-          className="rounded-md bg-[#ef5b2a] px-4 py-2 text-sm font-black text-white disabled:opacity-50"
+          className="rounded-md bg-brand px-4 py-2 text-sm font-black text-white disabled:opacity-50"
         >
           {uploading
             ? 'A carregar...'
@@ -670,8 +670,8 @@ export default function ProductImageManager({
         }}
         className={`rounded-xl border-2 border-dashed p-6 text-center transition ${
           dragOverKey === '__drop__'
-            ? 'border-[#ef5b2a] bg-[#fff7f3]'
-            : 'border-black/15 bg-[#fafaf9] hover:border-[#ef5b2a]/50'
+            ? 'border-brand bg-brand-soft'
+            : 'border-black/15 bg-[#fafaf9] hover:border-brand/50'
         }`}
       >
         <p className="text-sm font-bold">
@@ -798,7 +798,7 @@ export default function ProductImageManager({
                       }}
                       className={`rounded-lg border bg-white p-2 ${
                         draggingId === image.id
-                          ? 'border-[#ef5b2a] opacity-60'
+                          ? 'border-brand opacity-60'
                           : 'border-black/10'
                       }`}
                     >
@@ -812,7 +812,7 @@ export default function ProductImageManager({
                           className="h-full w-full object-contain"
                         />
                         {image.isPrimary && (
-                          <span className="absolute left-2 top-2 rounded bg-[#ef5b2a] px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white">
+                          <span className="absolute left-2 top-2 rounded bg-brand px-2 py-1 text-[9px] font-black uppercase tracking-[0.08em] text-white">
                             Capa
                           </span>
                         )}

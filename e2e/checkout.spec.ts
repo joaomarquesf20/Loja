@@ -34,7 +34,7 @@ const preview = {
 
 const order = {
   id: 'order-1',
-  orderNumber: 'PFA-TESTE-0001',
+  orderNumber: 'STORE-TESTE-0001',
   fulfillmentMethod: 'DELIVERY',
   paymentMethod: 'CARD',
   installmentCount: null,
@@ -51,8 +51,8 @@ const payment = {
   paymentStatus: 'PENDING',
   paymentMethod: 'CARD',
   installmentCount: null,
-  paymentProvider: 'PFA_SIMULATED',
-  paymentReference: 'pfa_sim_e2e',
+  paymentProvider: 'SIMULATED',
+  paymentReference: 'sim_e2e',
   amount: '509.99',
 }
 
@@ -443,10 +443,10 @@ test.describe('checkout E2E', () => {
       }),
     ).toBeVisible()
     await expect(
-      page.getByText('PFA-TESTE-0001'),
+      page.getByText('STORE-TESTE-0001'),
     ).toBeVisible()
     await expect(
-      page.getByText('pfa_sim_e2e'),
+      page.getByText('sim_e2e'),
     ).toBeVisible()
   })
 

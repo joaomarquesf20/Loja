@@ -108,7 +108,7 @@ function createOrder(
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     fulfillmentMethod,
     subtotal: 100,
     shippingCost:

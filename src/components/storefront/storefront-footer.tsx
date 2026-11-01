@@ -2,14 +2,26 @@ import Image from 'next/image'
 import Link from 'next/link'
 import type { CatalogCategory } from '@/server/catalog'
 
+import {
+  DEFAULT_LOGO_URL_DARK,
+  DEFAULT_STORE_NAME,
+} from '@/lib/brand-defaults'
+
 import FooterSessionLink from './footer-session-link'
 
 type StorefrontFooterProps = {
   categories: CatalogCategory[]
+  storeName?: string
+  logoUrl?: string
+  /** Descrição curta mostrada na coluna da marca. */
+  tagline?: string
 }
 
 export default function StorefrontFooter({
   categories,
+  storeName = DEFAULT_STORE_NAME,
+  logoUrl = DEFAULT_LOGO_URL_DARK,
+  tagline = 'Catálogo de peças e acessórios automóvel.',
 }: StorefrontFooterProps) {
   return (
     <footer className="border-t border-gray-200 bg-white">
@@ -17,11 +29,11 @@ export default function StorefrontFooter({
         <div>
           <Link
             href="/"
-            aria-label="PFAUTOPARTS"
+            aria-label={storeName}
             className="inline-flex rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
           >
             <Image
-              src="/brand/pfautoparts-logo-horizontal-dark.png"
+              src={logoUrl}
               alt=""
               width={256}
               height={42}
@@ -30,9 +42,7 @@ export default function StorefrontFooter({
           </Link>
 
           <p className="mt-5 max-w-sm text-sm leading-6 text-gray-500">
-            Jantes premium, suspensão,
-            body-kits e acessórios para
-            personalização automóvel.
+            {tagline}
           </p>
         </div>
 
@@ -93,11 +103,12 @@ export default function StorefrontFooter({
       <div className="border-t border-gray-100">
         <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-5 text-[10px] font-medium uppercase tracking-[0.08em] text-gray-400 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span>
-            © {new Date().getFullYear()} PFAutoParts
+            © {new Date().getFullYear()}{' '}
+            {storeName}
           </span>
 
           <span>
-            Jantes · Suspensão · Body-kits · Personalização
+            Peças · Acessórios · Compatibilidade por veículo
           </span>
         </div>
       </div>

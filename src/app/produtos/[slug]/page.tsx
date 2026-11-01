@@ -17,6 +17,9 @@ import {
 } from '@/server/catalog'
 import { getCatalogCategories } from '@/server/catalog-request'
 import { listProductCompatibilities } from '@/server/product-compatibilities'
+import {
+  getPublicStoreBranding,
+} from '@/server/branding-settings'
 import CompatibilityAnchorLink from './compatibility-anchor-link'
 import ProductGallery from './product-gallery'
 import {
@@ -46,10 +49,15 @@ export async function generateMetadata({
 }: ProductPageProps): Promise<Metadata> {
   const { slug } = await params
 
-  const product =
-    await getCatalogProductPerRequest(
+  const [
+    product,
+    branding,
+  ] = await Promise.all([
+    getCatalogProductPerRequest(
       slug,
-    )
+    ),
+    getPublicStoreBranding(),
+  ])
 
   if (!product) {
     return {
@@ -65,13 +73,14 @@ export async function generateMetadata({
     productDescription &&
     productDescription.length > 0
       ? productDescription.slice(0, 300)
-      : `Vê preço, disponibilidade e aplicações de ${product.name} (${product.sku}) na PFAUTOPARTS.`
+      : `Vê preço, disponibilidade e aplicações de ${product.name} (${product.sku}) na ${branding.storeName}.`
 
   return buildPageMetadata({
     title: product.name,
     description: metadataDescription,
     path: `/produtos/${product.slug}`,
     image: product.images[0],
+    storeName: branding.storeName,
   })
 }
 
@@ -232,6 +241,7 @@ export default async function ProductPage({
     categories,
     compatibilities,
     categoryPage,
+    branding,
   ] = await Promise.all([
     getCatalogCategories(),
     showsVehicleCompatibility
@@ -242,6 +252,7 @@ export default async function ProductPage({
     getCatalogCategoryPageBySlug(
       product.category.slug,
     ),
+    getPublicStoreBranding(),
   ])
 
   const footerCategories =
@@ -617,6 +628,8 @@ export default async function ProductPage({
 
       <StorefrontFooter
         categories={footerCategories}
+        storeName={branding.storeName}
+        logoUrl={branding.logoUrl}
       />
     </main>
   )

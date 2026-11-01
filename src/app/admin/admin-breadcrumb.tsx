@@ -17,7 +17,8 @@ const crumbLabels: Record<string, string> =
     'product-brands':
       'Marcas de produto',
     'commercial-settings':
-      'Definições da loja',
+      'Definições comerciais',
+    settings: 'Configurações',
     'vehicle-compatibility':
       'Compatibilidade de veículos',
     'vehicle-makes':

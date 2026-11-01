@@ -11,6 +11,12 @@ import {
   sortStorefrontCategories,
 } from '@/lib/storefront-category-media'
 import {
+  DEFAULT_STORE_DESCRIPTION,
+} from '@/lib/brand-defaults'
+import {
+  getPublicStoreBranding,
+} from '@/server/branding-settings'
+import {
   listCatalogProducts,
   type CatalogCategory,
   type CatalogProduct,
@@ -35,17 +41,23 @@ type HomeProps = {
 const OG_FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=88'
 
-export const metadata: Metadata = buildPageMetadata(
-  {
-    title:
-      'PFAUTOPARTS — Jantes, suspensões e body-kits',
-    description:
-      'Jantes premium, suspensões, body-kits e personalização automóvel, com pesquisa por veículo e stock em tempo real.',
+/**
+ * SEO da home: título absoluto é dinâmico (nome da loja configurado
+ * no backoffice + subtítulo neutro do template).
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const branding =
+    await getPublicStoreBranding()
+
+  return buildPageMetadata({
+    title: `${branding.storeName} — Peças e acessórios automóvel`,
+    description: DEFAULT_STORE_DESCRIPTION,
     path: '/',
     image: OG_FALLBACK_IMAGE,
+    storeName: branding.storeName,
     absoluteTitle: true,
-  },
-)
+  })
+}
 
 function firstProductImage(
   products: CatalogProduct[],
@@ -178,12 +190,17 @@ function productGridClass(
 export default async function Home({
   searchParams,
 }: HomeProps) {
-  const [{ q }, products, categories] =
-    await Promise.all([
-      searchParams,
-      listCatalogProducts(),
-      getCatalogCategories(),
-    ])
+  const [
+    { q },
+    products,
+    categories,
+    branding,
+  ] = await Promise.all([
+    searchParams,
+    listCatalogProducts(),
+    getCatalogCategories(),
+    getPublicStoreBranding(),
+  ])
 
   const normalizedQuery =
     normalizeSearchQuery(q)
@@ -357,7 +374,7 @@ export default async function Home({
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
                 {normalizedQuery
                   ? 'Pesquisa'
-                  : 'Seleção PFAutoParts'}
+                  : branding.storeName}
               </p>
 
               <h2
@@ -392,7 +409,7 @@ export default async function Home({
               <p className="mt-2 text-sm leading-6 text-gray-500">
                 {normalizedQuery
                   ? 'Experimenta outro nome, marca ou categoria.'
-                  : 'Estamos a preparar a seleção PFAutoParts. Volta em breve.'}
+                  : 'Estamos a preparar o catálogo. Volta em breve.'}
               </p>
             </div>
           ) : (
@@ -453,6 +470,8 @@ export default async function Home({
         categories={
           footerCategories
         }
+        storeName={branding.storeName}
+        logoUrl={branding.logoUrl}
       />
     </main>
   )

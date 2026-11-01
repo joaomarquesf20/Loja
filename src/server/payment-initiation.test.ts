@@ -125,7 +125,7 @@ describe(
             ' order-1 ',
             client,
             () =>
-              'pfa_sim_test-123',
+              'sim_test-123',
           ),
         ).resolves.toEqual({
           orderId: 'order-1',
@@ -138,7 +138,7 @@ describe(
           paymentProvider:
             SIMULATED_PAYMENT_PROVIDER,
           paymentReference:
-            'pfa_sim_test-123',
+            'sim_test-123',
           amount: '128.50',
         })
 
@@ -176,9 +176,9 @@ describe(
           },
           data: {
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_test-123',
+              'sim_test-123',
           },
         })
       },
@@ -212,7 +212,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_installments',
+              'sim_installments',
           ),
         ).resolves.toMatchObject({
           paymentMethod:
@@ -235,9 +235,9 @@ describe(
         findFirst.mockResolvedValue(
           createOrder({
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_existing',
+              'sim_existing',
           }),
         )
 
@@ -249,9 +249,9 @@ describe(
           ),
         ).resolves.toMatchObject({
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_existing',
+            'sim_existing',
         })
 
         expect(
@@ -276,9 +276,9 @@ describe(
           .mockResolvedValueOnce(
             createOrder({
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_winner',
+                'sim_winner',
             }),
           )
 
@@ -292,11 +292,11 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_loser',
+              'sim_loser',
           ),
         ).resolves.toMatchObject({
           paymentReference:
-            'pfa_sim_winner',
+            'sim_winner',
         })
 
         expect(
@@ -331,7 +331,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_duplicate',
+              'sim_duplicate',
           ),
         ).rejects.toMatchObject({
           name:
@@ -374,7 +374,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_duplicate',
+              'sim_duplicate',
           ),
         ).rejects.toMatchObject({
           name:
@@ -597,7 +597,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_duplicate',
+              'sim_duplicate',
           ),
         ).rejects.toBe(error)
 
@@ -687,9 +687,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -703,15 +703,15 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_retry',
+              'sim_retry',
           ),
         ).resolves.toMatchObject({
           paymentStatus:
             'PENDING',
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_retry',
+            'sim_retry',
         })
 
         expect(
@@ -728,17 +728,17 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           },
           data: {
             paymentStatus:
               'PENDING',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_retry',
+              'sim_retry',
           },
         })
 
@@ -774,9 +774,9 @@ describe(
               paymentStatus:
                 'FAILED',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_failed',
+                'sim_failed',
             }),
           )
           .mockResolvedValueOnce(
@@ -784,9 +784,9 @@ describe(
               paymentStatus:
                 'PENDING',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_winner',
+                'sim_winner',
             }),
           )
 
@@ -800,11 +800,11 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_loser',
+              'sim_loser',
           ),
         ).resolves.toMatchObject({
           paymentReference:
-            'pfa_sim_winner',
+            'sim_winner',
         })
 
         expect(
@@ -832,9 +832,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -851,7 +851,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_retry',
+              'sim_retry',
           ),
         ).rejects.toMatchObject({
           name:
@@ -884,9 +884,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -905,7 +905,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_retry',
+              'sim_retry',
           ),
         ).rejects.toBe(
           uniqueConstraintError,
@@ -931,9 +931,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -954,7 +954,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_retry',
+              'sim_retry',
           ),
         ).rejects.toBe(databaseError)
       },
@@ -1011,9 +1011,9 @@ describe(
             paymentStatus:
               'FAILED',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_failed',
+              'sim_failed',
           }),
         )
 
@@ -1023,7 +1023,7 @@ describe(
             'order-1',
             client,
             () =>
-              'pfa_sim_failed',
+              'sim_failed',
           ),
         ).rejects.toMatchObject({
           message:

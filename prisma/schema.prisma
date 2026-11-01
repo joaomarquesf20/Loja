@@ -409,6 +409,15 @@ model Address {
 model StoreSettings {
   id               String   @id @default("store")
   pricesIncludeTax Boolean  @default(true)
+  /// White-label — identidade editável pelo administrador.
+  /// `null` = usar os defaults do template (src/lib/brand-defaults.ts).
+  storeName        String?
+  contactEmail     String?
+  contactPhone     String?
+  nif              String?
+  address          String?
+  primaryColorHex  String?
+  logoUrl          String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }

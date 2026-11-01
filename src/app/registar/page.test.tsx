@@ -396,12 +396,12 @@ describe('RegisterPage', () => {
       })
 
     window.localStorage.setItem(
-      'pfautoparts:guest-cart',
+      'store:guest-cart',
       guestCart,
     )
 
     window.localStorage.setItem(
-      'pfautoparts:guest-cart-merge',
+      'store:guest-cart-merge',
       mergeAttempt,
     )
 
@@ -435,13 +435,13 @@ describe('RegisterPage', () => {
 
     expect(
       window.localStorage.getItem(
-        'pfautoparts:guest-cart',
+        'store:guest-cart',
       ),
     ).toBe(guestCart)
 
     expect(
       window.localStorage.getItem(
-        'pfautoparts:guest-cart-merge',
+        'store:guest-cart-merge',
       ),
     ).toBe(mergeAttempt)
   })

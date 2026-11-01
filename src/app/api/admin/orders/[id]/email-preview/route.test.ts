@@ -89,11 +89,11 @@ describe(
             status: 'ready',
             type: 'CONFIRMATION',
             subject:
-              'PFAAutoParts: Encomenda ORD-2026-1 confirmada',
+              'AutoParts: Encomenda ORD-2026-1 confirmada',
             recipient:
               'maria@example.com',
             html:
-              '<html>PFAAutoParts</html>',
+              '<html>AutoParts</html>',
           },
         )
 
@@ -114,11 +114,11 @@ describe(
             status: 'ready',
             type: 'CONFIRMATION',
             subject:
-              'PFAAutoParts: Encomenda ORD-2026-1 confirmada',
+              'AutoParts: Encomenda ORD-2026-1 confirmada',
             recipient:
               'maria@example.com',
             html:
-              '<html>PFAAutoParts</html>',
+              '<html>AutoParts</html>',
           },
         })
 
@@ -139,7 +139,7 @@ describe(
             status: 'ready',
             type: 'STATUS_UPDATE',
             subject:
-              'PFAAutoParts: Atualização da encomenda ORD-2026-1',
+              'AutoParts: Atualização da encomenda ORD-2026-1',
             recipient: null,
             html: '<html>estado</html>',
           },

@@ -2,6 +2,10 @@
 
 import Link from 'next/link'
 
+import {
+  DEFAULT_STORE_NAME,
+} from '@/lib/brand-defaults'
+
 export default function Error({
   reset,
 }: {
@@ -14,7 +18,7 @@ export default function Error({
     <main className="grid min-h-[70vh] place-items-center bg-gray-50 px-4 text-gray-900">
       <section className="w-full max-w-xl rounded-md border border-gray-200 bg-white px-6 py-10 sm:px-8">
         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
-          PFAutoParts
+          {DEFAULT_STORE_NAME}
         </p>
 
         <h1 className="mt-3 text-2xl font-black tracking-tight">

@@ -19,6 +19,9 @@ import {
   type CatalogVehicleMakeFacet,
 } from '@/server/catalog'
 import { getCatalogCategories } from '@/server/catalog-request'
+import {
+  getPublicStoreBranding,
+} from '@/server/branding-settings'
 import CategorySortControl from './category-sort-control'
 import {
   getBrandFilterLabel,
@@ -66,8 +69,13 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
 
-  const categories =
-    await getCatalogCategories()
+  const [
+    categories,
+    branding,
+  ] = await Promise.all([
+    getCatalogCategories(),
+    getPublicStoreBranding(),
+  ])
 
   const category = categories.find(
     (item) => item.slug === slug,
@@ -91,6 +99,7 @@ export async function generateMetadata({
     title: category.name,
     description: categoryDescription,
     path: `/categorias/${category.slug}`,
+    storeName: branding.storeName,
   })
 }
 
@@ -854,18 +863,23 @@ export default async function CategoryPage({
     sort: requestedSort ?? 'newest',
   } as const
 
-  const [result, facets, allCategories] =
-    await Promise.all([
-      getCatalogCategoryPageBySlug(
-        slug,
-        requestedCatalogFilters,
-      ),
-      getCatalogCategoryFacetsBySlug(
-        slug,
-        requestedCatalogFilters,
-      ),
-      getCatalogCategories(),
-    ])
+  const [
+    result,
+    facets,
+    allCategories,
+    branding,
+  ] = await Promise.all([
+    getCatalogCategoryPageBySlug(
+      slug,
+      requestedCatalogFilters,
+    ),
+    getCatalogCategoryFacetsBySlug(
+      slug,
+      requestedCatalogFilters,
+    ),
+    getCatalogCategories(),
+    getPublicStoreBranding(),
+  ])
 
   if (!result || !facets) {
     notFound()
@@ -1044,7 +1058,7 @@ export default async function CategoryPage({
 
         <header className="max-w-3xl pb-9 pt-7 lg:pb-12 lg:pt-9">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand">
-            Catálogo PFAutoParts
+            {branding.storeName}
           </p>
 
           <h1 className="mt-2.5 text-4xl font-black tracking-[-0.045em] sm:text-5xl">
@@ -1375,6 +1389,8 @@ export default async function CategoryPage({
 
       <StorefrontFooter
         categories={footerCategories}
+        storeName={branding.storeName}
+        logoUrl={branding.logoUrl}
       />
     </main>
   )

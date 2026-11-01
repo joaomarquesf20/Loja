@@ -33,7 +33,7 @@ function createOrder(
 ) {
   return {
     id: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     total: '205.90',
     status: 'PENDING',
     paymentStatus: 'PENDING',
@@ -113,7 +113,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeTruthy()
 
@@ -153,7 +153,7 @@ describe(
             createOrder({
               id: 'order-2',
               orderNumber:
-                'PFA-DEF456',
+                'STORE-DEF456',
               status:
                 'CONFIRMED',
               paymentStatus:
@@ -162,7 +162,7 @@ describe(
             createOrder({
               id: 'order-3',
               orderNumber:
-                'PFA-GHI789',
+                'STORE-GHI789',
               status:
                 'CANCELLED',
             }),
@@ -175,7 +175,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeTruthy()
 
@@ -262,7 +262,7 @@ describe(
           jsonResponse(
             {
               orderNumber:
-                'PFA-ABC123',
+                'STORE-ABC123',
               checkoutSession: {
                 id: 'cs_test_1',
                 url: 'https://stripe.test/pagar',
@@ -356,7 +356,7 @@ describe(
           jsonResponse(
             {
               orderNumber:
-                'PFA-ABC123',
+                'STORE-ABC123',
               checkoutSession: {
                 id: 'cs_test_1',
                 url:
@@ -516,7 +516,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'Encomenda PFA-ABC123',
+            'Encomenda STORE-ABC123',
           ),
         ).toBeTruthy()
       },

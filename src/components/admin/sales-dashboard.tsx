@@ -114,7 +114,7 @@ function TrendCard(
                 className="flex h-2 flex-1 overflow-hidden rounded-full bg-neutral-100"
               >
                 <span
-                  className="rounded-full bg-[#ef5b2a]"
+                  className="rounded-full bg-brand"
                   style={{
                     width: `${
                       maxRevenue > 0
@@ -351,7 +351,7 @@ export default function SalesDashboard(
 
             <Link
               href="/admin/orders"
-              className="text-xs font-bold text-[#ef5b2a] hover:underline"
+              className="text-xs font-bold text-brand hover:underline"
             >
               Ver todas →
             </Link>

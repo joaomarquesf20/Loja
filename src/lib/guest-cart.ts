@@ -1,8 +1,8 @@
 export const GUEST_CART_STORAGE_KEY =
-  'pfautoparts:guest-cart'
+  'store:guest-cart'
 
 export const GUEST_CART_MERGE_STORAGE_KEY =
-  'pfautoparts:guest-cart-merge'
+  'store:guest-cart-merge'
 
 const MAX_MERGE_KEY_LENGTH = 128
 

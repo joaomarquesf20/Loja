@@ -849,7 +849,7 @@ describe('admin products service', () => {
       .mockResolvedValueOnce([
         {
           order: {
-            orderNumber: 'PFA-AAAA1111',
+            orderNumber: 'STORE-AAAA1111',
           },
         },
       ] as never)
@@ -867,14 +867,14 @@ describe('admin products service', () => {
     expect(result).toMatchObject({
       status: 'archived',
       reason: 'order_history',
-      orderNumbers: ['PFA-AAAA1111'],
+      orderNumbers: ['STORE-AAAA1111'],
       references: {
         orderItems: 1,
         cartItems: 0,
       },
     })
     expect(result.message).toContain(
-      'PFA-AAAA1111',
+      'STORE-AAAA1111',
     )
     expect(result.message).toContain(
       'arquivado',
@@ -912,7 +912,7 @@ describe('admin products service', () => {
       .mockResolvedValueOnce([
         {
           order: {
-            orderNumber: 'PFA-BBBB2222',
+            orderNumber: 'STORE-BBBB2222',
           },
         },
       ] as never)
@@ -928,7 +928,7 @@ describe('admin products service', () => {
 
     expect(result.status).toBe('archived')
     expect(result.orderNumbers).toEqual([
-      'PFA-BBBB2222',
+      'STORE-BBBB2222',
     ])
     expect(
       transaction.product.delete,
@@ -1038,7 +1038,7 @@ describe('admin products service', () => {
           ? [
               {
                 order: {
-                  orderNumber: 'PFA-CCCC3333',
+                  orderNumber: 'STORE-CCCC3333',
                 },
               },
             ]
@@ -1069,7 +1069,7 @@ describe('admin products service', () => {
       'order_history',
     )
     expect(result.archived[0].message).toContain(
-      'PFA-CCCC3333',
+      'STORE-CCCC3333',
     )
     expect(
       transaction.product.delete,
@@ -1158,12 +1158,12 @@ describe('admin products service', () => {
         .mockResolvedValueOnce([
           {
             order: {
-              orderNumber: 'PFA-1234',
+              orderNumber: 'STORE-1234',
             },
           },
           {
             order: {
-              orderNumber: 'PFA-5678',
+              orderNumber: 'STORE-5678',
             },
           },
         ] as never)
@@ -1177,11 +1177,11 @@ describe('admin products service', () => {
 
       expect(result.status).toBe('archived')
       expect(result.orderNumbers).toEqual([
-        'PFA-1234',
-        'PFA-5678',
+        'STORE-1234',
+        'STORE-5678',
       ])
       expect(result.message).toBe(
-        'Não foi possível eliminar BBS CH-R II porque está associado às encomendas (PFA-1234, PFA-5678). O produto foi arquivado para preservar o histórico de encomendas.',
+        'Não foi possível eliminar BBS CH-R II porque está associado às encomendas (STORE-1234, STORE-5678). O produto foi arquivado para preservar o histórico de encomendas.',
       )
     },
   )

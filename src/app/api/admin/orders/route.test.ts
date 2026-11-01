@@ -69,7 +69,7 @@ describe(
           {
             id: 'order-1',
             orderNumber:
-              'PFA-ABC123',
+              'STORE-ABC123',
           },
         ]
 

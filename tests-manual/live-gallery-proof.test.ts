@@ -21,7 +21,7 @@ import {
  * e é saltado automaticamente quando a BD não está acessível.
  */
 const canRun =
-  process.env.DATABASE_URL?.includes('pfautoparts') ?? false
+  process.env.DATABASE_URL?.includes('/store') ?? false
 
 const d = describe.skipIf(!canRun)
 

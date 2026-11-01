@@ -43,7 +43,7 @@ function createOrder(
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     subtotal: '100.00',
     shippingCost: '5.00',
     tax: '23.00',
@@ -55,9 +55,9 @@ function createOrder(
       'INSTALLMENTS',
     installmentCount: 3,
     paymentProvider:
-      'PFA_SIMULATED',
+      'SIMULATED',
     paymentReference:
-      'pfa_sim_123',
+      'sim_123',
     fulfillmentMethod:
       'DELIVERY',
     shippingName:
@@ -159,7 +159,7 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -205,7 +205,7 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA_SIMULATED',
+            'SIMULATED',
           ),
         ).toBeInTheDocument()
 
@@ -420,9 +420,9 @@ describe(
             fulfillmentMethod:
               'DELIVERY',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_123',
+              'sim_123',
           }),
         )
 
@@ -493,9 +493,9 @@ describe(
             fulfillmentMethod:
               'DELIVERY',
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_123',
+              'sim_123',
           }),
         )
 
@@ -661,7 +661,7 @@ describe(
               type:
                 'STATUS_UPDATE',
               subject:
-                'PFAAutoParts: Atualização da encomenda PFA-ABC123',
+                'AutoParts: Atualização da encomenda STORE-ABC123',
               recipient:
                 'cliente@example.com',
               html:
@@ -708,7 +708,7 @@ describe(
 
         expect(
           screen.getByText(
-            'PFAAutoParts: Atualização da encomenda PFA-ABC123',
+            'AutoParts: Atualização da encomenda STORE-ABC123',
           ),
         ).toBeInTheDocument()
 

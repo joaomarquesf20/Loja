@@ -44,7 +44,7 @@ function createOrderRecord() {
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     subtotal: {
       toString: () =>
         '100.00',
@@ -64,9 +64,9 @@ function createOrderRecord() {
       'INSTALLMENTS',
     installmentCount: 3,
     paymentProvider:
-      'PFA_SIMULATED',
+      'SIMULATED',
     paymentReference:
-      'pfa_sim_123',
+      'sim_123',
     fulfillmentMethod:
       'DELIVERY',
     shippingName:
@@ -141,7 +141,7 @@ describe(
           {
             id: 'order-1',
             orderNumber:
-              'PFA-ABC123',
+              'STORE-ABC123',
             subtotal:
               '100.00',
             shippingCost:
@@ -157,9 +157,9 @@ describe(
               'INSTALLMENTS',
             installmentCount: 3,
             paymentProvider:
-              'PFA_SIMULATED',
+              'SIMULATED',
             paymentReference:
-              'pfa_sim_123',
+              'sim_123',
             fulfillmentMethod:
               'DELIVERY',
             shippingName:
@@ -342,7 +342,7 @@ describe(
           expect.objectContaining({
             id: 'order-1',
             orderNumber:
-              'PFA-ABC123',
+              'STORE-ABC123',
             shippingRegion:
               'PORTUGAL_MAINLAND',
             shippingClassApplied:

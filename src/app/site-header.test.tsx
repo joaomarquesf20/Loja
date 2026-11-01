@@ -76,7 +76,7 @@ describe('SiteHeader', () => {
 
     expect(
       screen.getByRole('link', {
-        name: 'PFAUTOPARTS',
+        name: 'AutoParts',
       }),
     ).toHaveAttribute(
       'href',

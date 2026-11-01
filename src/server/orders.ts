@@ -537,7 +537,7 @@ function normalizeOrderNumber(
 
 /**
  * Detalhe de uma encomenda do utilizador, resolvida pelo número de
- * encomenda (ex.: PFA-ABC123). O filtro inclui o userId: encomendas de
+ * encomenda (ex.: STORE-ABC123). O filtro inclui o userId: encomendas de
  * outras contas devolvem null, sem lados a revelarem a sua existência.
  */
 export async function getUserOrder(

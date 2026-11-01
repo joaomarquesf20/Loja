@@ -277,7 +277,7 @@ export default function VehicleCompatibilityClient() {
               parentName: '',
             })
           }
-          className="rounded-lg bg-[#ef5b2a] px-4 py-2 text-sm font-black text-white"
+          className="rounded-lg bg-brand px-4 py-2 text-sm font-black text-white"
         >
           + Nova marca
         </button>
@@ -295,7 +295,7 @@ export default function VehicleCompatibilityClient() {
       {createTarget && (
         <form
           onSubmit={createNode}
-          className="grid gap-3 rounded-xl border border-[#ef5b2a]/30 bg-[#fff7f3] p-4 sm:grid-cols-[minmax(200px,1fr)_minmax(180px,1fr)_auto_auto] sm:items-end"
+          className="grid gap-3 rounded-xl border border-brand/30 bg-brand-soft p-4 sm:grid-cols-[minmax(200px,1fr)_minmax(180px,1fr)_auto_auto] sm:items-end"
         >
           <label className="grid gap-1 text-xs font-bold">
             {createTarget.level === 'make'
@@ -452,7 +452,7 @@ export default function VehicleCompatibilityClient() {
                         parentName: make.name,
                       })
                     }}
-                    className="text-[#ef5b2a]"
+                    className="text-brand"
                   >
                     + Modelo
                   </button>
@@ -496,7 +496,7 @@ export default function VehicleCompatibilityClient() {
                                 parentName: model.name,
                               })
                             }}
-                            className="font-bold text-[#ef5b2a]"
+                            className="font-bold text-brand"
                           >
                             + Especificação
                           </button>

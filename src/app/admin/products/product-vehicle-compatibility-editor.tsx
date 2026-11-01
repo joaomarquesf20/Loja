@@ -200,7 +200,7 @@ function InlineCreateForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mt-3 grid gap-3 rounded-lg border border-[#ef5b2a]/30 bg-[#fff7f3] p-4 sm:grid-cols-2"
+      className="mt-3 grid gap-3 rounded-lg border border-brand/30 bg-brand-soft p-4 sm:grid-cols-2"
     >
       <h4 className="font-black sm:col-span-2">
         {titles[level]}
@@ -562,7 +562,7 @@ export default function ProductVehicleCompatibilityEditor({
                           draftKey: draft.key,
                         })
                       }
-                      className="justify-self-start text-xs font-bold text-[#ef5b2a]"
+                      className="justify-self-start text-xs font-bold text-brand"
                     >
                       + Criar marca
                     </button>
@@ -604,7 +604,7 @@ export default function ProductVehicleCompatibilityEditor({
                           draftKey: draft.key,
                         })
                       }
-                      className="justify-self-start text-xs font-bold text-[#ef5b2a] disabled:opacity-40"
+                      className="justify-self-start text-xs font-bold text-brand disabled:opacity-40"
                     >
                       + Criar modelo
                     </button>
@@ -647,7 +647,7 @@ export default function ProductVehicleCompatibilityEditor({
                           draftKey: draft.key,
                         })
                       }
-                      className="justify-self-start text-xs font-bold text-[#ef5b2a] disabled:opacity-40"
+                      className="justify-self-start text-xs font-bold text-brand disabled:opacity-40"
                     >
                       + Criar especificação
                     </button>

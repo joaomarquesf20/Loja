@@ -80,7 +80,7 @@ export default async function AdminUserDetailPage({
         <div>
           <Link
             href="/admin/users"
-            className="text-sm font-bold text-[#ef5b2a] underline"
+            className="text-sm font-bold text-brand underline"
           >
             ← Voltar aos
             clientes

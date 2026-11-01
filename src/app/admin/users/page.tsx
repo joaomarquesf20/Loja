@@ -28,7 +28,7 @@ export default async function AdminUsersPage() {
     <main className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
             Comercial
           </p>
 

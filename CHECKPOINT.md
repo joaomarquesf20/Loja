@@ -2778,3 +2778,134 @@ Próximos passos (pós-etapa):
 
 
 
+
+---
+
+# Checkpoint - 01/11/2026 — Épico White-Label
+
+Épico: transformar o repositório num **template white-label
+turnkey** para lojas de peças automóvel — remover todas as
+referências ao cliente anterior (PFAutoParts) e tornar a
+identidade configurável no backoffice. **COMPLETO** (gate
+verde; commit em preparação; inclui Épico 8 Etapa 1 já
+commitada, 5cac2d9).
+
+## Identidade dinâmica (StoreSettings)
+
+- `StoreSettings` (Épico 4, singleton `id="store"`) ALARGADO com
+  campos nulláveis de branding: `storeName`, `contactEmail`,
+  `contactPhone`, `nif`, `address`, `primaryColorHex`, `logoUrl`.
+  `null` = usar defaults do template; instalação nova é
+  funcional sem configuração e a vitrine nunca falha.
+- Migração `20261101014424_add_store_settings_branding`
+  aplicada + `npx prisma generate`.
+- Novo serviço `src/server/branding-settings.ts`:
+  `getPublicStoreBranding()` (try/catch → defaults — vitrine
+  e emails nunca falham), `getAdminStoreBranding()` (resolvido
+  + raw cru para o form), `updateStoreBranding()` (Zod:
+  storeName obrigatório 1–80, email válido, hex `#RRGGBB`,
+  logoUrl `/…` ou `https://…`, `.strict()`; string vazia =
+  limpar campo → `null`; upsert preserva campos ausentes).
+- Defaults client-safe em `src/lib/brand-defaults.ts`
+  (DEFAULT_STORE_NAME='AutoParts', descrição neutra,
+  logos `/brand/logo-horizontal{,-dark}.png`,
+  DEFAULT_PRIMARY_COLOR='#ef5b2a', prefixo
+  STORE_STORAGE_PREFIX='store').
+- Coleção de cor: `src/lib/brand-colors.ts` — parse `#RRGGBB`,
+  `darkenHexColor` (12%) para `--brand-strong`,
+  `lightenHexColor` (12% sobre branco) para `--brand-soft`,
+  `buildBrandCssVariables()` gera o bloco de vars.
+- Root layout: `generateMetadata()` async (nome da loja +
+  template `%s | Loja`) + `<style id="store-brand-vars">`
+  injetado — as classes `bg-brand`/`text-brand`/
+  `hover:bg-brand-strong` leem a cor do backoffice em TODA a
+  app (vitrine + admin).
+
+## Admin — nova página Configurações
+
+- Rota `src/app/api/admin/settings/route.ts` (GET devolve
+  `{branding, raw}`, PATCH devolve `{branding}`; handleError
+  com 401/403/400/500, mesmo padrão das rotas veiculares).
+- Página `src/app/admin/settings/page.tsx` ('use client'):
+  form com preview de cor/nome, campos vazios limpam valores,
+  validação espelha o Zod, `noValidate` (a validação é do
+  handler — o `required` nativo bloqueava a asserção em jsdom).
+- Navegação admin: novo item 'Configurações'
+  (`/admin/settings`); 'Definições da loja' renomeado para
+  'Definições comerciais' (`admin-navigation.tsx`,
+  `admin-breadcrumb.tsx`).
+
+## Limpeza de marca (grep PFA = 0 em src/scripts)
+
+- SEO: `src/app/seo.ts` reescrito — `SITE_NAME`/`SITE_DESCRIPTION`
+  = defaults da lib; `buildPageMetadata` aceita `storeName?`.
+- Metadata dinâmico: layout raiz, home (generateMetadata
+  `${storeName} — Peças e acessórios automóvel`),
+  categorias, produtos (descrição fallback "na {storeName}") e
+  admin/layout (header dinâmico + props do footer).
+- Textos: eyebrows home/categorias = storeName dinâmico;
+  login/registar neutros; error.tsx de categorias/produtos
+  usam DEFAULT_STORE_NAME; footer © dinâmico + linha
+  'Peças · Acessórios · Compatibilidade por veículo'.
+- Hexes hardcodados (`#ef5b2a`, `#d94a1b`, `#fff7f3`,
+  `accent-[#ef5b2a]`) substituídos por classes theme
+  (`text-brand`, `bg-brand`, `hover:bg-brand-strong`,
+  `border-brand/30`, `bg-brand-soft`, `accent-brand`) em 18
+  ficheiros admin (~72 ocorrências). `globals.css` mantém os
+  defaults.
+- Logos renomeados (`git mv`):
+  `public/brand/pfautoparts-logo-horizontal{,-dark}.png` →
+  `logo-horizontal{,-dark}.png`.
+- Emails: `STORE_NAME` agora = default neutro; templates
+  (`order-confirmation`, `order-status-update`) aceitam prop
+  `storeName?`; serviço de email resolve o branding
+  (`getPublicStoreBranding`, nunca lança) para os subjects
+  (`{storeName}: Encomenda … confirmada / Atualização da
+  encomenda …`) e props dos templates.
+- Pagamentos: provedor simulado renomeado
+  `PFA_SIMULATED` → `SIMULATED` (valor `paymentProvider` em BD,
+  155 ocorrências em src+tests); referência
+  `pfa_sim_*` → `sim_*`; flag morta
+  `PFA_ENABLE_SIMULATED_PAYMENTS` → `ENABLE_SIMULATED_PAYMENTS`
+  (tests stub; produção bloqueada por NODE_ENV nas 2 rotas).
+- Números de encomenda: gerador `createOrderNumber()` deixou de
+  emitir `PFA-…` → `STORE-…` (checkout.ts); fixtures de testes
+  atualizadas (135 substituições) — instalações novas nascem
+  com números genéricos.
+- localStorage: carrinho de convidado
+  `pfautoparts:guest-cart[-merge]` → `store:guest-cart[-merge]`;
+  veículo selecionado `pfa-veiculo[-mudou]` →
+  `store:veiculo[-mudou]`.
+- Seed de dev: prefixo de SKU `DEV-PFA-` → `DEV-` (o `clear`
+  continua a apanhar SKUs antigos por partilharem `DEV-`).
+- Docs vivos: README.md reescrito por inteiro (guia de
+  instalação white-label: stack, pré-requisitos, .env, prisma
+  migrate, seeds, gate, configuração de identidade, integrações,
+  deploy); `.env.example` reescrito e documentado (DATABASE_URL,
+  NEXTAUTH_*, RESEND/EMAIL_FROM, Stripe, PAYMENT_WEBHOOK_*,
+  PRODUCT_IMAGE_STORAGE/BLOB_READ_WRITE_TOKEN);
+  payment-provider-webhook-requirements.md neutralizado.
+
+## Utilitário de linha de limpeza
+
+- NOVO `scripts/reset-transactions.mjs` +
+  `npm run admin:reset`: apaga TODO o catálogo e dados
+  transacionais numa única transação (variantes → opções →
+  imagens → compatibilidades → stock → encomendas → carrinhos →
+  importações → cupões → produtos → categorias → marcas),
+  PRESERVANDO VehicleMake/VehicleModel/VehicleSpec (Épico 8),
+  contas/moradas, StoreSettings e definições comerciais.
+  Modo simulação por omissão, `--yes` executa.
+
+## Gate completo (verde)
+
+- `npx tsc --noEmit` limpo (fix: Zod 4 não aceita argumento em
+  `.strict()`).
+- `npx vitest run` — 2430 passed + 3 skipped (171 ficheiros;
+  layout.test passa a mockar `getPublicStoreBranding`).
+- `npm run lint` limpo.
+- `npm run build` limpo (73/73 páginas geradas).
+
+Próximos passos (pós-épico):
+A definir — roadmap do template shop-ready (bundle de entrega,
+licença, demo de configuração de identidade).

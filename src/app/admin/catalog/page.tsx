@@ -4,7 +4,7 @@ export default function CatalogPage() {
   return (
     <main className="space-y-6">
       <header>
-        <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+        <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
           Organização da loja
         </p>
         <h1 className="mt-1 text-3xl font-black tracking-tight">

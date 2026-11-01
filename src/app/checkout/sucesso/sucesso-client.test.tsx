@@ -44,7 +44,7 @@ function createOrder(
   }>,
 ) {
   return {
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     subtotal: '100.00',
     shippingCost: '5.90',
     tax: '19.80',
@@ -137,7 +137,7 @@ describe(
       'rejeita session_id fora do formato do Stripe',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=ref-123',
+          'order=STORE-ABC123&session_id=ref-123',
         )
 
         render(
@@ -187,7 +187,7 @@ describe(
       'apresenta a confirmação da encomenda e limpa o carrinho local',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=cs_test_1',
+          'order=STORE-ABC123&session_id=cs_test_1',
         )
 
         window.localStorage.setItem(
@@ -213,7 +213,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeTruthy()
 
@@ -259,7 +259,7 @@ describe(
         expect(
           fetchMock,
         ).toHaveBeenCalledWith(
-          '/api/orders/PFA-ABC123',
+          '/api/orders/STORE-ABC123',
           {
             method: 'GET',
             cache: 'no-store',
@@ -272,7 +272,7 @@ describe(
       'indica pagamento pendente quando o webhook ainda não confirmou a encomenda',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=cs_test_1',
+          'order=STORE-ABC123&session_id=cs_test_1',
         )
 
         fetchMock.mockResolvedValueOnce(
@@ -290,7 +290,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeTruthy()
 
@@ -314,7 +314,7 @@ describe(
       'pede nova sessão quando a API devolve 401',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=cs_test_1',
+          'order=STORE-ABC123&session_id=cs_test_1',
         )
 
         fetchMock.mockResolvedValueOnce(
@@ -347,7 +347,7 @@ describe(
         ).toHaveAttribute(
           'href',
           `/login?callbackUrl=${encodeURIComponent(
-            '/checkout/sucesso?order=PFA-ABC123&session_id=cs_test_1',
+            '/checkout/sucesso?order=STORE-ABC123&session_id=cs_test_1',
           )}`,
         )
       },
@@ -357,7 +357,7 @@ describe(
       'mostra o erro da API e mantém o carrinho local',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=cs_test_1',
+          'order=STORE-ABC123&session_id=cs_test_1',
         )
 
         window.localStorage.setItem(
@@ -413,14 +413,14 @@ describe(
       'rejeita resposta com detalhe de encomenda inválido',
       async () => {
         setSuccessUrl(
-          'order=PFA-ABC123&session_id=cs_test_1',
+          'order=STORE-ABC123&session_id=cs_test_1',
         )
 
         fetchMock.mockResolvedValueOnce(
           jsonResponse({
             order: {
               orderNumber:
-                'PFA-ABC123',
+                'STORE-ABC123',
             },
           }),
         )

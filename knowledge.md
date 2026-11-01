@@ -1,13 +1,15 @@
-# Knowledge — PFAutoParts (loja)
+# Knowledge — Template white-label de loja de peças automóvel (loja)
 
 > Documento de contexto para agentes/desenvolvedores que continuarem este projeto.
-> Última atualização: 2026-09-24, no branch `design/storefront-foundation` (commit `9c1870d` + testes de checkout alinhados com variantes).
+> Última atualização: 2026-11-01 (Épico white-label + Épico 8 no `master`).
 
 ## 1. O que é o projeto
 
-E-commerce (storefront + backoffice) de peças e acessórios automóveis
-(jantes, suspensão, body-kits, styling) para **Portugal Continental**, em português (pt-PT).
-Nome do pacote: `loja` (v0.1.0). Marca: **PFAutoParts / PFAUTOPARTS**.
+Template **white-label turnkey** de e-commerce (storefront + backoffice) de
+peças e acessórios automóveis para **Portugal Continental**, em português (pt-PT).
+Nome do pacote: `loja` (v0.1.0). **Sem marca hardcoded** — a identidade da loja
+(nome, contactos, NIF, cor, logótipo) vive em `StoreSettings` e edita-se em
+**Admin → Configurações**; defaults em `src/lib/brand-defaults.ts`.
 
 ## 2. Stack
 
@@ -26,7 +28,7 @@ Nome do pacote: `loja` (v0.1.0). Marca: **PFAutoParts / PFAUTOPARTS**.
 
 ```bash
 # 1. Configurar .env (ver .env.example)
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/pfautoparts"
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/store"
 NEXTAUTH_SECRET="..."
 NEXTAUTH_URL="http://localhost:3000"
 PAYMENT_WEBHOOK_SECRET="..."   # mínimo 32 caracteres
@@ -166,7 +168,7 @@ em memória sobre `listCatalogProducts()`.
   (`/categorias/[slug]`) com filtros (marca, preço, compatibilidade de veículo,
   stock) e ordenação; página de produto com galeria, compatibilidades, relacionados.
 - **Carrinho** (`/carrinho`): funciona para autenticados (API) e guest
-  (localStorage `pfautoparts:guest-cart`, resolvido via `POST /api/cart/guest`).
+  (localStorage `store:guest-cart`, resolvido via `POST /api/cart/guest`).
 - **Checkout** (`/checkout-client.tsx`, ~2200 linhas): moradas CRUD inline,
   DELIVERY/PICKUP, CARD/INSTALLMENTS (2–12), preview→confirm com fingerprint,
   inicia pagamento simulado automaticamente após criar encomenda.
@@ -230,14 +232,17 @@ em memória sobre `listCatalogProducts()`.
 5. **Regiões além de Portugal Continental**: schema/modelos preparados
    (MADEIRA/AZORES/INTERNATIONAL) mas `checkout.ts` rejeita tudo o que não seja
    `PORTUGAL_MAINLAND`; `CheckoutRegionRule.checkoutEnabled` default false.
-6. **Pagamentos**: apenas o fornecedor simulado `PFA_SIMULATED` (webhook genérico
-   pronto, adaptador de fornecedor real inexistente). `scripts/simulate-payment-paid.mjs`
+6. **Pagamentos**: Stripe Checkout (Épico 3) + simulador interno
+   (`SIMULATED`) em desenvolvimento (webhook genérico assinado).
+   `scripts/simulate-payment-paid.mjs`
    é ferramenta dev.
 7. **Roles**: `SELLER` existe no enum mas não tem permissões nem UI próprias
    (`requireAdmin` exige ADMIN; SELLER é rejeitado).
-8. **Sem imagens reais/upload**: imagens são URLs (Unsplash no seed); não há
-   gestão de ficheiros.
-9. **README.md** é o boilerplate do create-next-app — não documenta nada do projeto.
+8. **Imagens**: upload de imagens no admin (adaptador local em dev,
+   Vercel Blob em produção via `PRODUCT_IMAGE_STORAGE`); o seed de
+   demonstração usa URLs externas.
+9. **README.md** documentado (guia white-label completo); `.env.example`
+   documentado por inteiro.
 10. Sem i18n framework (textos pt-PT hard-coded), sem e-mails/notificações,
     sem tracking de envio, sem faturação/recibos PDF.
 
@@ -601,7 +606,7 @@ sincronização legado de stock do Produto no import removido),
 testes a passar, 118 ficheiros (+3 ignorados/escolhidos); eslint limpo;
 `next build` concluída (aviso `DYNAMIC_SERVER_USAGE` no `/checkout` é
 pré-existente e não quebra a build). Persistência confirmada em BD local
-(`pfautoparts`, 23 migrações).
+(`store`, 23 migrações).
 
 **Trabalho não commitado no ramo `design/storefront-foundation`** (a etapa 1
 do webhook da §14 também está por commitar).
@@ -773,7 +778,7 @@ campo `shippingMethod ShippingMethod?` (`null` no levantamento em loja
 e nas encomendas de entrega anteriores à etapa — sem valor por defeito
 na BD; legacy é apresentado como standard). Migração
 `prisma/migrations/20261022120000_shipping_method` aplicada no local
-(`pfautoparts`) e `prisma generate` refeito.
+(`store`) e `prisma generate` refeito.
 
 **Regra de negócio (fixada)** — o expresso é **suplemento por cima dos
 portes calculados** (classe, máximos, limiar grátis). Portes base
@@ -926,17 +931,19 @@ intacta).
   sessão via API — manter assim.
 
 **2. SEO base (+ Open Graph)**
-- `src/app/seo.ts`: `SITE_NAME` ('PFAUTOPARTS'),
-  `SITE_DESCRIPTION` ('Jantes premium, suspensões, body-kits e
-  personalização automóvel.') e
+- `src/app/seo.ts`: `SITE_NAME`/`SITE_DESCRIPTION` = defaults
+  neutros de `src/lib/brand-defaults.ts` (o nome real é
+  dinâmico via `StoreSettings`) e
   `buildPageMetadata({ title, description, path?, image?,
-  absoluteTitle? })` — título, descrição, `alternates.canonical` e
+  storeName?, absoluteTitle? })` — título, descrição,
+  `alternates.canonical` e
   Open Graph (type website, locale pt_PT, siteName) coerentes; cards
   Twitter herdam do OG resolvido.
 - Layout: `metadataBase` de `NEXTAUTH_URL ??
   'http://localhost:3000'` (mesma convenção de robots.ts/sitemap.ts;
   env inválido → try/catch e fallback, não rebenta o build),
-  `title: { default: 'PFAUTOPARTS', template: '%s | PFAUTOPARTS' }`,
+  `generateMetadata()` async com o nome configurado no backoffice
+  (default 'AutoParts') + template `%s | {storeName}`,
   defaults OG + `twitter.card: 'summary_large_image'`.
 - `generateMetadata` por item na página de produto e de categoria:
   título/nome, descrição (descrição do produto truncada a 300 ou
@@ -1105,8 +1112,8 @@ variante↔configuração) fica `undefined` até `npx prisma
 generate` manual.
 
 **SSR-Safe Persistence** — estado de sessão client persistido
-(veículo selecionado: chave `pfa-veiculo` no localStorage com
-evento DOM custom `pfa-veiculo-mudou` + evento `storage`) usa
+(veículo selecionado: chave `store:veiculo` no localStorage com
+evento DOM custom `store:veiculo-mudou` + evento `storage`) usa
 `useSyncExternalStore`, não leitura em `useEffect` + `useState`
 (padrão antigo: setState síncrono no corpo do efeito —
 proibido pelo lint `react-hooks/set-state-in-effect` e gerador
@@ -1216,7 +1223,7 @@ registada. A troca de referência respeita
 segurança porque cada sessão nova tem id fresco; a retoma
 só vale para `paymentStatus PENDING` com provider
 null|STRIPE (sessões expiradas/abandonadas podem ser
-substituídas, outros fornecedores — ex.: `PFA_SIMULATED`
+substituídas, outros fornecedores — ex.: `SIMULATED`
 — são recusados com 409). Guardas partilhadas pela
 criação e pela retoma moram num único loader
 (`findStripeOrderProjection`: encomenda própria, estado
@@ -1335,3 +1342,13 @@ fluxo).
 - **Hand-written Prisma Interfaces:** Keep `as unknown as ClientX`-style hand-written delegate interfaces (`orderBy` unions like `Array<{engine} | {yearStart}>`, exact `select`/`where` shapes) instead of `Pick<PrismaClient,...>` — they compile without depending on generated types and make mock transactions in tests structurally honest.
 - **CSV Fitment Resolution Defaults:** Mapped importers must tolerate supplier gaps deterministically: engine falls back to generation/chassis designation then `'Padrão'`; `yearStart` falls back to `yearTo` then `1900` (the admin's accepted minimum); missing fuel column defaults to `DIESEL`. Specs are resolved by the natural `[modelId, engine, yearStart]` key and compatibilities deduped by `[productId, vehicleSpecId]`, so re-imports stay idempotent.
 - **PowerShell Output Swallowing:** `npx tsc --noEmit` / `npm run lint` stdout can be silently swallowed in PowerShell pipelines — a "clean-looking" run proves nothing. Always pipe diagnostics to a file with `Out-File -Encoding utf8` and read that file; also delete `.next` before rebuilding after route deletions, since stale `.next/dev/types/validator.ts` raises TS2307/TS2344 noise.
+
+## §30 — Épico White-Label: template turnkey (tarefa de 2026-11-01)
+
+- **Identidade viva em `StoreSettings` (não no código):** o singleton `id="store"` do Épico 4 foi alargado com campos nulláveis de branding (`storeName`, `contactEmail`, `contactPhone`, `nif`, `address`, `primaryColorHex`, `logoUrl`) via migração `20261101014424_add_store_settings_branding`. `null` = default do template (`src/lib/brand-defaults.ts`, client-safe): instalação nova é funcional sem configuração, e `getPublicStoreBranding()` NUNCA lança (try/catch → defaults) — a vitrine e os emails renderizam mesmo sem DB.
+- **Cor como sistema, não como constante:** os hexes do antigo template foram extraídos para CSS variables (`--brand`, `--brand-strong`, `--brand-soft` em `globals.css`) months atrás; a cor do backoffice alimenta as MESMAS variáveis via `<style id="store-brand-vars">` no root layout (`buildBrandCssVariables`: darkenHexColor 12% para hover, lightenHexColor 12% sobre branco para soft). Resultado: trocar a cor no admin redecora vitrine + backoffice sem build. Regra: NUNCA reintroduzir hexes arbitrários nos classNames — usar `bg-brand`/`text-brand`/`border-brand/30`/`accent-brand`.
+- **Contrato white-label central (`buildPageMetadata`):** SEO sempre recebe `storeName` resolvido; o template de título vive no root layout (`%s | {storeName}`); componentes de marca (header/footer/admin header/emails/eyebrows) recebem o nome por props com defaults — texto hardcoded de marca é defeito de regressão.
+- **Rebranding mecanico de DOMÍNIO (não só strings):** renames que atingem dados vivos: provedor simulado `PFA_SIMULATED` → `SIMULATED` (valor persistido em `Order.paymentProvider` — base antigas precisam de reset via `npm run admin:reset`), referências `pfa_sim_*` → `sim_*`, prefixo de nº de encomenda `PFA-…` → `STORE-…` (novo formato nas instalações novas), storage keys `pfautoparts:guest-cart` → `store:guest-cart`, `pfa-veiculo` → `store:veiculo`, SKUs DEV `DEV-PFA-` → `DEV-`. Gate de regressão: `git grep -i "pfa"` = 0 fora dos logs históricos (CHECKPOINT/knowledge).
+- **Utils de limpeza:** `scripts/reset-transactions.mjs` (`npm run admin:reset`, `--yes` executa; default = simulação) apaga catálogo+transacionais numa transação preservando VehicleMake/Model/Spec (fitment do Épico 8), contas, StoreSettings e definições comerciais — o "clean slate" de template.
+- **Emails configuráveis:** templates React Email aceitam prop `storeName?` com fallback neutro; o serviço resolve branding uma vez por envio/preview e injeta no template + subject (`{storeName}: …`). `STORE_NAME` constante = default neutro, útil fora do servidor.
+- **Form de configurações:** validação client espelha Zod e FOCA no contrato do serviço (string vazia = limpar campo). `noValidate` no `<form>` é necessário — o `required` nativo bloqueia o fluxo e a asserção do alerta em jsdom. `.strict()` do Zod 4 não aceita argumento (mensagem custom via própria classe de erro).

@@ -73,9 +73,9 @@ const paidEvent = {
     'PAYMENT_PAID' as const,
   orderId: 'order-1',
   paymentProvider:
-    'PFA_SIMULATED',
+    'SIMULATED',
   paymentReference:
-    'pfa_sim_attempt-1',
+    'sim_attempt-1',
   amount: '128.50',
   currency: 'EUR',
 }
@@ -85,9 +85,9 @@ const failedEvent = {
     'PAYMENT_FAILED' as const,
   orderId: 'order-1',
   paymentProvider:
-    'PFA_SIMULATED',
+    'SIMULATED',
   paymentReference:
-    'pfa_sim_attempt-1',
+    'sim_attempt-1',
 }
 
 function createOrder(
@@ -110,9 +110,9 @@ function createInitiatedOrder(
 ) {
   return createOrder({
     paymentProvider:
-      'PFA_SIMULATED',
+      'SIMULATED',
     paymentReference:
-      'pfa_sim_attempt-1',
+      'sim_attempt-1',
     ...overrides,
   })
 }

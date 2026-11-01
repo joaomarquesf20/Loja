@@ -743,7 +743,7 @@ describe(
                 {
                   id: 'order-9',
                   orderNumber:
-                    'PFA-XYZ789',
+                    'STORE-XYZ789',
                   status:
                     'PROCESSING',
                   paymentStatus:
@@ -763,7 +763,7 @@ describe(
                 {
                   id: 'order-8',
                   orderNumber:
-                    'PFA-XYZ000',
+                    'STORE-XYZ000',
                   status:
                     'PENDING',
                   paymentStatus:
@@ -800,7 +800,7 @@ describe(
           {
             id: 'order-9',
             orderNumber:
-              'PFA-XYZ789',
+              'STORE-XYZ789',
             status:
               'PROCESSING',
             paymentStatus:
@@ -818,7 +818,7 @@ describe(
           {
             id: 'order-8',
             orderNumber:
-              'PFA-XYZ000',
+              'STORE-XYZ000',
             status:
               'PENDING',
             paymentStatus:

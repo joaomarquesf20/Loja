@@ -221,7 +221,7 @@ function canRefundSimulatedPayment(
     order.paymentStatus ===
       'PAID' &&
     order.paymentProvider ===
-      'PFA_SIMULATED' &&
+      'SIMULATED' &&
     Boolean(
       order.paymentReference,
     ) &&

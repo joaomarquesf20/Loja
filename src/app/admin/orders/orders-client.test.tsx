@@ -41,7 +41,7 @@ function createOrder(
   return {
     id: 'order-1',
     orderNumber:
-      'PFA-ABC123',
+      'STORE-ABC123',
     subtotal: '100.00',
     shippingCost: '5.00',
     tax: '23.00',
@@ -53,9 +53,9 @@ function createOrder(
       'CARD',
     installmentCount: null,
     paymentProvider:
-      'PFA_SIMULATED',
+      'SIMULATED',
     paymentReference:
-      'pfa_sim_123',
+      'sim_123',
     fulfillmentMethod:
       'DELIVERY',
     shippingName:
@@ -140,7 +140,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -202,9 +202,9 @@ describe(
               fulfillmentMethod:
                 'DELIVERY',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_123',
+                'sim_123',
             }),
           )
 
@@ -408,9 +408,9 @@ describe(
               fulfillmentMethod:
                 'DELIVERY',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_123',
+                'sim_123',
             }),
           )
 
@@ -552,7 +552,7 @@ describe(
         )
 
         await screen.findByText(
-          'PFA-ABC123',
+          'STORE-ABC123',
         )
 
         expect(
@@ -606,9 +606,9 @@ describe(
               fulfillmentMethod:
                 'DELIVERY',
               paymentProvider:
-                'PFA_SIMULATED',
+                'SIMULATED',
               paymentReference:
-                'pfa_sim_123',
+                'sim_123',
             }),
           )
 
@@ -713,7 +713,7 @@ describe(
         )
 
         await screen.findByText(
-          'PFA-ABC123',
+          'STORE-ABC123',
         )
 
         expect(
@@ -747,7 +747,7 @@ describe(
         )
 
         await screen.findByText(
-          'PFA-ABC123',
+          'STORE-ABC123',
         )
 
         expect(
@@ -799,7 +799,7 @@ describe(
               createOrder({
                 id: 'order-2',
                 orderNumber:
-                  'PFA-XYZ789',
+                  'STORE-XYZ789',
                 shippingName:
                   'Bruno Dias',
                 status: 'SHIPPED',
@@ -807,7 +807,7 @@ describe(
               createOrder({
                 id: 'order-3',
                 orderNumber:
-                  'PFA-DEF456',
+                  'STORE-DEF456',
                 shippingName:
                   'Ana Costa',
                 paymentStatus:
@@ -823,7 +823,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
@@ -852,19 +852,19 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-XYZ789',
+            'STORE-XYZ789',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.queryByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).not.toBeInTheDocument()
 
         expect(
           screen.queryByText(
-            'PFA-DEF456',
+            'STORE-DEF456',
           ),
         ).not.toBeInTheDocument()
 
@@ -902,13 +902,13 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-XYZ789',
+            'STORE-XYZ789',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.queryByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).not.toBeInTheDocument()
 
@@ -942,13 +942,13 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-DEF456',
+            'STORE-DEF456',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.queryByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).not.toBeInTheDocument()
 
@@ -986,19 +986,19 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-ABC123',
+            'STORE-ABC123',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.getByText(
-            'PFA-XYZ789',
+            'STORE-XYZ789',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.getByText(
-            'PFA-DEF456',
+            'STORE-DEF456',
           ),
         ).toBeInTheDocument()
       },
@@ -1012,7 +1012,7 @@ describe(
           (_, index) =>
             createOrder({
               id: `order-${index + 1}`,
-              orderNumber: `PFA-${String(index + 1).padStart(4, '0')}`,
+              orderNumber: `STORE-${String(index + 1).padStart(4, '0')}`,
             }),
         )
 
@@ -1028,7 +1028,7 @@ describe(
 
         expect(
           await screen.findByText(
-            'PFA-0001',
+            'STORE-0001',
           ),
         ).toBeInTheDocument()
 
@@ -1046,7 +1046,7 @@ describe(
 
         expect(
           screen.queryByText(
-            'PFA-0012',
+            'STORE-0012',
           ),
         ).not.toBeInTheDocument()
 
@@ -1076,19 +1076,19 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-0011',
+            'STORE-0011',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.getByText(
-            'PFA-0012',
+            'STORE-0012',
           ),
         ).toBeInTheDocument()
 
         expect(
           screen.queryByText(
-            'PFA-0001',
+            'STORE-0001',
           ),
         ).not.toBeInTheDocument()
 
@@ -1107,7 +1107,7 @@ describe(
           ),
           {
             target: {
-              value: 'PFA-0011',
+              value: 'STORE-0011',
             },
           },
         )
@@ -1126,7 +1126,7 @@ describe(
 
         expect(
           screen.getByText(
-            'PFA-0011',
+            'STORE-0011',
           ),
         ).toBeInTheDocument()
       },

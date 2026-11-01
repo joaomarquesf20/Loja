@@ -1,16 +1,22 @@
 import type { Metadata } from 'next'
 
+import {
+  DEFAULT_STORE_DESCRIPTION,
+  DEFAULT_STORE_NAME,
+} from '../lib/brand-defaults'
+
 /**
- * Nome da loja usado no título, no template e no Open Graph.
+ * Nome da loja usado como fallback neu­tro do template (o valor
+ * real é dinâmico via `StoreSettings` — ver `getPublicStoreBranding`).
  */
-export const SITE_NAME = 'PFAUTOPARTS'
+export const SITE_NAME = DEFAULT_STORE_NAME
 
 /**
  * Descrição base da loja, reutilizada nos metadados de todas as
  * páginas de vitrine.
  */
 export const SITE_DESCRIPTION =
-  'Jantes premium, suspensões, body-kits e personalização automóvel.'
+  DEFAULT_STORE_DESCRIPTION
 
 type PageMetadataInput = {
   title: string
@@ -18,8 +24,10 @@ type PageMetadataInput = {
   /** Caminho canónico relativo (resolvido com metadataBase). */
   path?: string
   image?: string
+  /** Nome da loja resolvido do backoffice (default do template). */
+  storeName?: string
   /**
-   * Faz bypass do template `%s | PFAUTOPARTS` — usado na home,
+   * Faz bypass do template `%s | storeName` — usado na home,
    * cujo título já inclui o nome da loja.
    */
   absoluteTitle?: boolean
@@ -32,6 +40,10 @@ type PageMetadataInput = {
 export function buildPageMetadata(
   input: PageMetadataInput,
 ): Metadata {
+  const storeName =
+    input.storeName?.trim() ||
+    DEFAULT_STORE_NAME
+
   return {
     title: input.absoluteTitle
       ? {
@@ -49,7 +61,7 @@ export function buildPageMetadata(
     openGraph: {
       type: 'website',
       locale: 'pt_PT',
-      siteName: SITE_NAME,
+      siteName: storeName,
       title: input.title,
       description: input.description,
       ...(input.path ? { url: input.path } : {}),

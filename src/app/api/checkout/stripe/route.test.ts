@@ -182,7 +182,7 @@ function createShipping() {
 function createOrder() {
   return {
     id: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     fulfillmentMethod: 'DELIVERY',
     subtotal: 100,
     shippingCost: 5.9,
@@ -470,7 +470,7 @@ describe('/api/checkout/stripe', () => {
     expect(
       urls.successUrl,
     ).toBe(
-      'http://localhost:3000/checkout/sucesso?order=PFA-ABC123&session_id={CHECKOUT_SESSION_ID}',
+      'http://localhost:3000/checkout/sucesso?order=STORE-ABC123&session_id={CHECKOUT_SESSION_ID}',
     )
     expect(
       urls.cancelUrl,

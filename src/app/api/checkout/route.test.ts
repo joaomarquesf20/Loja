@@ -135,7 +135,7 @@ function createOrder(
 ) {
   return {
     id: 'order-1',
-    orderNumber: 'PFA-ABC123',
+    orderNumber: 'STORE-ABC123',
     fulfillmentMethod,
     subtotal: 100,
     shippingCost: fulfillmentMethod === 'PICKUP' ? 0 : 5.9,

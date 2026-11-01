@@ -83,9 +83,9 @@ describe('POST /api/payments/initiate', () => {
         paymentMethod: 'CARD',
         installmentCount: null,
         paymentProvider:
-          'PFA_SIMULATED',
+          'SIMULATED',
         paymentReference:
-          'pfa_sim_test-123',
+          'sim_test-123',
         amount: '128.50',
       } as Awaited<
         ReturnType<
@@ -107,7 +107,7 @@ describe('POST /api/payments/initiate', () => {
         'production',
       )
       vi.stubEnv(
-        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        'ENABLE_SIMULATED_PAYMENTS',
         '',
       )
 
@@ -134,7 +134,7 @@ describe('POST /api/payments/initiate', () => {
         'production',
       )
       vi.stubEnv(
-        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        'ENABLE_SIMULATED_PAYMENTS',
         'TRUE',
       )
 
@@ -158,7 +158,7 @@ describe('POST /api/payments/initiate', () => {
         'production',
       )
       vi.stubEnv(
-        'PFA_ENABLE_SIMULATED_PAYMENTS',
+        'ENABLE_SIMULATED_PAYMENTS',
         'true',
       )
 

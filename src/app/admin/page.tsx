@@ -76,7 +76,7 @@ export default async function AdminPage() {
     <main className="space-y-7">
       <section className="flex flex-col gap-5 rounded-xl bg-[#171a1d] p-6 text-white sm:p-8">
         <div className="max-w-3xl">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ef5b2a]">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-brand">
             Central de administração
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
@@ -93,7 +93,7 @@ export default async function AdminPage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/admin/products/new"
-            className="rounded-lg bg-[#ef5b2a] px-5 py-3 text-sm font-black text-white transition hover:bg-[#d94a1b]"
+            className="rounded-lg bg-brand px-5 py-3 text-sm font-black text-white transition hover:bg-brand-strong"
           >
             + Novo produto
           </Link>
@@ -133,7 +133,7 @@ export default async function AdminPage() {
             <p className="mt-2 flex-1 text-sm leading-6 text-[#687078]">
               {area.description}
             </p>
-            <span className="mt-5 text-sm font-bold text-[#ef5b2a]">
+            <span className="mt-5 text-sm font-bold text-brand">
               {area.action} →
             </span>
           </Link>

@@ -108,7 +108,7 @@ function overviewStub() {
       {
         id: 'order-9',
         orderNumber:
-          'PFA-XYZ789',
+          'STORE-XYZ789',
         status:
           'PROCESSING',
         paymentStatus:
@@ -205,7 +205,7 @@ describe(
             'link',
             {
               name:
-                /PFA-XYZ789/,
+                /STORE-XYZ789/,
             },
           ).getAttribute(
             'href',

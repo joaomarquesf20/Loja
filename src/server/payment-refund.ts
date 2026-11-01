@@ -15,7 +15,7 @@ import {
 } from './order-lifecycle'
 
 const SIMULATED_PAYMENT_PROVIDER =
-  'PFA_SIMULATED'
+  'SIMULATED'
 
 type RefundOrderRecord = {
   id: string
@@ -383,7 +383,7 @@ async function refundSimulatedPaymentForOwner(
 }
 
 /**
- * Simula um reembolso apenas para pagamentos PFA_SIMULATED.
+ * Simula um reembolso apenas para pagamentos SIMULATED.
  *
  * Não contacta um processador de pagamentos real e não movimenta dinheiro.
  * A função apenas muda o estado persistido de PAID para REFUNDED, de forma

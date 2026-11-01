@@ -19,7 +19,7 @@ export default async function ProductsPage() {
     <main className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-black uppercase tracking-[0.14em] text-[#ef5b2a]">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-brand">
             Comercial
           </p>
           <h1 className="mt-1 text-3xl font-black tracking-tight">
@@ -42,7 +42,7 @@ export default async function ProductsPage() {
 
           <Link
             href="/admin/products/new"
-            className="rounded-lg bg-[#ef5b2a] px-5 py-3 text-center text-sm font-black text-white shadow-sm transition hover:bg-[#d94a1b]"
+            className="rounded-lg bg-brand px-5 py-3 text-center text-sm font-black text-white shadow-sm transition hover:bg-brand-strong"
           >
             + Novo produto
           </Link>

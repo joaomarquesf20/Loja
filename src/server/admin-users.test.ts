@@ -177,7 +177,7 @@ describe(
               {
                 id: 'order-1',
                 orderNumber:
-                  'PFA-ABC123',
+                  'STORE-ABC123',
                 total: {
                   toString: () =>
                     '128.00',
@@ -249,7 +249,7 @@ describe(
               expect.objectContaining(
                 {
                   orderNumber:
-                    'PFA-ABC123',
+                    'STORE-ABC123',
                   total:
                     '128.00',
                 },

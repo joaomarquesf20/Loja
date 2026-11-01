@@ -40,9 +40,9 @@ function createOrder(
     fulfillmentMethod:
       'DELIVERY' as const,
     paymentProvider:
-      'PFA_SIMULATED',
+      'SIMULATED',
     paymentReference:
-      'pfa_sim_123',
+      'sim_123',
     items: [
       {
         productId:
@@ -192,9 +192,9 @@ describe(
           fulfillmentMethod:
             'DELIVERY',
           paymentProvider:
-            'PFA_SIMULATED',
+            'SIMULATED',
           paymentReference:
-            'pfa_sim_123',
+            'sim_123',
         })
 
         expect(

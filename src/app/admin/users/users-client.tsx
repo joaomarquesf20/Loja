@@ -426,7 +426,7 @@ export default function UsersClient() {
                 onClick={
                   handleClearFilters
                 }
-                className="mt-2 text-sm font-bold text-[#ef5b2a] underline"
+                className="mt-2 text-sm font-bold text-brand underline"
               >
                 Limpar filtros
               </button>
@@ -522,7 +522,7 @@ export default function UsersClient() {
                       <td className="px-4 py-4 text-right">
                         <Link
                           href={`/admin/users/${user.id}`}
-                          className="text-sm font-bold text-[#ef5b2a] underline"
+                          className="text-sm font-bold text-brand underline"
                         >
                           Ver ficha
                         </Link>

@@ -1,4 +1,4 @@
-# Requisitos do webhook do fornecedor de pagamentos — PFAutoParts
+# Requisitos do webhook do fornecedor de pagamentos
 
 > Documento de requisitos para o fornecedor de pagamentos que vier a substituir o
 > simulador. Baseado exclusivamente na auditoria do repositório (2026-10-14).
@@ -22,8 +22,8 @@
 ## 1. Objetivo e âmbito
 
 Este documento define o **contrato mínimo** que qualquer fornecedor de pagamentos
-real tem de cumprir para que a PFAutoParts possa implementar deduplicação durável
-de webhooks.
+real tem de cumprir para que a loja (template white-label) possa implementar
+deduplicação durável de webhooks.
 
 Motivação (auditoria de pagamentos): a validação atual (assinatura HMAC +
 timestamp ±5 min) garante **autenticidade e recência**, mas **não** constitui
@@ -44,7 +44,7 @@ do fornecedor (§8).
 
 | Aspeto | Estado atual |
 |---|---|
-| Fornecedores implementados | Apenas `PFA_SIMULATED` (simulador de desenvolvimento) |
+| Fornecedores implementados | Apenas `SIMULATED` (simulador de desenvolvimento) |
 | Abstração de fornecedor | **Não existe** para pagamentos (só `ImageStorageAdapter`, para imagens) |
 | Adaptador de fornecedor real | Inexistente — ver `knowledge.md` §6, item 6 |
 | Identificador de evento | **Inexistente** em todo o contrato |
@@ -97,7 +97,7 @@ Garantias já implementadas que o novo contrato **tem de preservar**:
 - Fluxo simulado desativado em produção (imposto por `NODE_ENV`, nas rotas
   `payments/initiate` e `payments/simulate`).
 
-**Nota de configuração (L1).** `PFA_ENABLE_SIMULATED_PAYMENTS` continua em
+**Nota de configuração (L1).** `ENABLE_SIMULATED_PAYMENTS` continua em
 `.env.example`, mas **nenhum código de produção o lê**: o bloqueio em produção
 depende apenas de `NODE_ENV`, e ambas as rotas do simulador comentam
 explicitamente que ignoram flags de ambiente. Os testes verificam-no de forma
@@ -223,7 +223,7 @@ sobre o corpo bruto (R6).
 
 ## 6. Garantias de entrega
 
-- **R18 — Semântica de entrega.** A PFAutoParts assume **at-least-once**;
+- **R18 — Semântica de entrega.** Assume-se **at-least-once**;
   qualquer garantia diferente tem de ser declarada.
 - **R19 — Reintentos.** Política, agendamento de *backoff* e **janela de
   reintento** (tempo máximo durante o qual um evento pode ser reenviado).
@@ -272,7 +272,7 @@ sobre o corpo bruto (R6).
   criar um segundo evento de histórico nem aplicar duas vezes uma transição de
   pagamento.
 
-## 7. Requisitos de integração PFAutoParts
+## 7. Requisitos de integração da loja
 
 Preservação obrigatória do comportamento atual:
 
@@ -415,7 +415,7 @@ um fornecedor escolhido e o respetivo contrato oficial:
    máxima de reentrega **é desconhecida** e não se assume nenhum valor.
 9. Se o fornecedor oferece idempotência do lado dele (evitando duplicados à
    partida) ou apenas entrega repetida.
-10. Variável `PFA_ENABLE_SIMULATED_PAYMENTS`, que permanece em `.env.example` sem
+10. Variável `ENABLE_SIMULATED_PAYMENTS`, que permanece em `.env.example` sem
     qualquer leitura em código de produção (limpeza ou remoção pendente; ver L1).
 11. Se a reentrega de um evento preserva **exatamente** o mesmo payload
     (necessário para R33–R34) e se o fornecedor expõe algum *hash*, versão ou

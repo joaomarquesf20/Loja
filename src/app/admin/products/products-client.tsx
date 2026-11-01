@@ -805,7 +805,7 @@ export default function ProductsClient() {
           </div>
           <Link
             href="/admin/products/new"
-            className="rounded-lg bg-[#ef5b2a] px-4 py-2.5 text-sm font-black text-white transition hover:bg-[#d94a1b]"
+            className="rounded-lg bg-brand px-4 py-2.5 text-sm font-black text-white transition hover:bg-brand-strong"
           >
             + Novo produto
           </Link>
@@ -860,7 +860,7 @@ export default function ProductsClient() {
               onClick={() =>
                 setSelectedIds([])
               }
-              className="rounded-md px-3 py-1.5 text-sm font-bold text-[#ef5b2a] underline disabled:opacity-50"
+              className="rounded-md px-3 py-1.5 text-sm font-bold text-brand underline disabled:opacity-50"
             >
               Limpar seleção
             </button>
@@ -881,7 +881,7 @@ export default function ProductsClient() {
                 setStatus('all')
                 setSelectedIds([])
               }}
-              className="mt-2 text-sm font-bold text-[#ef5b2a] underline"
+              className="mt-2 text-sm font-bold text-brand underline"
             >
               Limpar filtros
             </button>
@@ -908,7 +908,7 @@ export default function ProductsClient() {
                         )
                       }
                       aria-label="Selecionar todos os produtos visíveis"
-                      className="h-4 w-4 accent-[#ef5b2a]"
+                      className="h-4 w-4 accent-brand"
                     />
                   </th>
                   <th className="px-4 py-3 font-black">
@@ -965,13 +965,13 @@ export default function ProductsClient() {
                           )
                         }
                         aria-label={`Selecionar ${product.name}`}
-                        className="h-4 w-4 accent-[#ef5b2a]"
+                        className="h-4 w-4 accent-brand"
                       />
                     </td>
                     <td className="px-4 py-4">
                       <Link
                         href={`/admin/products/${product.id}`}
-                        className="font-black hover:text-[#ef5b2a]"
+                        className="font-black hover:text-brand"
                       >
                         {product.name}
                       </Link>

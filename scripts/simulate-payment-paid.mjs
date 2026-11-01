@@ -7,7 +7,7 @@ import pg from 'pg'
 
 const { Client } = pg
 
-const PAYMENT_PROVIDER = 'PFA_SIMULATED'
+const PAYMENT_PROVIDER = 'SIMULATED'
 const PAYMENT_CURRENCY = 'EUR'
 const PAYMENT_AMOUNT_PATTERN =
   /^\d{1,8}(?:\.\d{1,2})?$/
@@ -207,7 +207,7 @@ function validateOrderForSimulation(order) {
     PAYMENT_PROVIDER
   ) {
     fail(
-      'A encomenda não tem um pagamento PFA_SIMULATED iniciado.',
+      'A encomenda não tem um pagamento SIMULATED iniciado.',
     )
   }
 
